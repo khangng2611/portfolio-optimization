@@ -1,65 +1,103 @@
-# This is a sample Python script to fetch historical stock data for popular Vietnamese stocks, ETFs, and CCQ (mutual funds).
-# Prioritizes popular stocks in recent years (e.g., blue-chips like VCB, VNM), ETFs like E1VFVN30 (VN30 ETF), and popular CCQ like VCBF-BCF.
-# Uses 'vnstock' library (install via: pip install vnstock3) for easy access to Vietnamese market data.
-# Time range: Last 3 years (from 2023-01-01 to current date).
-# Output: Saves data to CSV files for each asset type.
+# ===================================================================
+# LẤY DỮ LIỆU OHLCV CHO 30 MÃ VN30 + ETF E1VFVN30
+# - Tự động lấy danh sách 30 mã VN30 từ vnstock (dynamic)
+# - Lưu danh sách vào file txt (vn30_stocks.txt)
+# - Với mỗi mã (cổ phiếu + ETF) → lấy đầy đủ OHLCV
+# - Mỗi mã lưu thành 1 file CSV riêng
+# ===================================================================
 
 import pandas as pd
+from vnstock import Quote, Listing
 from datetime import datetime
-from vnstock import Vnstock  # Import Vnstock from vnstock3 package
+import time
+import os
 
-# Define the list of assets
-# Popular stocks (blue-chips/mid-caps recent years): VCB (Vietcombank), VNM (Vinamilk), HPG (Hoa Phat), FPT, MWG (Mobile World), SSI, BID, CTG, etc.
-stocks = ['VCB', 'VNM', 'HPG', 'FPT', 'MWG', 'SSI', 'BID', 'CTG']
+# ====================== CÀI ĐẶT ======================
+# Thời gian lấy dữ liệu (3 năm gần nhất)
+start_date = '2023-01-01'
+end_date   = datetime.now().strftime('%Y-%m-%d')
+LIST_FILE = 'datasets/vn30_list.txt'
+OUTPUT_DIR = 'datasets/stocks'
+START_INDEX =  29 # Chỉ số bắt đầu trong danh sách (dùng để chạy theo batch)
+BATCH_SIZE = 10   # Số mã xử lý mỗi lần chạy
 
-# ETFs: E1VFVN30 (VN30 ETF), add more if needed like VFMVND (Diamond ETF)
-etfs = ['E1VFVN30']
 
-# CCQ (mutual funds): VCBF-BCF (bond fund), TCBS-IBOND (bond), add more like VCBF-FIF (equity)
-ccq = ['VCBF-BCF', 'TCBS-IBOND']
+# ====================== BƯỚC 1: LẤY DANH SÁCH 30 MÃ VN30 ======================
+def retrieve_vn30_list():
+    print("Đang lấy danh sách 30 mã VN30 từ vnstock...")
+    listing = Listing()
+    vn30_list = listing.symbols_by_group(group_name='VN30')
+    # vn30_symbols = vn30_list['symbol'].tolist()
+    print(f"Đã lấy được {len(vn30_list)} mã VN30.")
 
-# Combine all symbols for fetching
-all_symbols = stocks + etfs + ccq
+    # Lưu danh sách vào file txt
+    with open(LIST_FILE, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(vn30_list))
+    print(f"Đã lưu danh sách 30 mã VN30 vào file: {LIST_FILE}")
 
-# Set time range: Last 3 years to current date (adjust as needed)
-start_date = '2024-01-01'
-end_date = '2026-01-01'
-# end_date = datetime.now().strftime('%Y-%m-%d')  # Current date
-
-# Initialize Vnstock client (for HOSE/HNX data)
-stock_client = Vnstock().stock(symbol='VCB', source='VCI')  # Initialize with any symbol, source='VCI' for reliable data
-
-# Function to fetch historical data for a symbol
-def fetch_historical_data(symbol, start, end):
+# ====================== BƯỚC 3: LẤY OHLCV VÀ LƯU RIÊNG TỪNG FILE ======================
+def fetch_and_save(symbol):
     try:
-        df = stock_client.quote.history(symbol=symbol, start=start, end=end)
-        df = df[['time', 'close', 'volume']] 
+        quote = Quote(symbol='VCI', source='VCI')
+
+        df = quote.history(
+            symbol=symbol,
+            start=start_date,
+            interval='1D',
+        )
+
+        # Đảm bảo các cột chuẩn
+        df = df[['time', 'open', 'high', 'low', 'close', 'volume']].copy()
         df.rename(columns={'time': 'date'}, inplace=True)
         df['symbol'] = symbol
-        return df
+
+        # Tên file: <symbol>.csv
+        file_path = f"{OUTPUT_DIR}/{symbol}.csv"
+        df.to_csv(file_path, index=False, encoding='utf-8-sig')
+
+        print(f"Đã lưu {symbol} → {file_path} ({len(df)} dòng)")
+        return True
+
     except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
-        return pd.DataFrame()
+        print(f"Lỗi khi lấy {symbol}: {e}")
+        return False
 
-# Fetch data for all symbols
-all_data = pd.DataFrame()
-for symbol in all_symbols:
-    df = fetch_historical_data(symbol, start_date, end_date)
-    if not df.empty:
-        all_data = pd.concat([all_data, df], ignore_index=True)
+def retrieve_ohlcv_for_vn30_symbols():
+    # Đọc lại danh sách từ file
+    with open(LIST_FILE, 'r', encoding='utf-8') as f:
+        symbols = [line.strip() for line in f.readlines() if line.strip()]
 
-# Save to CSV (or process further for MPT/Black-Litterman)
-all_data.to_csv('vietnam_stock_data.csv', index=False)
-print("Data saved to 'vietnam_stock_data.csv'. Preview:")
-print(all_data.head())
+    print(f"Tổng số mã sẽ lấy dữ liệu: {len(symbols)} (30 VN30)")
 
-# Further processing example: Compute daily returns for MPT
-# Group by symbol and compute returns
-def compute_returns(df):
-    df = df.sort_values('date')
-    df['return'] = df['close'].pct_change()  # Daily return = (close_t - close_{t-1}) / close_{t-1}
-    return df
+    # Lấy batch <BATCH_SIZE> mã theo START_INDEX
+    symbols_batch = symbols[START_INDEX:START_INDEX + BATCH_SIZE]
 
-all_data_with_returns = all_data.groupby('symbol').apply(compute_returns).reset_index(drop=True)
-all_data_with_returns.to_csv('vietnam_stock_data_with_returns.csv', index=False)
-print("Data with returns saved to 'vietnam_stock_data_with_returns.csv'.")
+    if not symbols_batch:
+        print(f"Không còn mã nào để xử lý (START_INDEX={START_INDEX} vượt quá danh sách).")
+        return
+    print(f"Xử lý quỹ từ index {START_INDEX} đến {START_INDEX + len(symbols_batch) - 1}:")
+    print(f"Danh sách: {symbols_batch}")
+
+    # Lấy OHLCV cho từng mã và lưu riêng
+    success_count = 0
+    for symbol in symbols_batch:
+        if fetch_and_save(symbol):
+            success_count += 1
+        time.sleep(1.2)  # Delay tránh rate limit
+
+    print("\n" + "="*60)
+    print(f"HOÀN TẤT! Đã xử lý thành công {success_count}/{len(symbols)} mã.")
+    print(f"Tất cả file được lưu trong thư mục: {OUTPUT_DIR}")
+    print("Mỗi file có đầy đủ cột: date, open, high, low, close, volume, symbol")
+    next_index = START_INDEX + BATCH_SIZE
+    if next_index < len(symbols):
+        print(f"Lần chạy tiếp theo, đặt START_INDEX = {next_index}")
+
+if __name__ == "__main__":
+    # Bước 1: Lấy danh sách VN30 và lưu vào file, 1 lần duy nhất (bỏ comment nếu đã có file)
+    # retrieve_vn30_list()
+
+    retrieve_ohlcv_for_vn30_symbols()
+
+    # Lay dữ liệu cho ETF E1VFVN30
+    fetch_and_save('E1VFVN30')

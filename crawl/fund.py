@@ -1,5 +1,5 @@
 # CODE: Lấy NAV lịch sử từ vnstock (Fmarket integration)
-# - Đọc danh sách quỹ từ file fund_name_list.txt
+# - Đọc danh sách quỹ từ file fund_list.txt
 # - Mỗi lần chạy chỉ xử lý 5 quỹ (có thể set START_INDEX)
 # - Với từng quỹ, lấy NAV history qua nav_report()
 # - Tạo DataFrame với các cột: date, price (nav_per_unit), fund_name
@@ -19,13 +19,12 @@ OUTPUT_DIR = 'datasets/funds'
 # Khởi tạo Fund object
 fund = Fund()
 
-def retrieve_fund_short_names():
+def retrieve_fund_list():
     short_names = fund.listing()['short_name'].tolist()
-    with open('fund_short_names.txt', 'w') as f:
+    with open('fund_list.txt', 'w') as f:
         for name in short_names:
             f.write(name + '\n')
-    print(f"Saved {len(short_names)} fund short_names to fund_short_names.txt")
-
+    print(f"Saved {len(short_names)} fund short_names to fund_list.txt")
 
 def get_nav_and_return(fund_name):
     max_retries = 3
@@ -70,13 +69,13 @@ def get_nav_and_return(fund_name):
 
 def crawl_fund_nav_history():
     # Bước 1: Đọc danh sách quỹ từ file
-    fund_list_file = 'fund_name_list.txt'
+    fund_list_file = 'fund_list.txt'
     with open(fund_list_file, 'r') as f:
         all_fund_names = [line.strip() for line in f if line.strip()]
 
     print(f"Tổng số quỹ trong file: {len(all_fund_names)}")
 
-    # Bước 2: Lấy batch 5 quỹ theo START_INDEX
+    # Bước 2: Lấy batch <BATCH_SIZE> quỹ theo START_INDEX
     fund_names_batch = all_fund_names[START_INDEX:START_INDEX + BATCH_SIZE]
 
     if not fund_names_batch:
@@ -108,7 +107,7 @@ def crawl_fund_nav_history():
     print(f"Tất cả file được lưu trong thư mục: {OUTPUT_DIR}")
     next_index = START_INDEX + BATCH_SIZE
     if next_index < len(all_fund_names):
-        print(f"Lần chạy tiếp theo, đặt START_INDEX = {next_index}")\
+        print(f"Lần chạy tiếp theo, đặt START_INDEX = {next_index}")
 
 if __name__ == "__main__":
     crawl_fund_nav_history()

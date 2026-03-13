@@ -27,6 +27,15 @@ def retrieve_fund_list():
             f.write(name + '\n')
     print(f"Saved {len(short_names)} fund short_names to fund_list.txt")
 
+def retrieve_bond_list():
+    df_all_funds = fund.listing()
+    df_bond   = df_all_funds[df_all_funds['fund_type'].str.contains('Trái phiếu|Bond|Fixed Income', case=False, na=False)]
+    short_names = df_bond['short_name'].tolist()
+    with open(f"datasets/bond_list.txt", 'w') as f:
+        for name in short_names:
+            f.write(name + '\n')
+    print(f"Saved {len(short_names)} bond short_names to bond_list.txt")
+
 def get_nav_and_return(symbol):
     max_retries = 3
     attempt = 0
@@ -110,4 +119,5 @@ def crawl_fund_nav_history():
         print(f"Lần chạy tiếp theo, đặt START_INDEX = {next_index}")
 
 if __name__ == "__main__":
-    crawl_fund_nav_history()
+    retrieve_bond_list()
+    # crawl_fund_nav_history()

@@ -14,10 +14,10 @@ PNJ_API_BASE_URL = "https://edge-cf-api.pnj.io"
 ##Crawler
 def parse_price(text):
     try:
-        # Loại bỏ dấu chấm, chuyển về int rồi chia cho 1000
+        # Loại bỏ dấu chấm, chuyển về int
         clean = text.replace('.', '').strip()
         value = int(clean)
-        return round(value / 1000, 2)
+        return value
     except:
         return None
 

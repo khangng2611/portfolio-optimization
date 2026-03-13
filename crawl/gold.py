@@ -6,11 +6,10 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 import requests
-from bs4 import BeautifulSoup
-
 # Đường dẫn thư mục & file CSV (cùng folder với script này)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(BASE_DIR, "datasets/pnj_sjc_price.csv")
+CSV_PATH = os.path.join(BASE_DIR, "datasets/gold/pnj_sjc_price.csv")
+PNJ_API_BASE_URL = "https://edge-cf-api.pnj.io"
 
 ##Crawler
 def parse_price(text):
@@ -22,94 +21,116 @@ def parse_price(text):
     except:
         return None
 
-def get_gold_data_for_date(date_obj):
-    day = date_obj.strftime("%d")
-    month = date_obj.strftime("%m")
-    year = date_obj.strftime("%Y")
-    url = f"https://giavang.pnj.com.vn/history?gold_history_day={day}&gold_history_month={month}&gold_history_year={year}"
-    resp = requests.get(url)
-    if resp.status_code != 200:
-        return None
-    soup = BeautifulSoup(resp.text, 'lxml')
-    table = soup.select_one(
-        "#portlet_com_pnj_gold_price_web_SearchGoldPriceResultPortlet_INSTANCE_3WGHuiSEaY89 > div > div > div > table:nth-child(1)"
-    )
-    if not table:
-        # Trả về NaN cho các cột nếu không tìm thấy bảng
-        return {"PNJ_gia_mua": None, "PNJ_gia_ban": None, "SJC_gia_mua": None, "SJC_gia_ban": None}
-    try:
-        pnj_row = table.select_one("tbody > tr:nth-child(2)")
-        sjc_row = table.select_one("tbody > tr:nth-child(4)")
-        pnj_gia_mua = parse_price(pnj_row.select_one("td:nth-child(2)").get_text())
-        pnj_gia_ban = parse_price(pnj_row.select_one("td:nth-child(3)").get_text())
-        sjc_gia_mua = parse_price(sjc_row.select_one("td:nth-child(2)").get_text())
-        # Lấy SJC_gia_ban theo thứ tự ưu tiên:
-        sjc_gia_ban = None
-        # 1) tr[5] td[3]
-        cell = table.select_one("tbody > tr:nth-child(5) > td:nth-child(3)")
-        if cell and cell.get_text().strip():
-            sjc_gia_ban = parse_price(cell.get_text())
-        else:
-            # 2) tr[6] td[2]
-            cell = table.select_one("tbody > tr:nth-child(6) > td:nth-child(2)")
-            if cell and cell.get_text().strip():
-                sjc_gia_ban = parse_price(cell.get_text())
-            else:
-                # 3) sang table thứ hai: tr[7] td[2]
-                table2 = soup.select_one(
-                    "#portlet_com_pnj_gold_price_web_SearchGoldPriceResultPortlet_INSTANCE_3WGHuiSEaY89 "
-                    "> div > div > div > table:nth-child(2)"
-                )
-                if table2:
-                    cell = table2.select_one("tbody > tr:nth-child(7) > td:nth-child(2)")
-                    if cell and cell.get_text().strip():
-                        sjc_gia_ban = parse_price(cell.get_text())
-        return {"PNJ_gia_mua": pnj_gia_mua, "PNJ_gia_ban": pnj_gia_ban, "SJC_gia_mua": sjc_gia_mua, "SJC_gia_ban": sjc_gia_ban}
-    except:
-        return {"PNJ_gia_mua": None, "PNJ_gia_ban": None, "SJC_gia_mua": None, "SJC_gia_ban": None}
 
-def code_update_gia_vang(start_date, end_date):
+def _extract_buy_sell(gold_type):
+    gia_mua = parse_price(gold_type.get("gia_mua", ""))
+    gia_ban = parse_price(gold_type.get("gia_ban", ""))
+
+    if gia_mua is not None and gia_ban is not None:
+        return gia_mua, gia_ban
+
+    data = gold_type.get("data") or []
+    if data:
+        first = data[0] or {}
+        if gia_mua is None:
+            gia_mua = parse_price(first.get("gia_mua", ""))
+        if gia_ban is None:
+            gia_ban = parse_price(first.get("gia_ban", ""))
+
+    return gia_mua, gia_ban
+
+def get_gold_data_for_date(date_obj):
+    date_param = date_obj.strftime("%Y%m%d")
+    url = f"{PNJ_API_BASE_URL}/ecom-frontend/v1/get-gold-price-history?date={date_param}"
+
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+    except requests.RequestException:
+        return None
+    except ValueError:
+        return None
+
+    locations = payload.get("locations") if isinstance(payload, dict) else None
+    if not locations:
+        return {"pnj_buy": None, "pnj_sell": None, "sjc_buy": None, "sjc_sell": None}
+
+    pnj_buy = pnj_sell = None
+    sjc_buy = sjc_sell = None
+
+    for location in locations:
+        for gold_type in location.get("gold_type", []):
+            name = (gold_type.get("name") or "").strip().upper()
+            gia_mua, gia_ban = _extract_buy_sell(gold_type)
+
+            if name == "PNJ" and (pnj_buy is None or pnj_sell is None):
+                pnj_buy = gia_mua if pnj_buy is None else pnj_buy
+                pnj_sell = gia_ban if pnj_sell is None else pnj_sell
+
+            if "PNJ" in name and (pnj_buy is None or pnj_sell is None):
+                pnj_buy = gia_mua if pnj_buy is None else pnj_buy
+                pnj_sell = gia_ban if pnj_sell is None else pnj_sell
+
+            if name == "SJC" and (sjc_buy is None or sjc_sell is None):
+                sjc_buy = gia_mua if sjc_buy is None else sjc_buy
+                sjc_sell = gia_ban if sjc_sell is None else sjc_sell
+
+        if None not in (pnj_buy, pnj_sell, sjc_buy, sjc_sell):
+            break
+
+    return {
+        "pnj_buy": pnj_buy,
+        "pnj_sell": pnj_sell,
+        "sjc_buy": sjc_buy,
+        "sjc_sell": sjc_sell,
+    }
+
+def batch_gold_price_update(start_date, end_date):
     # Thư mục chứa file và đường dẫn file CSV
     folder = BASE_DIR                            
     filepath = CSV_PATH                          
     os.makedirs(folder, exist_ok=True)    
 
-    # Đọc dữ liệu đã có (nếu file tồn tại và không rỗng)
-    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+    # Đọc dữ liệu đã có (nếu file tồn tại)
+    if os.path.exists(filepath):
         df_existing = pd.read_csv(filepath, dtype=str)
-        df_existing['Ngày'] = pd.to_datetime(df_existing['Ngày'], format="%d/%m/%Y")
-        existing_dates = set(df_existing['Ngày'].dt.strftime("%d/%m/%Y"))
+        df_existing['date'] = pd.to_datetime(df_existing['date'], errors='coerce', dayfirst=True)
+        df_existing = df_existing.dropna(subset=['date'])
+        existing_dates = set(df_existing['date'].dt.strftime("%Y-%m-%d"))
     else:
-        df_existing = pd.DataFrame(columns=["Ngày", "PNJ_gia_mua", "PNJ_gia_ban", "SJC_gia_mua", "SJC_gia_ban"])
+        df_existing = pd.DataFrame(columns=["date", "pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"])
         existing_dates = set()
 
     rows = []
     current_date = start_date
     while current_date <= end_date:
-        date_str = current_date.strftime("%d/%m/%Y")
+        date_str = current_date.strftime("%Y-%m-%d")
         if date_str not in existing_dates:
             print(f"Crawling {date_str}...")
             data = get_gold_data_for_date(current_date)
             if data is None:
                 # Lỗi khi request
-                row = {"Ngày": date_str, "PNJ_gia_mua": None, "PNJ_gia_ban": None, "SJC_gia_mua": None, "SJC_gia_ban": None}
+                row = {"date": date_str, "pnj_buy": None, "pnj_sell": None, "sjc_buy": None, "sjc_sell": None}
             else:
-                row = {"Ngày": date_str,
-                       "PNJ_gia_mua": data["PNJ_gia_mua"],
-                       "PNJ_gia_ban": data["PNJ_gia_ban"],
-                       "SJC_gia_mua": data["SJC_gia_mua"],
-                       "SJC_gia_ban": data["SJC_gia_ban"]}
+                row = {"date": date_str,
+                       "pnj_buy": data["pnj_buy"],
+                       "pnj_sell": data["pnj_sell"],
+                       "sjc_buy": data["sjc_buy"],
+                       "sjc_sell": data["sjc_sell"]}
             rows.append(row)
         current_date += timedelta(days=1)
 
     # Ghi vào CSV và sắp xếp
     if rows:
         df_new = pd.DataFrame(rows)
-        df_new['Ngày'] = pd.to_datetime(df_new['Ngày'], format="%d/%m/%Y")
+        df_new['date'] = pd.to_datetime(df_new['date'], errors='coerce')
         df_all = pd.concat([df_existing, df_new], ignore_index=True)
-        df_all = df_all.drop_duplicates(subset=['Ngày'], keep='first')
-        df_all = df_all.sort_values(by='Ngày', ascending=False)
-        df_all['Ngày'] = df_all['Ngày'].dt.strftime("%d/%m/%Y")
+        df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce')
+        df_all = df_all.dropna(subset=['date'])
+        df_all = df_all.drop_duplicates(subset=['date'], keep='first')
+        df_all = df_all.sort_values(by='date', ascending=True)
+        df_all['date'] = df_all['date'].dt.strftime("%Y-%m-%d")
         df_all.to_csv(filepath, index=False)
         print(f"Saved {len(df_new)} new records to {filepath}")
     else:
@@ -119,7 +140,7 @@ def update_missing_data(start_date, end_date):
     """
     Gọi batch crawl để đảm bảo CSV đã đầy đủ dữ liệu từ start_date đến end_date.
     """
-    code_update_gia_vang(start_date, end_date)
+    batch_gold_price_update(start_date, end_date)
     print(f"Đã cập nhật dữ liệu từ {start_date.strftime('%d/%m/%Y')} đến {end_date.strftime('%d/%m/%Y')}.")
 
 
@@ -127,8 +148,8 @@ def visualize(start_date, end_date, columns):
     """
     Đọc CSV, lọc, vẽ đồ thị giá vàng cho các cột trong `columns`
     """
-    df = pd.read_csv(CSV_PATH, parse_dates=["Ngày"], dayfirst=True)
-    mask = (df['Ngày'].dt.date >= start_date) & (df['Ngày'].dt.date <= end_date)
+    df = pd.read_csv(CSV_PATH, parse_dates=["date"], dayfirst=True)
+    mask = (df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)
     df = df.loc[mask].copy()
     df.dropna(subset=columns, how='all', inplace=True)
     if df.empty:
@@ -146,7 +167,7 @@ def visualize(start_date, end_date, columns):
     }
     for col in columns:
         ax.plot(
-            df['Ngày'],
+            df['date'],
             df[col],
             marker=marker_map.get(col, 'o'),
             label=col
@@ -163,8 +184,8 @@ def visualize(start_date, end_date, columns):
     else:
         ax.xaxis.set_major_locator(mdates.MonthLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        for year, group in df.groupby(df['Ngày'].dt.year):
-            dates = group['Ngày']
+        for year, group in df.groupby(df['date'].dt.year):
+            dates = group['date']
             mid = dates.iloc[len(dates)//2]
             ax.text(mid, ymin, str(year), ha='center', va='bottom')
 
@@ -174,39 +195,21 @@ def visualize(start_date, end_date, columns):
     plt.show()
 
 def main():
-    # start_str = input("Enter start date (dd/mm/yyyy): ")
-    # end_str   = input("Enter end date (dd/mm/yyyy): ")
-    start_str = "01/01/2024"
-    end_str   = "10/01/2024"
+    start_str = "01/01/2023"
+    end_str   = "10/03/2026"
     sd = datetime.strptime(start_str, "%d/%m/%Y").date()
     ed = datetime.strptime(end_str, "%d/%m/%Y").date()
 
     # Cập nhật dữ liệu thiếu
     update_missing_data(sd, ed)
 
-    # # Chọn cột để hiển thị
-    # print("Chọn cột để hiển thị:")
-    # print(" 1: PNJ_gia_mua")
-    # print(" 2: PNJ_gia_ban")
-    # print(" 3: SJC_gia_mua")
-    # print(" 4: SJC_gia_ban")
-    # nums = input("Nhập các số (cách nhau bởi dấu phẩy) hoặc 'all' để chọn tất cả: ")
-    # if nums.strip().lower() == 'all':
-    #     cols = ["PNJ_gia_mua", "PNJ_gia_ban", "SJC_gia_mua", "SJC_gia_ban"]
-    # else:
-    #     mapping = {'1': 'PNJ_gia_mua', '2': 'PNJ_gia_ban', '3': 'SJC_gia_mua', '4': 'SJC_gia_ban'}
-    #     cols = [mapping[n.strip()] for n in nums.split(',') if n.strip() in mapping]
-    #     if not cols:
-    #         print("Không có lựa chọn hợp lệ, sử dụng mặc định cả 4 cột.")
-    #         cols = ["PNJ_gia_mua", "PNJ_gia_ban", "SJC_gia_mua", "SJC_gia_ban"]
-
-    cols = ["PNJ_gia_mua", "PNJ_gia_ban", "SJC_gia_mua", "SJC_gia_ban"]
+    cols = ["pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
     if not cols:
         print("Không có lựa chọn hợp lệ, sử dụng mặc định cả 4 cột.")
-        cols = ["PNJ_gia_mua", "PNJ_gia_ban", "SJC_gia_mua", "SJC_gia_ban"]
+        cols = ["pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
 
     # Vẽ biểu đồ với cột đã chọn
-    visualize(sd, ed, cols)
+    # visualize(sd, ed, cols)
 
 if __name__ == '__main__':
     main()

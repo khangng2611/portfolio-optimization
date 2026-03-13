@@ -1,23 +1,23 @@
-# CODE: Lấy NAV lịch sử từ vnstock (Fmarket integration)
-# - Đọc danh sách quỹ từ file fund_list.txt
-# - Mỗi lần chạy chỉ xử lý 5 quỹ (có thể set START_INDEX)
-# - Với từng quỹ, lấy NAV history qua nav_report()
-# - Tạo DataFrame với các cột: date, price (nav_per_unit), fund_name
-# - LƯU RIÊNG TỪNG FILE CSV cho mỗi mã quỹ (tên file: <fund_name>_nav_history.csv)
+# CODE: Retrieve historical NAV from vnstock (Fmarket integration)
+# - Read fund symbols from fund_list.txt
+# - Process only 5 funds per run (configurable via START_INDEX)
+# - For each fund, fetch NAV history using nav_report()
+# - Build a DataFrame with columns: date, price (nav_per_unit), fund_name
+# - SAVE EACH FUND TO A SEPARATE CSV FILE (filename: <fund_name>_nav_history.csv)
 
 import pandas as pd
 from vnstock import Fund
 from datetime import datetime
-import time  # Để delay tránh rate limit nếu cần
+import time  # Delay to avoid rate limits when needed
 
-# ====== CẤU HÌNH ======
-START_INDEX = 60  # Chỉ số bắt đầu trong danh sách
-BATCH_SIZE = 5    # Số quỹ xử lý mỗi lần chạy
+# ====== CONFIGURATION ======
+START_INDEX = 60  # Starting index in the list
+BATCH_SIZE = 5    # Number of funds to process per run
 LIST_FILE = 'datasets/fund_list.txt'
 OUTPUT_DIR = 'datasets/funds'
 # ========================
 
-# Khởi tạo Fund object
+# Initialize Fund object
 fund = Fund()
 
 def retrieve_fund_list():
@@ -42,24 +42,24 @@ def get_nav_and_return(symbol):
 
     while attempt < max_retries:
         try:
-            # Lấy báo cáo NAV
+            # Fetch NAV report
             nav_df = fund.details.nav_report(symbol)
 
-            # Kiểm tra cột cần thiết
+            # Validate required columns
             if 'nav_per_unit' not in nav_df.columns or 'date' not in nav_df.columns:
-                print(f"Quỹ {symbol} thiếu cột nav_per_unit hoặc date.")
+                print(f"Fund {symbol} is missing nav_per_unit or date columns.")
                 return pd.DataFrame()
 
-            # Chuẩn bị DataFrame
+            # Prepare DataFrame
             df = nav_df[['date', 'nav_per_unit']].copy()
-            df = df.sort_values('date')  # Đảm bảo theo thứ tự thời gian
+            df = df.sort_values('date')  # Ensure chronological order
             df['symbol'] = symbol
-            df['price'] = (df['nav_per_unit'] / 1000).round(2)  # Chia 1000 và làm tròn 2 chữ số
+            df['price'] = (df['nav_per_unit'] / 1000).round(2)  # Divide by 1000 and round to 2 decimals
 
-            # Chỉ giữ 3 cột theo yêu cầu
+            # Keep only the 3 required columns
             df_final = df[['date', 'price', 'symbol']]
 
-            print(f"Đã xử lý quỹ {symbol} ({len(df_final)} dòng)")
+            print(f"Processed fund {symbol} ({len(df_final)} rows)")
 
             return df_final
 
@@ -67,56 +67,56 @@ def get_nav_and_return(symbol):
             error_message = str(e)
             if 'RateLimitExceeded' in error_message:
                 attempt += 1
-                print(f"RateLimitExceeded khi lấy quỹ {symbol}. Chờ 60 giây rồi thử lại ({attempt}/{max_retries})...")
+                print(f"RateLimitExceeded while fetching fund {symbol}. Waiting 60 seconds before retry ({attempt}/{max_retries})...")
                 time.sleep(60)
                 continue
 
-            print(f"Lỗi khi lấy NAV cho quỹ {symbol}: {e}")
+            print(f"Error while fetching NAV for fund {symbol}: {e}")
             return pd.DataFrame()
 
-    print(f"Vượt quá số lần thử lại cho quỹ {symbol} do RateLimitExceeded.")
+    print(f"Exceeded maximum retries for fund {symbol} due to RateLimitExceeded.")
     return pd.DataFrame()
 
 def crawl_fund_nav_history():
-    # Bước 1: Đọc danh sách quỹ từ file
+    # Step 1: Read fund symbols from file
     with open(LIST_FILE, 'r') as f:
         all_fund_names = [line.strip() for line in f if line.strip()]
 
-    print(f"Tổng số quỹ trong file: {len(all_fund_names)}")
+    print(f"Total funds in list file: {len(all_fund_names)}")
 
-    # Bước 2: Lấy batch <BATCH_SIZE> quỹ theo START_INDEX
+    # Step 2: Select a <BATCH_SIZE> batch based on START_INDEX
     fund_names_batch = all_fund_names[START_INDEX:START_INDEX + BATCH_SIZE]
 
     if not fund_names_batch:
-        print(f"Không còn quỹ nào để xử lý (START_INDEX={START_INDEX} vượt quá danh sách).")
+        print(f"No funds left to process (START_INDEX={START_INDEX} exceeds the list length).")
         return
 
-    print(f"Xử lý quỹ từ index {START_INDEX} đến {START_INDEX + len(fund_names_batch) - 1}:")
-    print(f"Danh sách: {fund_names_batch}")
-    # Bước 3: Lặp qua từng quỹ và lưu RIÊNG từng file
+    print(f"Processing funds from index {START_INDEX} to {START_INDEX + len(fund_names_batch) - 1}:")
+    print(f"Fund batch: {fund_names_batch}")
+    # Step 3: Iterate through each fund and save each to a separate file
     processed_count = 0
 
     for fund_name in fund_names_batch:
         
-        # Hàm lấy NAV history và tính return cho một quỹ
+        # Get NAV history and returns for one fund
         df_quy = get_nav_and_return(fund_name)
 
         if not df_quy.empty:
-            # Tên file riêng cho từng quỹ
+            # Output filename for each fund
             file_name = f"{OUTPUT_DIR}/{fund_name}.csv"
             df_quy.to_csv(file_name, index=False, encoding='utf-8-sig')
-            print(f"Đã lưu file riêng: {file_name}")
+            print(f"Saved separate file: {file_name}")
             processed_count += 1
 
-        # Delay để tránh rate limit từ Fmarket
-        time.sleep(1.5)  # 1.5 giây giữa các request
+        # Delay to avoid Fmarket rate limits
+        time.sleep(1.5)  # 1.5 seconds between requests
 
-    # Bước 4: Báo cáo tổng kết
-    print(f"\nHoàn tất! Đã xử lý và lưu thành công {processed_count} quỹ.")
-    print(f"Tất cả file được lưu trong thư mục: {OUTPUT_DIR}")
+    # Step 4: Summary report
+    print(f"\nDone! Successfully processed and saved {processed_count} funds.")
+    print(f"All files were saved in directory: {OUTPUT_DIR}")
     next_index = START_INDEX + BATCH_SIZE
     if next_index < len(all_fund_names):
-        print(f"Lần chạy tiếp theo, đặt START_INDEX = {next_index}")
+        print(f"For the next run, set START_INDEX = {next_index}")
 
 if __name__ == "__main__":
     retrieve_bond_list()

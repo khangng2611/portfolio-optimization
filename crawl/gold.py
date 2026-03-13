@@ -6,15 +6,15 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 import requests
-# Đường dẫn thư mục & file CSV (cùng folder với script này)
+# Folder and CSV file path (same directory as this script)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, "datasets/gold/pnj_sjc_price.csv")
 PNJ_API_BASE_URL = "https://edge-cf-api.pnj.io"
 
-##Crawler
+## Crawler
 def parse_price(text):
     try:
-        # Loại bỏ dấu chấm, chuyển về int
+        # Remove thousand separators and cast to int
         clean = text.replace('.', '').strip()
         value = int(clean)
         return value
@@ -87,12 +87,12 @@ def get_gold_data_for_date(date_obj):
     }
 
 def batch_gold_price_update(start_date, end_date):
-    # Thư mục chứa file và đường dẫn file CSV
+    # Folder containing files and CSV path
     folder = BASE_DIR                            
     filepath = CSV_PATH                          
     os.makedirs(folder, exist_ok=True)    
 
-    # Đọc dữ liệu đã có (nếu file tồn tại)
+    # Read existing data (if file exists)
     if os.path.exists(filepath):
         df_existing = pd.read_csv(filepath, dtype=str)
         df_existing['date'] = pd.to_datetime(df_existing['date'], errors='coerce', dayfirst=True)
@@ -110,7 +110,7 @@ def batch_gold_price_update(start_date, end_date):
             print(f"Crawling {date_str}...")
             data = get_gold_data_for_date(current_date)
             if data is None:
-                # Lỗi khi request
+                # Request error
                 row = {"date": date_str, "pnj_buy": None, "pnj_sell": None, "sjc_buy": None, "sjc_sell": None}
             else:
                 row = {"date": date_str,
@@ -121,7 +121,7 @@ def batch_gold_price_update(start_date, end_date):
             rows.append(row)
         current_date += timedelta(days=1)
 
-    # Ghi vào CSV và sắp xếp
+    # Write to CSV and sort
     if rows:
         df_new = pd.DataFrame(rows)
         df_new['date'] = pd.to_datetime(df_new['date'], errors='coerce')
@@ -138,25 +138,25 @@ def batch_gold_price_update(start_date, end_date):
 
 def update_missing_data(start_date, end_date):
     """
-    Gọi batch crawl để đảm bảo CSV đã đầy đủ dữ liệu từ start_date đến end_date.
+    Run batch crawl to ensure CSV contains complete data from start_date to end_date.
     """
     batch_gold_price_update(start_date, end_date)
-    print(f"Đã cập nhật dữ liệu từ {start_date.strftime('%d/%m/%Y')} đến {end_date.strftime('%d/%m/%Y')}.")
+    print(f"Updated data from {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')}.")
 
 
 def visualize(start_date, end_date, columns):
     """
-    Đọc CSV, lọc, vẽ đồ thị giá vàng cho các cột trong `columns`
+    Read CSV, filter data, and plot gold prices for the selected columns.
     """
     df = pd.read_csv(CSV_PATH, parse_dates=["date"], dayfirst=True)
     mask = (df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)
     df = df.loc[mask].copy()
     df.dropna(subset=columns, how='all', inplace=True)
     if df.empty:
-        print("Không có dữ liệu để hiển thị sau khi loại NaN.")
+        print("No data to display after removing NaN values.")
         return
 
-    # Giới hạn trục Y
+    # Set Y-axis limits
     vals = df[columns]
     ymin, ymax = vals.min().min(), vals.max().max()
 
@@ -176,7 +176,7 @@ def visualize(start_date, end_date, columns):
     ax.set_ylim(ymin * 0.99, ymax * 1.01)
     ax.set_ylabel('Giá (triệu đồng/lượng)')
 
-    # Định dạng trục X (giữ nguyên logic cũ)
+    # Format X-axis (keep existing logic)
     days = (end_date - start_date).days
     if days <= 10:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%y'))
@@ -200,15 +200,15 @@ def main():
     sd = datetime.strptime(start_str, "%d/%m/%Y").date()
     ed = datetime.strptime(end_str, "%d/%m/%Y").date()
 
-    # Cập nhật dữ liệu thiếu
+    # Update missing data
     update_missing_data(sd, ed)
 
     cols = ["pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
     if not cols:
-        print("Không có lựa chọn hợp lệ, sử dụng mặc định cả 4 cột.")
+        print("No valid selection found, using all 4 columns by default.")
         cols = ["pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
 
-    # Vẽ biểu đồ với cột đã chọn
+    # Plot chart with selected columns
     # visualize(sd, ed, cols)
 
 if __name__ == '__main__':

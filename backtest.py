@@ -7,7 +7,7 @@ import cvxpy as cp
 # ====================== CONFIG ======================
 START_DATE = "2023-01-01"
 END_DATE = "2026-01-01"
-WINDOW = 120
+WINDOW = 20
 REBALANCE_FREQ = 5
 INITIAL_NAV = 100000.0
 TRADING_DAYS_PER_YEAR = 252
@@ -16,6 +16,23 @@ RISK_FREE_RATE_ANNUAL = 0.06
 BL_TAU = 0.05
 BL_DELTA = 2.5
 BL_VIEW_CONFIDENCE = 0.5
+
+# Relative views cho Black-Litterman:
+# view_return_annual > 0 nghĩa là leg_long kỳ vọng outperform leg_short theo năm.
+RELATIVE_VIEWS = [
+    {
+        "name": "GOLD_over_E1VFVN30",
+        "legs": {"GOLD": 1.0, "E1VFVN30": -1.0},
+        "view_return_annual": 0.06,
+        "confidence": 0.70,
+    },
+    {
+        "name": "MBBOND_over_DCDS",
+        "legs": {"MBBOND": 1.0, "DCDS": -1.0},
+        "view_return_annual": 0.015,
+        "confidence": 0.60,
+    },
+]
 
 BASE_DIR = Path("datasets")
 ASSETS = {
@@ -34,11 +51,11 @@ ASSETS = {
         "date_col": "date",
         "price_col": "price",
     },
-    "SSISCA": {
-        "path": BASE_DIR / "funds" / "SSISCA.csv",
-        "date_col": "date",
-        "price_col": "price",
-    },
+    # "SSISCA": {
+    #     "path": BASE_DIR / "funds" / "SSISCA.csv",
+    #     "date_col": "date",
+    #     "price_col": "price",
+    # },
     "MBBOND": {
         "path": BASE_DIR / "funds" / "MBBOND.csv",
         "date_col": "date",
@@ -115,17 +132,53 @@ def optimize_weight(mu, Sigma, risk_aversion=0.5):
     return np.full(n, 1.0 / n)
 
 
+def build_relative_views(assets, trading_days_per_year=TRADING_DAYS_PER_YEAR):
+    asset_to_idx = {asset: i for i, asset in enumerate(assets)}
+    p_rows = []
+    q_vals = []
+    conf_vals = []
+    active_names = []
+
+    for view in RELATIVE_VIEWS:
+        row = np.zeros(len(assets), dtype=float)
+        is_valid = True
+        for asset, coeff in view["legs"].items():
+            if asset not in asset_to_idx:
+                is_valid = False
+                break
+            row[asset_to_idx[asset]] = coeff
+
+        if not is_valid:
+            continue
+
+        p_rows.append(row)
+        q_vals.append(view["view_return_annual"] / trading_days_per_year)
+        conf_vals.append(view.get("confidence", BL_VIEW_CONFIDENCE))
+        active_names.append(view["name"])
+
+    if len(p_rows) == 0:
+        return None, None, None, []
+
+    P = np.array(p_rows, dtype=float)
+    Q = np.array(q_vals, dtype=float)
+    conf = np.array(conf_vals, dtype=float)
+    return P, Q, conf, active_names
+
+
 def black_litterman_posterior_mu(
     Sigma,
-    q_view,
     market_weights,
+    P,
+    Q,
+    confidences,
     tau=BL_TAU,
     delta=BL_DELTA,
-    view_confidence=BL_VIEW_CONFIDENCE,
 ):
     Sigma = np.asarray(Sigma, dtype=float)
-    q_view = np.asarray(q_view, dtype=float)
     market_weights = np.asarray(market_weights, dtype=float)
+    P = np.asarray(P, dtype=float)
+    Q = np.asarray(Q, dtype=float)
+    confidences = np.asarray(confidences, dtype=float)
     n = len(market_weights)
 
     Sigma = np.nan_to_num(Sigma, nan=0.0, posinf=0.0, neginf=0.0)
@@ -135,18 +188,17 @@ def black_litterman_posterior_mu(
     Sigma = eigvecs @ np.diag(eigvals) @ eigvecs.T
 
     pi = delta * Sigma @ market_weights
-    p = np.eye(n)
 
-    omega_diag = np.diag(p @ (tau * Sigma) @ p.T)
+    omega_diag = np.diag(P @ (tau * Sigma) @ P.T)
     omega_diag = np.clip(omega_diag, 1e-10, None)
-    confidence = np.clip(view_confidence, 1e-6, 1.0)
-    omega = np.diag(omega_diag / confidence)
+    confidences = np.clip(confidences, 1e-6, 1.0)
+    omega = np.diag(omega_diag / confidences)
 
     inv_tau_sigma = np.linalg.inv(tau * Sigma)
     inv_omega = np.linalg.inv(omega)
 
-    middle = inv_tau_sigma + p.T @ inv_omega @ p
-    rhs = inv_tau_sigma @ pi + p.T @ inv_omega @ q_view
+    middle = inv_tau_sigma + P.T @ inv_omega @ P
+    rhs = inv_tau_sigma @ pi + P.T @ inv_omega @ Q
     mu_bl = np.linalg.solve(middle, rhs)
     return mu_bl
 
@@ -155,6 +207,7 @@ def backtest(prices, window=WINDOW, rebalance_freq=REBALANCE_FREQ, initial_nav=I
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
     m = len(assets)
+    p_view, q_view, conf_view, _ = build_relative_views(assets)
 
     ew_weight = np.full(m, 1.0 / m)
     mvo_weight = np.full(m, 1.0 / m)
@@ -183,7 +236,12 @@ def backtest(prices, window=WINDOW, rebalance_freq=REBALANCE_FREQ, initial_nav=I
             mvo_weight = optimize_weight(mu, Sigma)
 
             market_weights = np.full(m, 1.0 / m)
-            mu_bl = black_litterman_posterior_mu(Sigma, mu, market_weights)
+            if p_view is not None:
+                mu_bl = black_litterman_posterior_mu(
+                    Sigma, market_weights, p_view, q_view, conf_view
+                )
+            else:
+                mu_bl = mu
             bl_weight = optimize_weight(mu_bl, Sigma)
             rebalance_dates.append(returns.index[t])
 
@@ -239,7 +297,11 @@ def get_next_period_weights(returns, as_of_date=pd.Timestamp(END_DATE), window=W
     mu = hist.mean().values
     Sigma = hist.cov().values
     market_weights = np.full(len(mu), 1.0 / len(mu))
-    mu_bl = black_litterman_posterior_mu(Sigma, mu, market_weights)
+    p_view, q_view, conf_view, _ = build_relative_views(list(returns.columns))
+    if p_view is not None:
+        mu_bl = black_litterman_posterior_mu(Sigma, market_weights, p_view, q_view, conf_view)
+    else:
+        mu_bl = mu
 
     w_mvo = optimize_weight(mu, Sigma)
     w_bl = optimize_weight(mu_bl, Sigma)
@@ -266,6 +328,7 @@ def main():
     print("Đang load và đồng bộ dữ liệu 4 tài sản...")
     prices = build_price_table(START_DATE, END_DATE)
     asset_summary = summarize_asset_returns(prices)
+    _, _, _, active_view_names = build_relative_views(list(prices.columns))
 
     print(
         f"Khoảng dữ liệu dùng backtest: {prices.index.min().date()} -> {prices.index.max().date()} "
@@ -276,6 +339,15 @@ def main():
     print("BẢNG RETURN TỪNG ASSET")
     print("=" * 70)
     print(asset_summary.to_string(float_format=lambda x: f"{x:,.2%}"))
+
+    print("\n" + "=" * 70)
+    print("BLACK-LITTERMAN VIEWS ĐANG DÙNG")
+    print("=" * 70)
+    if len(active_view_names) == 0:
+        print("Không có relative view hợp lệ với tập assets hiện tại -> BL fallback về mu lịch sử")
+    else:
+        for name in active_view_names:
+            print(f"- {name}")
 
     result = backtest(prices)
     ew_nav = result["ew_nav"]

@@ -1,21 +1,28 @@
-import os
-import subprocess
 from datetime import datetime, timedelta
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+from pathlib import Path
 
+import pandas as pd
 import requests
-# Folder and CSV file path (same directory as this script)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(BASE_DIR, "datasets/gold/pnj_sjc_price.csv")
+
 PNJ_API_BASE_URL = "https://edge-cf-api.pnj.io"
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+GOLD_DIR = ROOT_DIR / "datasets" / "gold"
+TRAIN_CSV_PATH = GOLD_DIR / "gold_train.csv"
+TEST_CSV_PATH = GOLD_DIR / "gold_test.csv"
+
+TRAIN_START_STR = "01/01/2020"
+SPLIT_DATE_STR = "01/10/2023"
+TEST_END_STR = datetime.now().strftime("%d/%m/%Y")
+
+COLUMNS = ["date", "pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
+
 
 ## Crawler
 def parse_price(text):
     try:
         # Remove thousand separators and cast to int
-        clean = text.replace('.', '').strip()
+        clean = text.replace(".", "").strip()
         value = int(clean)
         return value
     except:
@@ -39,9 +46,12 @@ def _extract_buy_sell(gold_type):
 
     return gia_mua, gia_ban
 
+
 def get_gold_data_for_date(date_obj):
     date_param = date_obj.strftime("%Y%m%d")
-    url = f"{PNJ_API_BASE_URL}/ecom-frontend/v1/get-gold-price-history?date={date_param}"
+    url = (
+        f"{PNJ_API_BASE_URL}/ecom-frontend/v1/get-gold-price-history?date={date_param}"
+    )
 
     try:
         resp = requests.get(url, timeout=30)
@@ -86,130 +96,94 @@ def get_gold_data_for_date(date_obj):
         "sjc_sell": sjc_sell,
     }
 
-def batch_gold_price_update(start_date, end_date):
-    # Folder containing files and CSV path
-    folder = BASE_DIR                            
-    filepath = CSV_PATH                          
-    os.makedirs(folder, exist_ok=True)    
 
-    # Read existing data (if file exists)
-    if os.path.exists(filepath):
-        df_existing = pd.read_csv(filepath, dtype=str)
-        df_existing['date'] = pd.to_datetime(df_existing['date'], errors='coerce', dayfirst=True)
-        df_existing = df_existing.dropna(subset=['date'])
-        existing_dates = set(df_existing['date'].dt.strftime("%Y-%m-%d"))
-    else:
-        df_existing = pd.DataFrame(columns=["date", "pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"])
-        existing_dates = set()
-
+def crawl_gold_range(start_date, end_date):
     rows = []
     current_date = start_date
+
     while current_date <= end_date:
         date_str = current_date.strftime("%Y-%m-%d")
-        if date_str not in existing_dates:
-            print(f"Crawling {date_str}...")
-            data = get_gold_data_for_date(current_date)
-            if data is None:
-                # Request error
-                row = {"date": date_str, "pnj_buy": None, "pnj_sell": None, "sjc_buy": None, "sjc_sell": None}
-            else:
-                row = {"date": date_str,
-                       "pnj_buy": data["pnj_buy"],
-                       "pnj_sell": data["pnj_sell"],
-                       "sjc_buy": data["sjc_buy"],
-                       "sjc_sell": data["sjc_sell"]}
-            rows.append(row)
+        print(f"Crawling {date_str}...")
+        data = get_gold_data_for_date(current_date)
+
+        if data is None:
+            row = {
+                "date": date_str,
+                "pnj_buy": None,
+                "pnj_sell": None,
+                "sjc_buy": None,
+                "sjc_sell": None,
+            }
+        else:
+            row = {
+                "date": date_str,
+                "pnj_buy": data["pnj_buy"],
+                "pnj_sell": data["pnj_sell"],
+                "sjc_buy": data["sjc_buy"],
+                "sjc_sell": data["sjc_sell"],
+            }
+
+        rows.append(row)
         current_date += timedelta(days=1)
 
-    # Write to CSV and sort
-    if rows:
-        df_new = pd.DataFrame(rows)
-        df_new['date'] = pd.to_datetime(df_new['date'], errors='coerce')
-        df_all = pd.concat([df_existing, df_new], ignore_index=True)
-        df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce')
-        df_all = df_all.dropna(subset=['date'])
-        df_all = df_all.drop_duplicates(subset=['date'], keep='first')
-        df_all = df_all.sort_values(by='date', ascending=True)
-        df_all['date'] = df_all['date'].dt.strftime("%Y-%m-%d")
-        df_all.to_csv(filepath, index=False)
-        print(f"Saved {len(df_new)} new records to {filepath}")
-    else:
-        print("No new dates to crawl.")
-
-def update_missing_data(start_date, end_date):
-    """
-    Run batch crawl to ensure CSV contains complete data from start_date to end_date.
-    """
-    batch_gold_price_update(start_date, end_date)
-    print(f"Updated data from {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')}.")
+    return pd.DataFrame(rows, columns=COLUMNS)
 
 
-def visualize(start_date, end_date, columns):
-    """
-    Read CSV, filter data, and plot gold prices for the selected columns.
-    """
-    df = pd.read_csv(CSV_PATH, parse_dates=["date"], dayfirst=True)
-    mask = (df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)
-    df = df.loc[mask].copy()
-    df.dropna(subset=columns, how='all', inplace=True)
-    if df.empty:
-        print("No data to display after removing NaN values.")
-        return
+def fill_missing_with_previous_day(df, start_date, end_date):
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
 
-    # Set Y-axis limits
-    vals = df[columns]
-    ymin, ymax = vals.min().min(), vals.max().max()
+    for col in COLUMNS[1:]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    marker_map = {
-        "PNJ_gia_mua": "o", "PNJ_gia_ban": "o",
-        "SJC_gia_mua": "x", "SJC_gia_ban": "x"
-    }
-    for col in columns:
-        ax.plot(
-            df['date'],
-            df[col],
-            marker=marker_map.get(col, 'o'),
-            label=col
-        )
+    full_index = pd.date_range(start=start_date, end=end_date, freq="D")
+    df = (
+        df.drop_duplicates(subset=["date"], keep="last")
+        .set_index("date")
+        .reindex(full_index)
+        .sort_index()
+        .ffill()
+        .reset_index()
+        .rename(columns={"index": "date"})
+    )
 
-    ax.set_ylim(ymin * 0.99, ymax * 1.01)
-    ax.set_ylabel('Giá (triệu đồng/lượng)')
+    df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+    return df[COLUMNS]
 
-    # Format X-axis (keep existing logic)
-    days = (end_date - start_date).days
-    if days <= 10:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%y'))
-        ax.xaxis.set_major_locator(mdates.DayLocator())
-    else:
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        for year, group in df.groupby(df['date'].dt.year):
-            dates = group['date']
-            mid = dates.iloc[len(dates)//2]
-            ax.text(mid, ymin, str(year), ha='center', va='bottom')
 
-    plt.title(f"Giá vàng từ {start_date.strftime('%d/%m/%Y')} đến {end_date.strftime('%d/%m/%Y')}")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+def build_and_save_train_test():
+    train_start = datetime.strptime(TRAIN_START_STR, "%d/%m/%Y").date()
+    split_date = datetime.strptime(SPLIT_DATE_STR, "%d/%m/%Y").date()
+    test_end = datetime.strptime(TEST_END_STR, "%d/%m/%Y").date()
+
+    seed_start = train_start - timedelta(days=1)
+    df_raw = crawl_gold_range(seed_start, test_end)
+    df_filled = fill_missing_with_previous_day(df_raw, seed_start, test_end)
+
+    df_filled["date"] = pd.to_datetime(df_filled["date"]).dt.date
+
+    train_df = df_filled[
+        (df_filled["date"] >= train_start) & (df_filled["date"] <= split_date)
+    ].copy()
+    test_df = df_filled[
+        (df_filled["date"] >= split_date) & (df_filled["date"] <= test_end)
+    ].copy()
+
+    train_df["date"] = pd.to_datetime(train_df["date"]).dt.strftime("%Y-%m-%d")
+    test_df["date"] = pd.to_datetime(test_df["date"]).dt.strftime("%Y-%m-%d")
+
+    GOLD_DIR.mkdir(parents=True, exist_ok=True)
+    train_df[COLUMNS].to_csv(TRAIN_CSV_PATH, index=False)
+    test_df[COLUMNS].to_csv(TEST_CSV_PATH, index=False)
+
+    print(f"Saved train data to: {TRAIN_CSV_PATH} ({len(train_df)} rows)")
+    print(f"Saved test data to: {TEST_CSV_PATH} ({len(test_df)} rows)")
+
 
 def main():
-    start_str = "01/01/2023"
-    end_str   = "10/03/2026"
-    sd = datetime.strptime(start_str, "%d/%m/%Y").date()
-    ed = datetime.strptime(end_str, "%d/%m/%Y").date()
+    build_and_save_train_test()
 
-    # Update missing data
-    update_missing_data(sd, ed)
 
-    cols = ["pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
-    if not cols:
-        print("No valid selection found, using all 4 columns by default.")
-        cols = ["pnj_buy", "pnj_sell", "sjc_buy", "sjc_sell"]
-
-    # Plot chart with selected columns
-    # visualize(sd, ed, cols)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

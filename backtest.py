@@ -7,6 +7,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from view_generators import (
+    generate_rule_based_views,
+    generate_relative_views,
+    generate_ml_views,
+    build_views_matrix,
+    combine_views,
+)
+
 # ====================== CONFIG ======================
 TRAIN_START_DATE = "2020-01-01"
 SPLIT_DATE = "2023-10-01"
@@ -24,7 +32,11 @@ BL_TAU = 0.05
 BL_DELTA = 2.5
 BL_VIEW_CONFIDENCE = 0.5
 
-RELATIVE_VIEWS = [
+# View generation mode: "static", "rule_based", "relative", "ml", "combined"
+VIEW_MODE = "rule_based"
+
+# Static views (used when VIEW_MODE = "static")
+STATIC_VIEWS = [
     {
         "name": "GOLD_over_E1VFVN30",
         "legs": {"GOLD": 1.0, "E1VFVN30": -1.0},
@@ -38,6 +50,9 @@ RELATIVE_VIEWS = [
         "confidence": 0.60,
     },
 ]
+
+# Combined view weights: (rule_based, relative, ml)
+COMBINED_VIEW_WEIGHTS = (0.4, 0.4, 0.2)
 
 ROOT_DIR = Path(__file__).resolve().parents[0]
 DATASETS_DIR = ROOT_DIR / "datasets"
@@ -204,14 +219,15 @@ def optimize_weight(mu, sigma, risk_aversion=0.5):
     return np.full(n, 1.0 / n)
 
 
-def build_relative_views(assets, trading_days_per_year=TRADING_DAYS_PER_YEAR):
+def build_static_views(assets, trading_days_per_year=TRADING_DAYS_PER_YEAR):
+    """Build views from STATIC_VIEWS config (legacy hardcoded views)."""
     asset_to_idx = {asset: i for i, asset in enumerate(assets)}
     p_rows = []
     q_vals = []
     conf_vals = []
     active_names = []
 
-    for view in RELATIVE_VIEWS:
+    for view in STATIC_VIEWS:
         row = np.zeros(len(assets), dtype=float)
         is_valid = True
         for asset, coeff in view["legs"].items():
@@ -235,6 +251,47 @@ def build_relative_views(assets, trading_days_per_year=TRADING_DAYS_PER_YEAR):
     q = np.array(q_vals, dtype=float)
     conf = np.array(conf_vals, dtype=float)
     return p, q, conf, active_names
+
+
+def generate_dynamic_views(price_window: pd.DataFrame, assets: list, mode: str = VIEW_MODE):
+    """
+    Generate views dynamically based on the selected mode.
+    
+    Parameters
+    ----------
+    price_window : pd.DataFrame
+        Price data for the lookback window (used for indicator calculation)
+    assets : list
+        List of asset names
+    mode : str
+        View generation mode: "static", "rule_based", "relative", "ml", "combined"
+    
+    Returns
+    -------
+    tuple
+        (P matrix, Q vector, confidence vector, view names)
+    """
+    if mode == "static":
+        return build_static_views(assets)
+    
+    views = []
+    
+    if mode == "rule_based":
+        views = generate_rule_based_views(price_window)
+    elif mode == "relative":
+        views = generate_relative_views(price_window)
+    elif mode == "ml":
+        views = generate_ml_views(price_window, model=None)  # Fallback mode
+    elif mode == "combined":
+        rule_views = generate_rule_based_views(price_window)
+        rel_views = generate_relative_views(price_window)
+        ml_views = generate_ml_views(price_window, model=None)
+        views = combine_views(rule_views, rel_views, ml_views, COMBINED_VIEW_WEIGHTS)
+    else:
+        # Unknown mode, fallback to static
+        return build_static_views(assets)
+    
+    return build_views_matrix(views, assets)
 
 
 def black_litterman_posterior_mu(
@@ -273,12 +330,17 @@ def black_litterman_posterior_mu(
 
 
 def backtest(
-    prices, window=WINDOW, rebalance_freq=REBALANCE_FREQ, initial_nav=INITIAL_NAV
+    prices, window=WINDOW, rebalance_freq=REBALANCE_FREQ, initial_nav=INITIAL_NAV, view_mode=VIEW_MODE
 ):
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
     m = len(assets)
-    p_view, q_view, conf_view, _ = build_relative_views(assets)
+    
+    # For static mode, compute views once upfront
+    if view_mode == "static":
+        p_view, q_view, conf_view, _ = build_static_views(assets)
+    else:
+        p_view, q_view, conf_view = None, None, None
 
     ew_weight = np.full(m, 1.0 / m)
     mvo_weight = np.full(m, 1.0 / m)
@@ -291,6 +353,7 @@ def backtest(
     mvo_weights_hist = []
     bl_weights_hist = []
     rebalance_dates = []
+    views_history = []  # Track generated views at each rebalance
 
     for t in range(window, len(returns)):
         hist = returns.iloc[t - window : t]
@@ -305,6 +368,22 @@ def backtest(
             mvo_weight = optimize_weight(mu, sigma)
 
             market_weights = np.full(m, 1.0 / m)
+            
+            # Generate views dynamically (except for static mode which is precomputed)
+            if view_mode != "static":
+                # Get price window for indicator calculation
+                # Use prices up to current point (not returns)
+                price_window = prices.iloc[max(0, t - window - 30) : t + window]
+                p_view, q_view, conf_view, view_names = generate_dynamic_views(
+                    price_window, assets, view_mode
+                )
+                views_history.append({
+                    "date": returns.index[t],
+                    "view_names": view_names if p_view is not None else [],
+                    "q_values": q_view.tolist() if q_view is not None else [],
+                    "confidences": conf_view.tolist() if conf_view is not None else [],
+                })
+            
             if p_view is not None:
                 mu_bl = black_litterman_posterior_mu(
                     sigma, market_weights, p_view, q_view, conf_view
@@ -334,6 +413,8 @@ def backtest(
         "bl_weights_hist": np.array(bl_weights_hist),
         "rebalance_dates": rebalance_dates,
         "assets": assets,
+        "views_history": views_history,
+        "view_mode": view_mode,
     }
 
 
@@ -355,7 +436,7 @@ def max_drawdown(nav_series):
     return drawdown.min()
 
 
-def get_next_period_weights(returns, as_of_date, window=WINDOW):
+def get_next_period_weights(returns, prices, as_of_date, window=WINDOW, view_mode=VIEW_MODE):
     eligible = returns.loc[returns.index <= as_of_date]
     if len(eligible) < window:
         raise ValueError(
@@ -366,7 +447,17 @@ def get_next_period_weights(returns, as_of_date, window=WINDOW):
     mu = hist.mean().values
     sigma = hist.cov().values
     market_weights = np.full(len(mu), 1.0 / len(mu))
-    p_view, q_view, conf_view, _ = build_relative_views(list(returns.columns))
+    assets = list(returns.columns)
+    
+    # Generate views based on mode
+    if view_mode == "static":
+        p_view, q_view, conf_view, view_names = build_static_views(assets)
+    else:
+        # Get price window for dynamic view generation
+        price_eligible = prices.loc[prices.index <= as_of_date]
+        price_window = price_eligible.iloc[-window - 30:] if len(price_eligible) > window + 30 else price_eligible
+        p_view, q_view, conf_view, view_names = generate_dynamic_views(price_window, assets, view_mode)
+    
     if p_view is not None:
         mu_bl = black_litterman_posterior_mu(
             sigma, market_weights, p_view, q_view, conf_view
@@ -376,7 +467,7 @@ def get_next_period_weights(returns, as_of_date, window=WINDOW):
 
     w_mvo = optimize_weight(mu, sigma)
     w_bl = optimize_weight(mu_bl, sigma)
-    return w_mvo, w_bl, hist.index[-1]
+    return w_mvo, w_bl, hist.index[-1], view_names
 
 
 def summarize_asset_returns(prices):
@@ -401,6 +492,7 @@ def main():
     print(
         f"Phase={BACKTEST_PHASE} | Data mode={BACKTEST_DATA_MODE} | Period={start_date} -> {end_date}"
     )
+    print(f"View mode={VIEW_MODE}")
 
     prices = build_price_table(
         start_date=start_date,
@@ -409,7 +501,6 @@ def main():
         data_mode=BACKTEST_DATA_MODE,
     )
     asset_summary = summarize_asset_returns(prices)
-    _, _, _, active_view_names = build_relative_views(list(prices.columns))
 
     print(
         f"Khoang du lieu dung backtest: {prices.index.min().date()} -> {prices.index.max().date()} ({len(prices)} phien)"
@@ -421,17 +512,28 @@ def main():
     print(asset_summary.to_string(float_format=lambda x: f"{x:,.2%}"))
 
     print("\n" + "=" * 70)
-    print("BLACK-LITTERMAN VIEWS DANG DUNG")
+    print(f"BLACK-LITTERMAN VIEW MODE: {VIEW_MODE.upper()}")
     print("=" * 70)
-    if len(active_view_names) == 0:
-        print(
-            "Khong co relative view hop le voi tap assets hien tai -> BL fallback ve mu lich su"
-        )
+    if VIEW_MODE == "static":
+        _, _, _, active_view_names = build_static_views(list(prices.columns))
+        if len(active_view_names) == 0:
+            print("Khong co view hop le voi tap assets hien tai -> BL fallback ve mu lich su")
+        else:
+            print("Static views:")
+            for name in active_view_names:
+                print(f"  - {name}")
     else:
-        for name in active_view_names:
-            print(f"- {name}")
+        print(f"Views duoc sinh dong tai moi lan rebalance dua tren {VIEW_MODE} indicators")
+        if VIEW_MODE == "rule_based":
+            print("  - Su dung: MA Crossover, RSI, Momentum")
+        elif VIEW_MODE == "relative":
+            print("  - Su dung: Momentum comparison giua cac cap assets")
+        elif VIEW_MODE == "ml":
+            print("  - Su dung: ML model predictions (fallback: simple momentum)")
+        elif VIEW_MODE == "combined":
+            print(f"  - Ket hop: rule_based ({COMBINED_VIEW_WEIGHTS[0]:.0%}), relative ({COMBINED_VIEW_WEIGHTS[1]:.0%}), ml ({COMBINED_VIEW_WEIGHTS[2]:.0%})")
 
-    result = backtest(prices)
+    result = backtest(prices, view_mode=VIEW_MODE)
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]
     bl_nav = result["bl_nav"]
@@ -449,9 +551,27 @@ def main():
         f"BL   | NAV cuoi: {bl_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(bl_nav):6.2f} | MDD: {max_drawdown(bl_nav):7.2%}"
     )
 
+    # Show sample of dynamic views generated during backtest
+    if VIEW_MODE != "static" and result.get("views_history"):
+        print("\n" + "=" * 70)
+        print("MAU VIEWS SINH RA TRONG QUA TRINH BACKTEST")
+        print("=" * 70)
+        views_hist = result["views_history"]
+        # Show first 3 and last 3 rebalance dates
+        sample_indices = list(range(min(3, len(views_hist)))) + list(range(max(0, len(views_hist) - 3), len(views_hist)))
+        sample_indices = sorted(set(sample_indices))
+        for i in sample_indices:
+            vh = views_hist[i]
+            print(f"\n{vh['date'].strftime('%Y-%m-%d')}:")
+            if vh['view_names']:
+                for name, q, conf in zip(vh['view_names'], vh['q_values'], vh['confidences']):
+                    print(f"  - {name}: Q={q:.6f} (daily), conf={conf:.2f}")
+            else:
+                print("  - Khong co view (BL fallback ve mu lich su)")
+
     as_of_date = pd.Timestamp(end_date)
-    w_mvo_next, w_bl_next, last_hist_date = get_next_period_weights(
-        result["returns"], as_of_date=as_of_date, window=WINDOW
+    w_mvo_next, w_bl_next, last_hist_date, next_view_names = get_next_period_weights(
+        result["returns"], prices, as_of_date=as_of_date, window=WINDOW, view_mode=VIEW_MODE
     )
 
     print("\n" + "=" * 70)
@@ -464,14 +584,16 @@ def main():
     print("BL:")
     for asset, weight in zip(result["assets"], w_bl_next):
         print(f"  {asset:8}: {weight:7.2%}")
+    if next_view_names:
+        print(f"  Views used: {', '.join(next_view_names)}")
 
     if not args.no_plot:
         plt.figure(figsize=(12, 6))
         plt.plot(ew_nav.index, ew_nav.values, label="EW")
         plt.plot(mvo_nav.index, mvo_nav.values, label="MVO")
-        plt.plot(bl_nav.index, bl_nav.values, label="BL")
-        plt.title("Backtest 4 Assets (train): EW vs MVO vs BL")
-        plt.ylabel("NAV (initial = 100)")
+        plt.plot(bl_nav.index, bl_nav.values, label=f"BL ({VIEW_MODE})")
+        plt.title(f"Backtest 4 Assets ({BACKTEST_PHASE}): EW vs MVO vs BL ({VIEW_MODE})")
+        plt.ylabel("NAV (initial = 100,000)")
         plt.grid(True)
         plt.legend()
         plt.tight_layout()

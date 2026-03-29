@@ -42,12 +42,14 @@ Dự án nghiên cứu tối ưu hóa danh mục đầu tư cho thị trường 
 
 ```
 portfolio-optimization/
-├── backtest.py              # Script backtest chính
-├── view_generators.py       # Module sinh views động cho Black-Litterman
-├── requirements.txt         # Dependencies
-├── README.md               # Tài liệu này
+├── backtest.py                    # Script backtest chính
+├── view_generators.py             # Module sinh views động (rule-based, relative)
+├── llm_view_generators.py         # 🆕 ML/LLM view generators (RF, LSTM, GPT-4)
+├── train_ml_models.py             # 🆕 Script train ML models
+├── requirements.txt               # Dependencies
+├── README.md                      # Tài liệu này
 │
-├── crawl/                  # Scripts thu thập dữ liệu
+├── crawl/                         # Scripts thu thập dữ liệu
 │   ├── stock.py            # Crawl giá ETF/cổ phiếu (vnstock)
 │   ├── fund.py             # Crawl NAV quỹ đầu tư
 │   └── gold.py             # Crawl giá vàng từ PNJ API
@@ -209,9 +211,15 @@ Ma trận P: `[-1, 1, 0, 0]` (Long GOLD, Short E1VFVN30)
 
 ## Các phương pháp sinh Views động
 
-File `view_generators.py` cung cấp 3 phương pháp sinh views tự động dựa trên phân tích kỹ thuật, thay vì dùng views cố định (hardcoded).
+Dự án cung cấp 2 modules để sinh views tự động:
+- `view_generators.py`: Rule-based & Relative views (dựa trên chỉ báo kỹ thuật)
+- `llm_view_generators.py`: 🆕 ML/LLM views (Random Forest, LSTM, GPT-4)
 
-### 1. Rule-Based View Generator (`rule_based`)
+### Module 1: view_generators.py
+
+File `view_generators.py` cung cấp 3 phương pháp sinh views dựa trên phân tích kỹ thuật:
+
+#### 1. Rule-Based View Generator (`rule_based`)
 
 **Cơ sở lý thuyết**: Sử dụng các chỉ báo kỹ thuật cổ điển để xác định xu hướng và sinh views.
 
@@ -450,6 +458,183 @@ model = joblib.load("models/return_predictor.pkl")
 # Sinh views với model
 views = generate_ml_views(prices, model=model)
 ```
+
+---
+
+### Module 2: llm_view_generators.py 🆕
+
+File `llm_view_generators.py` cung cấp 3 phương pháp ML/LLM nâng cao:
+
+#### Option 1: Traditional ML (Random Forest / XGBoost)
+
+**Cơ sở lý thuyết**: Học có giám sát (supervised learning) để dự đoán return tương lai.
+
+**Training process**:
+1. Tính features từ price data (MA, RSI, momentum, volatility, MACD)
+2. Label = return sau N ngày (ví dụ: 5 ngày)
+3. Train model: `features -> future_return`
+4. Predict return cho current state
+
+**Ưu điểm**:
+- ✅ Huấn luyện nhanh (5-10 giây)
+- ✅ Có thể xem feature importance (giải thích được)
+- ✅ Hoạt động tốt với dữ liệu ít
+- ✅ Không cần GPU
+
+**Nhược điểm**:
+- ❌ Cần manual feature engineering
+- ❌ Không bắt được pattern phức tạp
+
+**Sử dụng**:
+```python
+from llm_view_generators import TraditionalMLViewGenerator
+
+# Khởi tạo
+ml_gen = TraditionalMLViewGenerator(
+    model_type="random_forest",  # hoặc "xgboost"
+    feature_window=20,
+    prediction_horizon=5,
+)
+
+# Train
+ml_gen.train(train_prices, verbose=True)
+ml_gen.save(".cache/rf_models.pkl")
+
+# Tạo views
+views = ml_gen.generate_views(test_prices)
+```
+
+#### Option 2: Deep Learning (LSTM)
+
+**Cơ sở lý thuyết**: LSTM (Long Short-Term Memory) - neural network chuyên cho time series.
+
+**Training process**:
+1. Tạo sequences: [60 ngày giá] -> [return 5 ngày sau]
+2. Train LSTM để học temporal patterns
+3. Predict return từ sequence gần nhất
+
+**Ưu điểm**:
+- ✅ Bắt được complex temporal dependencies
+- ✅ Không cần feature engineering thủ công
+- ✅ State-of-the-art cho time series
+- ✅ Có thể học long-term patterns
+
+**Nhược điểm**:
+- ❌ Cần nhiều data (1000+ samples)
+- ❌ Huấn luyện chậm (vài phút)
+- ❌ Black-box (khó giải thích)
+- ❌ Dễ overfit
+
+**Sử dụng**:
+```python
+from llm_view_generators import LSTMViewGenerator
+
+# Khởi tạo
+lstm_gen = LSTMViewGenerator(
+    sequence_length=60,  # nhìn lại 60 ngày
+    hidden_size=64,
+    num_layers=2,
+    epochs=50,
+    device="cpu",  # hoặc "cuda" nếu có GPU
+)
+
+# Train
+lstm_gen.train(train_prices, verbose=True)
+lstm_gen.save(".cache/lstm_models.pt")
+
+# Tạo views
+views = lstm_gen.generate_views(test_prices)
+```
+
+#### Option 3: LLM-based (GPT-4 / Claude)
+
+**Cơ sở lý thuyết**: Kết hợp phân tích định lượng + định tính bằng Large Language Models.
+
+**Input**:
+- Quantitative: Price data, technical indicators (MA, RSI, momentum)
+- Qualitative: News headlines, market sentiment, events
+
+**Process**:
+1. Crawl tin tức từ CafeF, VnExpress
+2. Tạo prompt với giá + indicators + news
+3. Query LLM API (GPT-4 hoặc Claude)
+4. Parse response để lấy predicted return + reasoning
+
+**Ưu điểm**:
+- ✅ Kết hợp quantitative + qualitative
+- ✅ Hiểu được ngữ cảnh, sự kiện, sentiment
+- ✅ Không cần training (zero-shot)
+- ✅ Có reasoning (giải thích được)
+
+**Nhược điểm**:
+- ❌ Chi phí API cao (~$0.03-0.10/view)
+- ❌ Latency cao (2-5 giây)
+- ❌ Non-deterministic
+- ❌ Cần internet
+
+**Chi phí ước tính**:
+- 4 assets × 5 rebalances/ngày × 252 ngày = 5,040 calls/năm
+- Chi phí: $176/năm (GPT-4) hoặc $44/năm (với caching)
+
+**Sử dụng**:
+```python
+from llm_view_generators import LLMViewGenerator
+import os
+
+# Set API key
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+# Khởi tạo
+llm_gen = LLMViewGenerator(
+    llm_provider="openai",
+    model_name="gpt-4",
+    enable_caching=True,     # giảm cost 75%
+    enable_news=True,        # bật crawl tin tức
+)
+
+# Tạo views (không cần train!)
+views = llm_gen.generate_views(test_prices, verbose=True)
+
+# Xem chi phí
+cost = llm_gen.get_cost_summary()
+print(f"Total cost: ${cost['total_cost_usd']:.2f}")
+```
+
+#### Ensemble: Kết hợp 3 phương pháp
+
+Tận dụng ưu điểm của từng phương pháp:
+
+```python
+from llm_view_generators import combine_multi_source_views
+
+# Load các models đã train
+ml_gen.load(".cache/rf_models.pkl")
+lstm_gen.load(".cache/lstm_models.pt")
+
+# Tạo views từ mỗi source
+ml_views = ml_gen.generate_views(prices)
+lstm_views = lstm_gen.generate_views(prices)
+llm_views = llm_gen.generate_views(prices)
+
+# Kết hợp với trọng số
+combined = combine_multi_source_views(
+    ml_views, lstm_views, llm_views,
+    weights=(0.3, 0.3, 0.4)  # 30% ML, 30% LSTM, 40% LLM
+)
+```
+
+**So sánh performance (dự kiến)**:
+
+| Method | Sharpe Ratio | Training Time | Inference Time | Cost |
+|--------|--------------|---------------|----------------|------|
+| Rule-based | 1.70 | 0s | <1ms | $0 |
+| Random Forest | 1.50-1.80 | 5-10s | <1ms | $0 |
+| XGBoost | 1.55-1.85 | 10-20s | <1ms | $0 |
+| LSTM | 1.60-1.90 | 2-5 min | 10-50ms | $0 |
+| LLM (GPT-4) | 1.65-2.00 | 0s | 2-5s | $176/năm |
+| **Ensemble** | **1.80-2.10** | - | - | - |
+
+**Xem hướng dẫn chi tiết**: `docs/HUONG_DAN_SU_DUNG_LLM_GENERATORS.md`
 
 ---
 

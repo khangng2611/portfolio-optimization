@@ -357,112 +357,112 @@ def generate_relative_views(
     return views
 
 
-def generate_ml_views(
-    prices: pd.DataFrame,
-    model: Optional[object] = None,
-    feature_window: int = 20,
-    prediction_threshold: float = 0.01,
-) -> list[dict]:
-    """
-    ML-based View Generator
+# def generate_ml_views(
+#     prices: pd.DataFrame,
+#     model: Optional[object] = None,
+#     feature_window: int = 20,
+#     prediction_threshold: float = 0.01,
+# ) -> list[dict]:
+#     """
+#     ML-based View Generator
     
-    Uses a trained ML model to predict returns and generate views.
-    If no model is provided, uses a simple linear regression as fallback.
+#     Uses a trained ML model to predict returns and generate views.
+#     If no model is provided, uses a simple linear regression as fallback.
     
-    Parameters
-    ----------
-    prices : pd.DataFrame
-        Price data with assets as columns
-    model : object, optional
-        Trained model with .predict() method. If None, uses simple regression.
-    feature_window : int
-        Window size for feature calculation
-    prediction_threshold : float
-        Minimum predicted return to generate a view
+#     Parameters
+#     ----------
+#     prices : pd.DataFrame
+#         Price data with assets as columns
+#     model : object, optional
+#         Trained model with .predict() method. If None, uses simple regression.
+#     feature_window : int
+#         Window size for feature calculation
+#     prediction_threshold : float
+#         Minimum predicted return to generate a view
     
-    Returns
-    -------
-    list[dict]
-        List of ML-based view dictionaries
-    """
-    views = []
+#     Returns
+#     -------
+#     list[dict]
+#         List of ML-based view dictionaries
+#     """
+#     views = []
     
-    for asset in prices.columns:
-        price_series = prices[asset].dropna()
-        if len(price_series) < feature_window + 10:
-            continue
+#     for asset in prices.columns:
+#         price_series = prices[asset].dropna()
+#         if len(price_series) < feature_window + 10:
+#             continue
         
-        # Compute features
-        features = _compute_ml_features(price_series, feature_window)
+#         # Compute features
+#         features = _compute_ml_features(price_series, feature_window)
         
-        if model is not None:
-            # Use provided model
-            try:
-                features_array = np.array(list(features.values())).reshape(1, -1)
-                predicted_return = model.predict(features_array)[0]
+#         if model is not None:
+#             # Use provided model
+#             try:
+#                 features_array = np.array(list(features.values())).reshape(1, -1)
+#                 predicted_return = model.predict(features_array)[0]
                 
-                # Get confidence from model if available
-                if hasattr(model, "predict_proba"):
-                    proba = model.predict_proba(features_array)
-                    confidence = float(max(proba[0]))
-                else:
-                    confidence = 0.5
-            except Exception:
-                continue
-        else:
-            # Fallback: simple momentum-based prediction
-            predicted_return = _simple_return_prediction(price_series, feature_window)
-            confidence = 0.4  # Lower confidence for simple prediction
+#                 # Get confidence from model if available
+#                 if hasattr(model, "predict_proba"):
+#                     proba = model.predict_proba(features_array)
+#                     confidence = float(max(proba[0]))
+#                 else:
+#                     confidence = 0.5
+#             except Exception:
+#                 continue
+#         else:
+#             # Fallback: simple momentum-based prediction
+#             predicted_return = _simple_return_prediction(price_series, feature_window)
+#             confidence = 0.4  # Lower confidence for simple prediction
         
-        # Only generate view if prediction exceeds threshold
-        if abs(predicted_return) < prediction_threshold:
-            continue
+#         # Only generate view if prediction exceeds threshold
+#         if abs(predicted_return) < prediction_threshold:
+#             continue
         
-        # Annualize the prediction
-        view_return_annual = predicted_return * TRADING_DAYS_PER_YEAR / feature_window
-        view_return_annual = max(-0.50, min(0.50, view_return_annual))  # Cap at 50%
+#         # Annualize the prediction
+#         view_return_annual = predicted_return * TRADING_DAYS_PER_YEAR / feature_window
+#         view_return_annual = max(-0.50, min(0.50, view_return_annual))  # Cap at 50%
         
-        views.append({
-            "name": f"{asset}_ml_pred",
-            "legs": {asset: 1.0},
-            "view_return_annual": view_return_annual,
-            "confidence": confidence,
-            "indicators": features,
-        })
+#         views.append({
+#             "name": f"{asset}_ml_pred",
+#             "legs": {asset: 1.0},
+#             "view_return_annual": view_return_annual,
+#             "confidence": confidence,
+#             "indicators": features,
+#         })
     
-    return views
+#     return views
 
 
-def _compute_ml_features(prices: pd.Series, window: int) -> dict:
-    """Compute features for ML model."""
-    return {
-        "momentum_5": compute_momentum(prices, 5),
-        "momentum_10": compute_momentum(prices, 10),
-        "momentum_20": compute_momentum(prices, 20),
-        "rsi": compute_rsi(prices, 14),
-        "ma_ratio_10_30": (
-            compute_ema(prices, 10).iloc[-1] / compute_ema(prices, 30).iloc[-1] - 1
-        ),
-        "volatility": prices.pct_change().tail(window).std(),
-        "macd_hist": compute_macd(prices)[2],
-    }
+# def _compute_ml_features(prices: pd.Series, window: int) -> dict:
+#     """Compute features for ML model."""
+#     return {
+#         "momentum_5": compute_momentum(prices, 5),
+#         "momentum_10": compute_momentum(prices, 10),
+#         "momentum_20": compute_momentum(prices, 20),
+#         "rsi": compute_rsi(prices, 14),
+#         "ma_ratio_10_30": (
+#             compute_ema(prices, 10).iloc[-1] / compute_ema(prices, 30).iloc[-1] - 1
+#         ),
+#         "volatility": prices.pct_change().tail(window).std(),
+#         "macd_hist": compute_macd(prices)[2],
+#     }
 
 
-def _simple_return_prediction(prices: pd.Series, window: int) -> float:
-    """Simple return prediction based on momentum and mean reversion."""
-    momentum = compute_momentum(prices, window)
-    rsi = compute_rsi(prices, 14)
+# def _simple_return_prediction(prices: pd.Series, window: int) -> float:
+#     """Simple return prediction based on momentum and mean reversion."""
+#     momentum = compute_momentum(prices, window)
+#     rsi = compute_rsi(prices, 14)
     
-    # Combine momentum and mean reversion
-    if rsi > 70:
-        # Overbought: predict reversal
-        return momentum * 0.5 - 0.02
-    elif rsi < 30:
-        # Oversold: predict reversal
-        return momentum * 0.5 + 0.02
-    else:
-        # Trend continuation
-        return momentum * 0.8
+#     # Combine momentum and mean reversion
+#     if rsi > 70:
+#         # Overbought: predict reversal
+#         return momentum * 0.5 - 0.02
+#     elif rsi < 30:
+#         # Oversold: predict reversal
+#         return momentum * 0.5 + 0.02
+#     else:
+#         # Trend continuation
+#         return momentum * 0.8
 
 
 # ====================== UTILITY FUNCTIONS ======================
@@ -679,49 +679,3 @@ def plot_indicators(
         plt.show()
     else:
         plt.close()
-
-
-if __name__ == "__main__":
-    # Demo / Test
-    print("View Generators Module")
-    print("=" * 50)
-    
-    # Create sample price data
-    np.random.seed(42)
-    dates = pd.date_range("2023-01-01", periods=100, freq="B")
-    sample_prices = pd.DataFrame({
-        "ASSET_A": 100 * (1 + np.random.randn(100).cumsum() * 0.01),
-        "ASSET_B": 50 * (1 + np.random.randn(100).cumsum() * 0.015),
-        "ASSET_C": 200 * (1 + np.random.randn(100).cumsum() * 0.008),
-    }, index=dates)
-    
-    print("\nSample Price Data:")
-    print(sample_prices.tail())
-    
-    print("\n" + "=" * 50)
-    print("Rule-based Views:")
-    rule_views = generate_rule_based_views(sample_prices)
-    for v in rule_views:
-        print(f"  {v['name']}: {v['view_return_annual']:.2%} (conf: {v['confidence']:.2f})")
-    
-    print("\n" + "=" * 50)
-    print("Relative Views:")
-    rel_views = generate_relative_views(sample_prices)
-    for v in rel_views:
-        print(f"  {v['name']}: {v['view_return_annual']:.2%} (conf: {v['confidence']:.2f})")
-    
-    print("\n" + "=" * 50)
-    print("ML-based Views (fallback mode):")
-    ml_views = generate_ml_views(sample_prices)
-    for v in ml_views:
-        print(f"  {v['name']}: {v['view_return_annual']:.2%} (conf: {v['confidence']:.2f})")
-    
-    print("\n" + "=" * 50)
-    print("Building P, Q matrices...")
-    assets = list(sample_prices.columns)
-    p, q, conf, names = build_views_matrix(rule_views, assets)
-    if p is not None:
-        print(f"P shape: {p.shape}")
-        print(f"Q: {q}")
-        print(f"Confidence: {conf}")
-        print(f"View names: {names}")

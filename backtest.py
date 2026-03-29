@@ -10,7 +10,7 @@ import pandas as pd
 from view_generators import (
     generate_rule_based_views,
     generate_relative_views,
-    generate_ml_views,
+    # generate_ml_views,
     build_views_matrix,
     combine_views,
 )
@@ -280,13 +280,13 @@ def generate_dynamic_views(price_window: pd.DataFrame, assets: list, mode: str =
         views = generate_rule_based_views(price_window)
     elif mode == "relative":
         views = generate_relative_views(price_window)
-    elif mode == "ml":
-        views = generate_ml_views(price_window, model=None)  # Fallback mode
-    elif mode == "combined":
-        rule_views = generate_rule_based_views(price_window)
-        rel_views = generate_relative_views(price_window)
-        ml_views = generate_ml_views(price_window, model=None)
-        views = combine_views(rule_views, rel_views, ml_views, COMBINED_VIEW_WEIGHTS)
+    # elif mode == "ml":
+    #     views = generate_ml_views(price_window, model=None)  # Fallback mode
+    # elif mode == "combined":
+    #     rule_views = generate_rule_based_views(price_window)
+    #     rel_views = generate_relative_views(price_window)
+    #     ml_views = generate_ml_views(price_window, model=None)
+    #     views = combine_views(rule_views, rel_views, ml_views, COMBINED_VIEW_WEIGHTS)
     else:
         # Unknown mode, fallback to static
         return build_static_views(assets)

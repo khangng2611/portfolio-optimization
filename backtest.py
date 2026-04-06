@@ -27,7 +27,7 @@ BACKTEST_DATA_MODE = "split"
 
 WINDOW = 20
 REBALANCE_FREQ = 5
-INITIAL_NAV = 100000.0
+INITIAL_NAV = 1.0
 TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_ANNUAL = 0.06
 
@@ -57,6 +57,7 @@ STATIC_VIEWS = [
 # Combined view weights: (rule_based, relative, ml)
 COMBINED_VIEW_WEIGHTS = (0.4, 0.4, 0.2)
 
+>>>>>>> 1001fd7 (Refactor code structure for improved readability and maintainability)
 
 def parse_args():
     parser = argparse.ArgumentParser(

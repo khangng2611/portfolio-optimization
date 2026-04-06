@@ -57,8 +57,6 @@ STATIC_VIEWS = [
 # Combined view weights: (rule_based, relative, ml)
 COMBINED_VIEW_WEIGHTS = (0.4, 0.4, 0.2)
 
->>>>>>> 1001fd7 (Refactor code structure for improved readability and maintainability)
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Backtest EW/MVO/BL on TRAIN data only"

@@ -43,6 +43,7 @@ Dự án nghiên cứu tối ưu hóa danh mục đầu tư cho thị trường 
 ```
 portfolio-optimization/
 ├── backtest.py                    # Script backtest chính
+├── data_loader.py                 # Module load dữ liệu + assets config
 ├── view_generators.py             # Module sinh views động (rule-based, relative)
 ├── llm_view_generators.py         # 🆕 ML/LLM view generators (RF, LSTM, GPT-4)
 ├── train_ml_models.py             # 🆕 Script train ML models
@@ -63,6 +64,7 @@ portfolio-optimization/
 │   │   ├── train/
 │   │   ├── test/
 │   │   └── full/
+│   ├── assets.json                # Cấu hình universe assets cho backtest
 │   └── gold/
 │       ├── gold_train.csv
 │       └── gold_test.csv
@@ -786,11 +788,43 @@ python backtest.py --no-plot
 
 # Chạy với khoảng thời gian tùy chỉnh
 python backtest.py --start-date 2021-01-01 --end-date 2023-06-01
+
+# Chạy với subset assets cụ thể
+python backtest.py --assets E1VFVN30,GOLD,DCDS
+
+# Chạy với file cấu hình assets riêng
+python backtest.py --assets-config datasets/assets.json --assets E1VFVN30,MBBOND
 ```
 
-### 4. Thay đổi View Mode
+### 4. Cấu hình Assets bằng JSON
 
-Mở file `backtest.py` và sửa dòng 36:
+Backtest không còn hardcode assets trong code. Danh sách tài sản nằm ở file `datasets/assets.json`.
+
+Ví dụ format:
+
+```json
+{
+    "default_selection": ["E1VFVN30", "GOLD", "DCDS", "MBBOND"],
+    "assets": {
+        "E1VFVN30": {
+            "full_path": "datasets/stocks/full/E1VFVN30.csv",
+            "train_path": "datasets/stocks/train/E1VFVN30_train.csv",
+            "test_path": "datasets/stocks/test/E1VFVN30_test.csv",
+            "date_col": "date",
+            "price_col": "close"
+        }
+    }
+}
+```
+
+Quy tắc chọn assets khi chạy:
+- Nếu truyền `--assets`, script sẽ dùng đúng danh sách này.
+- Nếu không truyền `--assets`, script dùng `default_selection` trong JSON.
+- Nếu JSON không có `default_selection`, script dùng toàn bộ key trong `assets`.
+
+### 5. Thay đổi View Mode
+
+Mở file `backtest.py` và sửa biến `VIEW_MODE`:
 
 ```python
 # Option 1: Views cố định (hardcoded)
@@ -866,6 +900,7 @@ BL   | NAV cuoi: 531,725 | Sharpe:  1.70 | MDD: -28.94%
 - [ ] Thêm các chỉ báo kỹ thuật khác (Bollinger Bands, ATR)
 
 ### Files quan trọng
-- `backtest.py:36` - Thay đổi VIEW_MODE
-- `backtest.py:55` - Thay đổi COMBINED_VIEW_WEIGHTS
-- `view_generators.py:29-32` - Thay đổi thresholds cho indicators
+- `backtest.py` - Luồng backtest chính + tham số CLI
+- `data_loader.py` - Load dữ liệu + đọc assets config từ JSON
+- `datasets/assets.json` - Khai báo universe assets
+- `view_generators.py` - Thay đổi thresholds cho indicators

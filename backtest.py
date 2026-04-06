@@ -1,11 +1,17 @@
 import argparse
-from datetime import datetime
-from pathlib import Path
 
 import cvxpy as cp
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from data_loader import (
+    PHASE_PERIODS,
+    build_price_table,
+    load_assets_config,
+    resolve_period,
+    summarize_asset_returns,
+)
 
 from view_generators import (
     generate_rule_based_views,
@@ -16,9 +22,6 @@ from view_generators import (
 )
 
 # ====================== CONFIG ======================
-TRAIN_START_DATE = "2020-01-01"
-SPLIT_DATE = "2023-10-01"
-TEST_END_DATE = datetime.now().strftime("%Y-%m-%d")
 BACKTEST_PHASE = "train"
 BACKTEST_DATA_MODE = "split"
 
@@ -54,46 +57,6 @@ STATIC_VIEWS = [
 # Combined view weights: (rule_based, relative, ml)
 COMBINED_VIEW_WEIGHTS = (0.4, 0.4, 0.2)
 
-ROOT_DIR = Path(__file__).resolve().parents[0]
-DATASETS_DIR = ROOT_DIR / "datasets"
-
-ASSETS = {
-    "E1VFVN30": {
-        "full_path": DATASETS_DIR / "stocks" / "full" / "E1VFVN30.csv",
-        "train_path": DATASETS_DIR / "stocks" / "train" / "E1VFVN30_train.csv",
-        "test_path": DATASETS_DIR / "stocks" / "test" / "E1VFVN30_test.csv",
-        "date_col": "date",
-        "price_col": "close",
-    },
-    "GOLD": {
-        "full_path": DATASETS_DIR / "gold" / "gold_test.csv",
-        "train_path": DATASETS_DIR / "gold" / "gold_train.csv",
-        "test_path": DATASETS_DIR / "gold" / "gold_test.csv",
-        "date_col": "date",
-        "price_col": "sjc_sell",
-    },
-    "DCDS": {
-        "full_path": DATASETS_DIR / "funds" / "full" / "DCDS.csv",
-        "train_path": DATASETS_DIR / "funds" / "train" / "DCDS_train.csv",
-        "test_path": DATASETS_DIR / "funds" / "test" / "DCDS_test.csv",
-        "date_col": "date",
-        "price_col": "price",
-    },
-    "MBBOND": {
-        "full_path": DATASETS_DIR / "funds" / "full" / "MBBOND.csv",
-        "train_path": DATASETS_DIR / "funds" / "train" / "MBBOND_train.csv",
-        "test_path": DATASETS_DIR / "funds" / "test" / "MBBOND_test.csv",
-        "date_col": "date",
-        "price_col": "price",
-    },
-}
-
-PHASE_PERIODS = {
-    "train": (TRAIN_START_DATE, SPLIT_DATE),
-    "test": (SPLIT_DATE, TEST_END_DATE),
-    "full": (TRAIN_START_DATE, TEST_END_DATE),
-}
-
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -106,82 +69,17 @@ def parse_args():
     parser.add_argument(
         "--no-plot", action="store_true", help="Disable NAV comparison plot"
     )
-    return parser.parse_args()
-
-
-def resolve_period(args):
-    if args.start_date or args.end_date:
-        if not args.start_date or not args.end_date:
-            raise ValueError(
-                "When overriding dates, both --start-date and --end-date are required"
-            )
-        return args.start_date, args.end_date
-    return PHASE_PERIODS[BACKTEST_PHASE]
-
-
-def resolve_asset_path(cfg, phase, data_mode):
-    if data_mode == "split" and phase in ("train", "test"):
-        key = f"{phase}_path"
-        p = cfg.get(key)
-        if p is not None and Path(p).exists():
-            return p
-    return cfg["full_path"]
-
-
-def load_asset_series(asset_name, cfg, phase, data_mode, start_date, end_date):
-    if data_mode == "split" and phase == "full":
-        train_path = cfg.get("train_path")
-        test_path = cfg.get("test_path")
-        if (
-            train_path is not None
-            and test_path is not None
-            and Path(train_path).exists()
-            and Path(test_path).exists()
-        ):
-            df_train = pd.read_csv(train_path)
-            df_test = pd.read_csv(test_path)
-            df = pd.concat([df_train, df_test], ignore_index=True)
-        else:
-            path = resolve_asset_path(cfg, phase, data_mode)
-            df = pd.read_csv(path)
-    else:
-        path = resolve_asset_path(cfg, phase, data_mode)
-        df = pd.read_csv(path)
-
-    df[cfg["date_col"]] = pd.to_datetime(df[cfg["date_col"]], errors="coerce")
-    df = df.dropna(subset=[cfg["date_col"], cfg["price_col"]])
-
-    start_ts = pd.Timestamp(start_date)
-    end_ts = pd.Timestamp(end_date)
-    s = (
-        df[(df[cfg["date_col"]] >= start_ts) & (df[cfg["date_col"]] <= end_ts)][
-            [cfg["date_col"], cfg["price_col"]]
-        ]
-        .drop_duplicates(subset=[cfg["date_col"]], keep="last")
-        .sort_values(cfg["date_col"])
-        .set_index(cfg["date_col"])[cfg["price_col"]]
-        .astype(float)
+    parser.add_argument(
+        "--assets-config",
+        default=None,
+        help="Path to assets JSON config (default: datasets/assets.json)",
     )
-    s.name = asset_name
-    return s
-
-
-def build_price_table(start_date, end_date, phase="full", data_mode="split"):
-    calendar = pd.date_range(start=start_date, end=end_date, freq="B")
-    data = {}
-
-    for asset, cfg in ASSETS.items():
-        series = load_asset_series(asset, cfg, phase, data_mode, start_date, end_date)
-        series = series.reindex(calendar).ffill()
-        data[asset] = series
-
-    prices = pd.DataFrame(data, index=calendar)
-    prices = prices.dropna(how="any")
-    if len(prices) <= WINDOW:
-        raise ValueError(
-            f"Khong du du lieu sau khi dong bo: {len(prices)} dong, can > WINDOW={WINDOW}"
-        )
-    return prices
+    parser.add_argument(
+        "--assets",
+        default=None,
+        help="Comma-separated asset list, e.g. E1VFVN30,GOLD,DCDS",
+    )
+    return parser.parse_args()
 
 
 def optimize_weight(mu, sigma, risk_aversion=0.5):
@@ -470,37 +368,34 @@ def get_next_period_weights(returns, prices, as_of_date, window=WINDOW, view_mod
     return w_mvo, w_bl, hist.index[-1], view_names
 
 
-def summarize_asset_returns(prices):
-    returns = prices.pct_change().dropna()
-    total_return = prices.iloc[-1] / prices.iloc[0] - 1
-    annualized_return = (1 + total_return) ** (TRADING_DAYS_PER_YEAR / len(returns)) - 1
-    annualized_vol = returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
-    return pd.DataFrame(
-        {
-            "Total Return": total_return,
-            "Annualized Return": annualized_return,
-            "Annualized Vol": annualized_vol,
-        }
-    )
-
-
 def main():
     args = parse_args()
-    start_date, end_date = resolve_period(args)
+    start_date, end_date = resolve_period(args, PHASE_PERIODS, BACKTEST_PHASE)
+    selected_assets = None
+    if args.assets:
+        selected_assets = [item.strip() for item in args.assets.split(",") if item.strip()]
 
-    print("Dang load va dong bo du lieu 4 tai san...")
+    assets = load_assets_config(
+        config_path=args.assets_config,
+        selected_assets=selected_assets,
+    )
+
+    print(f"Dang load va dong bo du lieu {len(assets)} tai san...")
     print(
         f"Phase={BACKTEST_PHASE} | Data mode={BACKTEST_DATA_MODE} | Period={start_date} -> {end_date}"
     )
     print(f"View mode={VIEW_MODE}")
+    print(f"Assets: {', '.join(assets.keys())}")
 
     prices = build_price_table(
         start_date=start_date,
         end_date=end_date,
+        assets=assets,
         phase=BACKTEST_PHASE,
         data_mode=BACKTEST_DATA_MODE,
+        window=WINDOW,
     )
-    asset_summary = summarize_asset_returns(prices)
+    asset_summary = summarize_asset_returns(prices, TRADING_DAYS_PER_YEAR)
 
     print(
         f"Khoang du lieu dung backtest: {prices.index.min().date()} -> {prices.index.max().date()} ({len(prices)} phien)"

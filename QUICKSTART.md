@@ -48,7 +48,7 @@ python backtest.py --assets-config datasets/assets.json --assets E1VFVN30,MBBOND
 
 ## 4. Cấu hình Assets bằng JSON
 
-Backtest không còn hardcode assets trong code. Danh sách tài sản nằm ở file `datasets/assets.json`.
+Backtest không còn hardcode assets trong code. Danh sách tài sản nằm ở file `assets.json`.
 
 Ví dụ format:
 
@@ -92,9 +92,3 @@ VIEW_MODE = "ml"
 # Option 5: Kết hợp tất cả
 VIEW_MODE = "combined"
 ```
-
-## Tài liệu khác
-
-- [INDICATORS.md](docs/INDICATORS.md) - Chi tiết về các chỉ báo kỹ thuật
-- [HOW_TO_USE_LLM_GENERATORS.md](docs/HOW_TO_USE_LLM_GENERATORS.md) - Hướng dẫn sử dụng LLM generators
-- [DYNAMIC_VIEWS_REPORT.md](docs/DYNAMIC_VIEWS_REPORT.md) - Báo cáo về dynamic views

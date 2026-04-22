@@ -7,7 +7,7 @@ import pandas as pd
 
 TRAIN_START_DATE = "2020-01-01"
 SPLIT_DATE = "2023-10-01"
-TEST_END_DATE = datetime.now().strftime("%Y-%m-%d")
+TEST_END_DATE = "2026-03-01"
 
 ROOT_DIR = Path(__file__).resolve().parents[0]
 DATASETS_DIR = ROOT_DIR / "datasets"

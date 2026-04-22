@@ -10,7 +10,7 @@
 
 1. [Giới thiệu](#1-giới-thiệu)
 2. [Tại sao dùng LLM cho View Generation?](#2-tại-sao-dùng-llm-cho-view-generation)
-3. [Option 1: Traditional ML (Random Forest, XGBoost)](#3-option-1-traditional-ml-random-forest-xgboost)
+3. [Option 1: Traditional ML (XGBoost)](#3-option-1-traditional-ml-xgboost)
 4. [Option 2: Deep Learning (LSTM, Transformer)](#4-option-2-deep-learning-lstm-transformer)
 5. [Option 3: LLM-based Views (GPT-4, Claude)](#5-option-3-llm-based-views-gpt-4-claude)
 6. [So sánh 3 Options](#6-so-sánh-3-options)
@@ -50,7 +50,7 @@ Trong nghiên cứu trước, chúng ta đã implement **Rule-based View Generat
 - Reasoning như một financial analyst
 
 ### 1.3. Ba hướng tiếp cận
-#### Option 1: Traditional ML (Random Forest, XGBoost, ...)
+#### Option 1: Traditional ML (XGBoost, ...)
 - Input: Price data
 - Features: Manual
 - Complexity: Medium
@@ -164,7 +164,7 @@ View:
 
 ---
 
-## 3. Option 1: Traditional ML (Random Forest, XGBoost)
+## 3. Option 1: Traditional ML (XGBoost)
 
 ### 3.1. Cơ chế hoạt động
 
@@ -220,7 +220,6 @@ View:
 │  Step 5: Model Training                                     │
 │  ┌────────────────────────────────────────────────────┐     │
 │  │ Algorithms:                                        │     │
-│  │ • Random Forest: Ensemble of decision trees       │     │
 │  │ • XGBoost: Gradient boosting (fast, accurate)    │     │
 │  │ • LightGBM: Memory efficient, large datasets     │     │
 │  │                                                    │     │
@@ -408,7 +407,7 @@ View:
 
 1. **Data hungry**: Cần nhiều data (100K+ samples)
 2. **Computational cost**: Cần GPU, training lâu (hours/days)
-3. **Black box**: Khó interpret hơn Random Forest
+3. **Black box**: Khó interpret hơn các mô hình cây quyết định
 4. **Overfitting risk**: Dễ overfit nếu không regularize đúng
 5. **Hyperparameter tuning**: Rất nhiều parameters cần tune
 
@@ -728,7 +727,7 @@ Mục tiêu: Khám phá, test nhanh, iterate
 Budget: Hạn chế
 Timeline: 2-3 tháng
 
-→ Gợi ý: Traditional ML (Random Forest)
+→ Gợi ý: Traditional ML (XGBoost)
 
 Lý do:
 ✓ Train nhanh, iterate nhanh
@@ -747,7 +746,7 @@ Timeline: 6 tháng
 → Gợi ý: All 3 options (so sánh)
 
 Approach:
-1. Implement Random Forest (baseline ML)
+1. Implement XGBoost (baseline ML)
 2. Implement LSTM (advanced DL)
 3. Test LLM với small sample (proof of concept)
 4. Compare performance trong thesis
@@ -1213,7 +1212,7 @@ def smart_llm_caller(asset, price_data, news_data, rule_view):
 **Tasks**:
 1. Implement news crawler (CafeF, VnExpress)
 2. Integrate LLM với backtest pipeline
-3. Test cả 3 options (RF, LSTM, LLM)
+3. Test cả 3 options (XGBoost, LSTM, LLM)
 4. Compare performance
 5. Optimize costs (caching, batching)
 
@@ -1281,7 +1280,7 @@ def smart_llm_caller(asset, price_data, news_data, rule_view):
 
 3. **Chapter 3**: Methodology
    - Rule-based (baseline)
-   - Option 1: Random Forest
+    - Option 1: XGBoost
    - Option 2: LSTM (nếu có thời gian)
    - Option 3: LLM (GPT-4)
 
@@ -1314,7 +1313,7 @@ def smart_llm_caller(asset, price_data, news_data, rule_view):
    - Lên plan chi tiết
 
 3. **Tháng tới**:
-   - Implement Option 1 (RF) - dễ nhất
+    - Implement Option 1 (XGBoost) - dễ nhất
    - Nếu tốt, proceed với LLM
    - Document results
 

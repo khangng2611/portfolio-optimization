@@ -579,7 +579,7 @@ features = {
 
 ### 6.2. Hướng cải tiến: Train ML Model
 
-#### Option 1: Traditional ML (Random Forest, XGBoost)
+#### Option 1: Traditional ML (XGBoost)
 
 **Pipeline**:
 
@@ -613,7 +613,6 @@ features = {
            ▼
 ┌──────────────────────┐
 │ Model Training       │
-│ - Random Forest      │
 │ - XGBoost            │
 │ - LightGBM           │
 └──────────┬───────────┘
@@ -637,7 +636,7 @@ features = {
 **Code mẫu**:
 
 ```python
-from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 from sklearn.model_selection import TimeSeriesSplit
 import joblib
 
@@ -650,10 +649,10 @@ X, y = prepare_features_and_labels(prices)
 tscv = TimeSeriesSplit(n_splits=5)
 
 # 3. Train model
-model = RandomForestRegressor(
+model = XGBRegressor(
     n_estimators=100,
-    max_depth=10,
-    min_samples_split=50,
+    max_depth=6,
+    learning_rate=0.1,
     random_state=42
 )
 
@@ -1006,7 +1005,7 @@ NAV Evolution (2020-08 to 2023-09)
    ```python
    # TODO:
    - Collect thêm features (volume, order book data)
-   - Train Random Forest / XGBoost
+    - Train XGBoost
    - Evaluate on test set
    - Compare performance vs rule-based
    ```

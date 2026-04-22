@@ -4,7 +4,7 @@
 
 File `llm_view_generators.py` cung cấp 3 phương pháp nâng cao để tạo views động cho Black-Litterman:
 
-1. **Traditional ML** (Random Forest, XGBoost) - Học có giám sát
+1. **Traditional ML** (XGBoost) - Học có giám sát
 2. **Deep Learning** (LSTM) - Mô hình hóa chuỗi thời gian
 3. **LLM-based** (GPT-4, Claude) - Kết hợp dữ liệu định lượng + định tính
 
@@ -25,7 +25,7 @@ pip install torch
 pip install openai anthropic
 ```
 
-## Option 1: Traditional ML (Random Forest / XGBoost)
+## Option 1: Traditional ML (XGBoost)
 
 ### Ưu điểm
 - Huấn luyện nhanh (vài giây)
@@ -41,7 +41,7 @@ import pandas as pd
 
 # 1. Khởi tạo generator
 ml_gen = TraditionalMLViewGenerator(
-    model_type="random_forest",  # hoặc "xgboost"
+    model_type="xgboost",
     feature_window=20,           # 20 ngày để tính features
     prediction_horizon=5,        # dự đoán 5 ngày tới
 )
@@ -54,7 +54,7 @@ train_prices = pd.read_csv("datasets/stocks/train/E1VFVN30_train.csv")
 ml_gen.train(train_prices, verbose=True)
 
 # 4. Lưu model
-ml_gen.save(".cache/rf_models.pkl")
+ml_gen.save(".cache/xgboost_models.pkl")
 
 # 5. Tạo views cho dữ liệu mới
 test_prices = pd.read_csv("datasets/stocks/test/E1VFVN30_test.csv")
@@ -68,16 +68,6 @@ for view in views:
 ### Tùy chỉnh tham số
 
 ```python
-# Random Forest với tham số tùy chỉnh
-ml_gen = TraditionalMLViewGenerator(
-    model_type="random_forest",
-    model_params={
-        "n_estimators": 200,      # nhiều cây hơn
-        "max_depth": 15,          # độ sâu tối đa
-        "min_samples_split": 10,  # tối thiểu samples để split
-    }
-)
-
 # XGBoost với tham số tùy chỉnh
 ml_gen = TraditionalMLViewGenerator(
     model_type="xgboost",
@@ -258,7 +248,7 @@ from llm_view_generators import (
 
 # 1. Train/load các models
 ml_gen = TraditionalMLViewGenerator()
-ml_gen.load(".cache/rf_models.pkl")
+ml_gen.load(".cache/xgboost_models.pkl")
 
 lstm_gen = LSTMViewGenerator()
 lstm_gen.load(".cache/lstm_models.pt")
@@ -320,7 +310,7 @@ VIEW_MODE = "ml_ensemble"  # hoặc "ml_only", "lstm_only", "llm_only"
 
 # Khởi tạo generators (1 lần)
 ml_generator = TraditionalMLViewGenerator()
-ml_generator.load(".cache/rf_models.pkl")  # load trained model
+ml_generator.load(".cache/xgboost_models.pkl")  # load trained model
 
 lstm_generator = LSTMViewGenerator()
 lstm_generator.load(".cache/lstm_models.pt")
@@ -359,12 +349,6 @@ from llm_view_generators import TraditionalMLViewGenerator, LSTMViewGenerator
 
 # Load train data (2020-2023)
 train_prices = pd.read_csv(...)  # Load your training data
-
-# Train Random Forest
-print("Training Random Forest...")
-ml_gen = TraditionalMLViewGenerator(model_type="random_forest")
-ml_gen.train(train_prices, verbose=True)
-ml_gen.save(".cache/rf_models.pkl")
 
 # Train XGBoost
 print("Training XGBoost...")
@@ -445,7 +429,7 @@ train, test = train_test_split(prices)  # ❌ KHÔNG LÀM NHƯ VẦY
 
 ### 2. Tránh Overfitting
 ```python
-# Random Forest: Tăng min_samples_split, min_samples_leaf
+# XGBoost: Tăng min_samples_split, min_samples_leaf
 ml_gen = TraditionalMLViewGenerator(
     model_params={
         "min_samples_split": 20,
@@ -489,7 +473,6 @@ Dựa trên literature và thực nghiệm:
 | Method | Expected Sharpe | Training Time | Inference Time |
 |--------|----------------|---------------|----------------|
 | Rule-based | 1.70 | 0s (no training) | <1ms |
-| Random Forest | 1.50-1.80 | 5-10s | <1ms |
 | XGBoost | 1.55-1.85 | 10-20s | <1ms |
 | LSTM | 1.60-1.90 | 2-5 min | 10-50ms |
 | LLM (GPT-4) | 1.65-2.00 | 0s | 2-5s |

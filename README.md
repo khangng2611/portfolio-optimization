@@ -1,15 +1,15 @@
 # Portfolio Optimization - Thị trường Việt Nam
 
-Dự án nghiên cứu tối ưu hóa danh mục đầu tư cho thị trường Việt Nam, tập trung vào việc so sánh các chiến lược phân bổ tài sản và cải tiến mô hình Black-Litterman với các phương pháp sinh quan điểm (views) động dựa trên phân tích kỹ thuật.
+Dự án nghiên cứu tối ưu hóa danh mục đầu tư cho thị trường Việt Nam, tập trung vào việc so sánh các chiến lược phân bổ tài sản và cải tiến mô hình Black-Litterman bằng views động.
 
 ## Mục lục
 
 1. [Tổng quan](#tổng-quan)
 2. [Cấu trúc dự án](#cấu-trúc-dự-án)
 3. [Các chiến lược tối ưu hóa](#các-chiến-lược-tối-ưu-hóa)
-4. [Mô hình Black-Litterman](#mô-hình-black-litterman)
-5. [Cách sử dụng](#cách-sử-dụng)
-6. [Kết quả Backtest](#kết-quả-backtest)
+4. [View generation modes](#view-generation-modes)
+5. [Cách sử dụng nhanh](#cách-sử-dụng-nhanh)
+6. [Kết quả và báo cáo](#kết-quả-và-báo-cáo)
 
 ---
 
@@ -17,56 +17,61 @@ Dự án nghiên cứu tối ưu hóa danh mục đầu tư cho thị trường 
 
 ### Mục tiêu nghiên cứu
 
-1. **Thu thập dữ liệu** thị trường Việt Nam (ETF, vàng, quỹ đầu tư)
-2. **So sánh hiệu quả** 3 chiến lược phân bổ: Equal Weight, MVO, Black-Litterman
-3. **Cải tiến Black-Litterman** bằng cách thay thế views cố định bằng views động sinh tự động từ chỉ báo kỹ thuật
+1. Thu thập dữ liệu thị trường Việt Nam (ETF/cổ phiếu, vàng, quỹ mô)
+2. So sánh hiệu quả 3 chiến lược phân bổ: Equal Weight, MVO, Black-Litterman
+3. Đánh giá tác động của views động (rule-based, relative, ML XGBoost)
 
-### Tài sản sử dụng
+### Tài sản
 
-| Tài sản | Loại | Mô tả |
-|---------|------|-------|
-| E1VFVN30 | ETF | Quỹ ETF theo dõi chỉ số VN30 |
-| GOLD | Hàng hóa | Giá vàng SJC (giá bán) |
-| DCDS | Quỹ cổ phiếu | Quỹ đầu tư cổ phiếu Dragon Capital |
-| MBBOND | Quỹ trái phiếu | Quỹ trái phiếu MB Capital |
+Danh sách tài sản được quản lý bởi `assets.json` (không hardcode trong code). Script sẽ:
+- Đọc `default_selection` nếu không truyền `--assets`
+- Hỗ trợ train/test/full theo cấu hình path mỗi tài sản
 
-### Phân chia dữ liệu
+### Phân chia dữ liệu mặc định
 
-- **Train**: 2020-01-01 → 2023-10-01 (dùng để phát triển và đánh giá chiến lược)
-- **Test**: 2023-10-01 → hiện tại (dùng để kiểm tra out-of-sample)
+- Train: `2020-01-01 -> 2023-10-01`
+- Test: `2023-10-01 -> 2026-03-01`
+- Full: `2020-01-01 -> 2026-03-01`
+
+(Cấu hình tại `data_loader.py`)
 
 ---
 
 ## Cấu trúc dự án
 
-```
+```text
 portfolio-optimization/
-├── backtest.py                    # Script backtest chính
-├── data_loader.py                 # Module load dữ liệu + assets config
-├── view_generators.py             # Module sinh views động (rule-based, relative)
-├── assets.json                    # Cấu hình universe assets cho backtest
-├── requirements.txt               # Dependencies
-├── README.md                      # Tài liệu này
-│
-├── crawl/                         # Scripts thu thập dữ liệu
-│   ├── stock.py            # Crawl giá ETF/cổ phiếu (vnstock)
-│   ├── fund.py             # Crawl NAV quỹ đầu tư
-│   └── gold.py             # Crawl giá vàng từ PNJ API
-│
-├── datasets/               # Dữ liệu CSV
-│   ├── stocks/
-│   │   ├── train/          # Dữ liệu train
-│   │   ├── test/           # Dữ liệu test
-│   │   └── full/           # Dữ liệu đầy đủ
-│   ├── funds/
-│   │   ├── train/
-│   │   ├── test/
-│   │   └── full/
-│   └── gold/
-│       ├── gold_train.csv
-│       └── gold_test.csv
-│
-└── docs/        # Tài liệu khác
+|- backtest.py
+|- data_loader.py
+|- view_generators.py
+|- run_compare_backtests.py
+|- assets.json
+|- requirements.txt
+|- README.md
+|- QUICKSTART.md
+|
+|- crawl/
+|  |- stock.py
+|  |- fund.py
+|  |- gold.py
+|
+|- datasets/
+|  |- stocks/
+|  |- funds/
+|  |- gold/
+|
+|- view_llm/
+|  |- llm_view_generators.py
+|  |- xgboost_train.py
+|  |- .cache/
+|
+|- docs/
+|  |- DYNAMIC_VIEWS_REPORT.md
+|  |- INDICATORS.md
+|  |- GEN_VIEW_LLM_GUIDE.md
+|  |- HOW_TO_USE_LLM_GENERATORS.md
+|
+`- reports/
 ```
 
 ---
@@ -75,287 +80,87 @@ portfolio-optimization/
 
 ### 1. Equal Weight (EW)
 
-**Cơ sở lý thuyết**: Phân bổ đều tài sản, không cần ước lượng tham số.
+Phân bổ đều:
 
+```text
+w_i = 1 / n
 ```
-w_i = 1/n   với mọi i = 1, 2, ..., n
-```
-
-**Ưu điểm**:
-- Đơn giản, không cần estimation
-- Đa dạng hóa tự nhiên
-- Robust với estimation error
-
-**Nhược điểm**:
-- Không tận dụng thông tin về risk/return
-- Có thể không tối ưu
 
 ### 2. Mean-Variance Optimization (MVO)
 
-**Cơ sở lý thuyết**: Tối đa hóa utility function dựa trên expected return và variance (Markowitz, 1952).
-
+```text
+max   mu^T w - lambda * w^T Sigma w
+s.t.  sum(w_i) = 1, w_i >= 0
 ```
-max   μᵀw - (λ/2) wᵀΣw
-s.t.  Σw_i = 1
-      w_i ≥ 0
-```
-
-Trong đó:
-- `μ`: Vector expected returns (ước lượng từ dữ liệu lịch sử)
-- `Σ`: Ma trận covariance
-- `λ`: Hệ số risk aversion
-- `w`: Vector trọng số tài sản
-
-**Ưu điểm**:
-- Tối ưu theo lý thuyết (nếu input chính xác)
-- Cân bằng risk-return
-
-**Nhược điểm**:
-- Rất nhạy cảm với estimation error của μ
-- Dễ sinh ra concentrated portfolios
-- "Garbage in, garbage out"
 
 ### 3. Black-Litterman (BL)
 
-**Cơ sở lý thuyết**: Kết hợp equilibrium returns (từ CAPM) với quan điểm chủ quan của nhà đầu tư (Black & Litterman, 1992).
+Kết hợp equilibrium returns với views:
 
-#### Bước 1: Tính Equilibrium Returns (π)
-
-```
-π = δ × Σ × w_market
-```
-
-Trong đó:
-- `δ`: Risk aversion coefficient (mặc định 2.5)
-- `Σ`: Ma trận covariance
-- `w_market`: Trọng số thị trường (ở đây dùng equal weight)
-
-#### Bước 2: Kết hợp với Views
-
-Views được biểu diễn dưới dạng:
-- `P`: Ma trận pick (K × N) - xác định tài sản nào trong view
-- `Q`: Vector view returns (K × 1) - mức return kỳ vọng
-- `Ω`: Ma trận uncertainty của views (K × K)
-
-**Công thức posterior returns**:
-
-```
-μ_BL = [(τΣ)⁻¹ + PᵀΩ⁻¹P]⁻¹ × [(τΣ)⁻¹π + PᵀΩ⁻¹Q]
-```
-
-Trong đó:
-- `τ`: Scalar uncertainty về equilibrium (mặc định 0.05)
-- `Ω = diag(P × τΣ × Pᵀ) / confidence`: Uncertainty tỷ lệ nghịch với confidence
-
-**Ưu điểm**:
-- Ổn định hơn MVO (bắt đầu từ equilibrium)
-- Cho phép kết hợp views chủ quan
-- Tự động điều chỉnh theo confidence
-
-**Nhược điểm**:
-- Cần xác định views - nếu views sai sẽ ảnh hưởng kết quả
-- Phức tạp hơn MVO
-
----
-
-## Mô hình Black-Litterman
-
-### Cấu trúc một View
-
-Trong code, mỗi view là một dictionary với format:
-
-```python
-{
-    "name": "GOLD_over_E1VFVN30",       # Tên view
-    "legs": {"GOLD": 1.0, "E1VFVN30": -1.0},  # Tài sản và hệ số
-    "view_return_annual": 0.06,          # Return kỳ vọng (năm)
-    "confidence": 0.70                   # Độ tin cậy [0, 1]
-}
-```
-
-### Các loại Views
-
-#### Absolute View (View tuyệt đối)
-Kỳ vọng về return của một tài sản cụ thể.
-
-```python
-# "E1VFVN30 sẽ tăng 10% trong năm tới"
-{
-    "name": "E1VFVN30_bullish",
-    "legs": {"E1VFVN30": 1.0},
-    "view_return_annual": 0.10,
-    "confidence": 0.6
-}
-```
-
-Ma trận P: `[1, 0, 0, 0]` (với 4 assets: E1VFVN30, GOLD, DCDS, MBBOND)
-
-#### Relative View (View tương đối)
-Kỳ vọng về chênh lệch return giữa hai tài sản.
-
-```python
-# "GOLD sẽ outperform E1VFVN30 6%"
-{
-    "name": "GOLD_over_E1VFVN30",
-    "legs": {"GOLD": 1.0, "E1VFVN30": -1.0},
-    "view_return_annual": 0.06,
-    "confidence": 0.7
-}
-```
-
-Ma trận P: `[-1, 1, 0, 0]` (Long GOLD, Short E1VFVN30)
-
----
-
-## Áp dụng Views trong Backtest
-
-### Cấu hình VIEW_MODE
-
-Trong file `backtest.py`, thay đổi biến `VIEW_MODE`:
-
-```python
-# Dòng 39 trong backtest.py
-VIEW_MODE = "rule_based"  # Các giá trị: "static", "rule_based", "relative", "ml", "combined"
-```
-
-### Luồng xử lý trong Backtest
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         BACKTEST LOOP                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  for t in range(window, len(data)):                            │
-│      │                                                          │
-│      ├── Tính returns trong ngày t                              │
-│      │                                                          │
-│      ├── Cập nhật NAV của EW                                    │
-│      │                                                          │
-│      └── if t là ngày rebalance:                                │
-│              │                                                  │
-│              ├── Tính μ, Σ từ dữ liệu lịch sử                   │
-│              │                                                  │
-│              ├── MVO: Tối ưu với μ, Σ                           │
-│              │                                                  │
-│              ├── BL:                                            │
-│              │   ├── Lấy price_window cho indicators            │
-│              │   ├── Gọi generate_dynamic_views()               │
-│              │   │       → Sinh P, Q, confidence               │
-│              │   ├── Tính μ_BL = posterior returns              │
-│              │   └── Tối ưu với μ_BL, Σ                         │
-│              │                                                  │
-│              └── Lưu weights cho kỳ tiếp theo                   │
-│                                                                 │
-│      Cập nhật NAV của MVO, BL                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Code chi tiết
-
-```python
-# Trong hàm backtest() - dòng 365-394
-
-if (t - window) % rebalance_freq == 0:
-    # Tính mean và covariance từ dữ liệu lịch sử
-    mu = hist.mean().values
-    sigma = hist.cov().values
-    
-    # MVO: Tối ưu trực tiếp
-    mvo_weight = optimize_weight(mu, sigma)
-    
-    # BL: Sinh views động và tối ưu
-    if view_mode != "static":
-        # Lấy cửa sổ giá để tính indicators
-        price_window = prices.iloc[max(0, t - window - 30) : t + window]
-        
-        # Sinh views dựa trên mode
-        p_view, q_view, conf_view, view_names = generate_dynamic_views(
-            price_window, assets, view_mode
-        )
-    
-    if p_view is not None:
-        # Tính posterior returns
-        mu_bl = black_litterman_posterior_mu(
-            sigma, market_weights, p_view, q_view, conf_view
-        )
-    else:
-        mu_bl = mu  # Fallback về historical mean
-    
-    # Tối ưu với BL returns
-    bl_weight = optimize_weight(mu_bl, sigma)
+```text
+mu_BL = [(tau Sigma)^-1 + P^T Omega^-1 P]^-1 * [(tau Sigma)^-1 pi + P^T Omega^-1 Q]
 ```
 
 ---
 
-## Cách sử dụng
+## View generation modes
 
-Hướng dẫn chi tiết về cách cài đặt, chạy backtest, và cấu hình các tham số nằm ở [QUICKSTART.md](QUICKSTART.md).
+`backtest.py` hỗ trợ đầy đủ 5 modes:
 
-### Các bước nhanh
+1. `static`: views cố định trong code
+2. `rule_based`: EMA crossover + RSI + momentum
+3. `relative`: so sánh momentum giữa các cặp assets
+4. `ml`: views từ model XGBoost đã train trước
+5. `combined`: kết hợp rule_based + relative + ml theo trọng số
+
+Lưu ý:
+- ML mode hiện tại chỉ hỗ trợ `xgboost`
+- Cần train model trước, sau đó backtest chỉ load model từ cache
+
+---
+
+## Cách sử dụng nhanh
 
 ```bash
-# 1. Cài đặt
+# 1) Cài đặt
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Chạy backtest
-python backtest.py
+# 2) Chạy backtest mặc định (rule_based)
+python backtest.py --phase train
 
-# 3. Thay đổi view mode (trong backtest.py)
-VIEW_MODE = "rule_based"  # hoặc "static", "relative", "ml", "combined"
+# 3) Train model XGBoost
+python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+
+# 4) Chạy BL với views từ ML
+python backtest.py --phase test --view-mode ml --ml-model-type xgboost
+
+# 5) So sánh rule_based vs ml
+python run_compare_backtests.py --phase test
 ```
+
+Hướng dẫn chi tiết: xem `QUICKSTART.md`.
 
 ---
 
-## Kết quả Backtest
+## Kết quả và báo cáo
 
-### Kết quả mẫu (Train period: 2020-01 → 2023-10)
+Thư mục `reports/` lưu các kết quả so sánh và log backtest. Ví dụ:
+- `reports/backtest_compare_views.csv`
+- `reports/backtest_ml_xgboost.txt`
 
-```
-======================================================================
-KET QUA BACKTEST (2020-01-01 den 2023-10-01)
-======================================================================
-EW   | NAV cuoi: 199,839 | Sharpe:  1.12 | MDD: -30.41%
-MVO  | NAV cuoi: 370,714 | Sharpe:  1.18 | MDD: -26.01%
-BL   | NAV cuoi: 531,725 | Sharpe:  1.70 | MDD: -28.94%
-
-(VIEW_MODE = "rule_based")
-```
-
-### So sánh các View Modes
-
-| View Mode | NAV cuối | Sharpe | Max Drawdown |
-|-----------|----------|--------|--------------|
-| EW (baseline) | 199,839 | 1.12 | -30.41% |
-| MVO | 370,714 | 1.18 | -26.01% |
-| BL (static) | ~400,000 | ~1.30 | ~-28% |
-| BL (rule_based) | 531,725 | 1.70 | -28.94% |
-
-### Mẫu Views sinh ra trong Backtest
-
-```
-2020-09-02:
-  - E1VFVN30_rule_based: Q=0.000481 (daily), conf=0.60
-  - DCDS_rule_based: Q=0.000250 (daily), conf=0.42
-
-2023-09-27:
-  - E1VFVN30_rule_based: Q=-0.000267 (daily), conf=0.50
-```
+Khuyến nghị:
+- Regenerate report sau mỗi lần thay đổi logic views/model
+- Không sử dụng report cũ để kết luận nếu code đã thay đổi
 
 ---
 
-## Tham khảo
-
-1. Markowitz, H. (1952). *Portfolio Selection*. Journal of Finance.
-2. Black, F. & Litterman, R. (1992). *Global Portfolio Optimization*. Financial Analysts Journal.
-3. Idzorek, T. (2005). *A Step-By-Step Guide to the Black-Litterman Model*.
-4. Murphy, J.J. (1999). *Technical Analysis of the Financial Markets*.
-
----
 ## Files quan trọng
-- `backtest.py` - Luồng backtest chính + tham số CLI
-- `data_loader.py` - Load dữ liệu + đọc assets config từ JSON
-- `assets.json` - Khai báo universe assets
-- `view_generators.py` - Thay đổi thresholds cho indicators
+
+- `backtest.py`: luồng backtest chính + CLI
+- `data_loader.py`: load assets config + đồng bộ dữ liệu
+- `view_generators.py`: rule-based/relative + utilities P,Q,confidence
+- `view_llm/llm_view_generators.py`: `TraditionalMLViewGenerator` (XGBoost)
+- `view_llm/xgboost_train.py`: train model XGBoost
+- `assets.json`: cấu hình universe assets

@@ -15,15 +15,16 @@ from data_loader import (
 )
 
 from view_generators import (
+    generate_ml_views,
     generate_rule_based_views,
     generate_relative_views,
     build_views_matrix,
     combine_views,
 )
-from view_llm.llm_view_generators import TraditionalMLViewGenerator
+from xgboost.predictor import XGBoostReturnPredictor
 
 ROOT_DIR = Path(__file__).resolve().parent
-ML_MODEL_CACHE_DIR = ROOT_DIR / "view_llm" / ".cache"
+ML_MODEL_CACHE_DIR = ROOT_DIR / "view_ml" / ".cache"
 
 # ====================== CONFIG ======================
 BACKTEST_PHASE = "train"
@@ -108,7 +109,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_ml_view_generator(model_type: str) -> TraditionalMLViewGenerator:
+def load_ml_view_generator(model_type: str) -> XGBoostReturnPredictor:
     model_candidates = {
         "xgboost": [
             ML_MODEL_CACHE_DIR / "xgboost_models.pkl",
@@ -124,13 +125,13 @@ def load_ml_view_generator(model_type: str) -> TraditionalMLViewGenerator:
         searched = "\n".join(str(p) for p in candidates)
         raise FileNotFoundError(
             "Khong tim thay model da train truoc do.\n"
-            "Hay train model truoc bang: python view_llm/train_ml_models.py --method all\n"
+            "Hay train model truoc bang: python view_ml/xgboost_train.py --method xgboost\n"
             f"Da tim o:\n{searched}"
         )
 
-    generator = TraditionalMLViewGenerator(model_type=model_type)
-    generator.load(model_path)
-    return generator
+    predictor = XGBoostReturnPredictor()
+    predictor.load(model_path)
+    return predictor
 
 
 def optimize_weight(mu, sigma, risk_aversion=0.5):
@@ -206,7 +207,7 @@ def generate_dynamic_views(
     price_window: pd.DataFrame,
     assets: list,
     mode: str = VIEW_MODE,
-    ml_generator=None,
+    ml_predictor=None,
     ml_min_return_threshold: float = ML_MIN_RETURN_THRESHOLD,
 ):
     """
@@ -220,6 +221,10 @@ def generate_dynamic_views(
         List of asset names
     mode : str
         View generation mode: "static", "rule_based", "relative", "ml", "combined"
+    ml_predictor : XGBoostReturnPredictor, optional
+        Trained ML predictor (used when mode is "ml" or "combined")
+    ml_min_return_threshold : float
+        Minimum predicted return to generate a view
     
     Returns
     -------
@@ -236,23 +241,26 @@ def generate_dynamic_views(
     elif mode == "relative":
         views = generate_relative_views(price_window)
     elif mode == "ml":
-        if ml_generator is None:
+        if ml_predictor is None:
             return None, None, None, []
-        views = ml_generator.generate_views(
-            price_window,
+        predictions = ml_predictor.predict(price_window)
+        views = generate_ml_views(
+            predictions,
+            prediction_horizon=ml_predictor.prediction_horizon,
             min_return_threshold=ml_min_return_threshold,
         )
     elif mode == "combined":
         rule_views = generate_rule_based_views(price_window)
         rel_views = generate_relative_views(price_window)
-        ml_views = (
-            ml_generator.generate_views(
-                price_window,
+        if ml_predictor is not None:
+            predictions = ml_predictor.predict(price_window)
+            ml_views = generate_ml_views(
+                predictions,
+                prediction_horizon=ml_predictor.prediction_horizon,
                 min_return_threshold=ml_min_return_threshold,
             )
-            if ml_generator is not None
-            else []
-        )
+        else:
+            ml_views = []
         views = combine_views(rule_views, rel_views, ml_views, COMBINED_VIEW_WEIGHTS)
     else:
         # Unknown mode, fallback to static
@@ -302,7 +310,7 @@ def backtest(
     rebalance_freq=REBALANCE_FREQ,
     initial_nav=INITIAL_NAV,
     view_mode=VIEW_MODE,
-    ml_generator=None,
+    ml_predictor=None,
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
 ):
     returns = prices.pct_change().dropna()
@@ -351,7 +359,7 @@ def backtest(
                     price_window,
                     assets,
                     view_mode,
-                    ml_generator=ml_generator,
+                    ml_predictor=ml_predictor,
                     ml_min_return_threshold=ml_min_return_threshold,
                 )
                 views_history.append({
@@ -419,7 +427,7 @@ def get_next_period_weights(
     as_of_date,
     window=WINDOW,
     view_mode=VIEW_MODE,
-    ml_generator=None,
+    ml_predictor=None,
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
 ):
     eligible = returns.loc[returns.index <= as_of_date]
@@ -445,7 +453,7 @@ def get_next_period_weights(
             price_window,
             assets,
             view_mode,
-            ml_generator=ml_generator,
+            ml_predictor=ml_predictor,
             ml_min_return_threshold=ml_min_return_threshold,
         )
     
@@ -523,13 +531,13 @@ def main():
         elif view_mode == "combined":
             print(f"  - Ket hop: rule_based ({COMBINED_VIEW_WEIGHTS[0]:.0%}), relative ({COMBINED_VIEW_WEIGHTS[1]:.0%}), ml ({COMBINED_VIEW_WEIGHTS[2]:.0%})")
 
-    ml_generator = None
+    ml_predictor = None
     if view_mode in ("ml", "combined"):
         print("\n" + "=" * 70)
         print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
         print("=" * 70)
         try:
-            ml_generator = load_ml_view_generator(args.ml_model_type)
+            ml_predictor = load_ml_view_generator(args.ml_model_type)
         except FileNotFoundError as e:
             print(f"\nERROR: {e}")
             return
@@ -537,7 +545,7 @@ def main():
     result = backtest(
         prices,
         view_mode=view_mode,
-        ml_generator=ml_generator,
+        ml_predictor=ml_predictor,
     )
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]
@@ -581,7 +589,7 @@ def main():
         as_of_date=as_of_date,
         window=WINDOW,
         view_mode=view_mode,
-        ml_generator=ml_generator,
+        ml_predictor=ml_predictor,
     )
 
     print("\n" + "=" * 70)

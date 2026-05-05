@@ -2,18 +2,22 @@
 View Generators for Black-Litterman Model
 ==========================================
 
-This module provides 3 approaches to generate dynamic views for Black-Litterman:
+This module provides all approaches to generate dynamic views for Black-Litterman:
 1. Rule-based View Generator (using MA, RSI, Momentum)
 2. Relative View Generator (comparing pairs of assets)
-3. ML-based View Generator (using trained model predictions)
+3. ML-based View Generator (XGBoost supervised learning)
 
 Each generator returns a list of view dicts compatible with Black-Litterman.
 """
 
-from typing import Optional
+import warnings
+from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
+
+warnings.filterwarnings("ignore")
 
 # ====================== CONSTANTS ======================
 TRADING_DAYS_PER_YEAR = 252
@@ -24,6 +28,10 @@ DEFAULT_MA_LONG = 30
 DEFAULT_RSI_PERIOD = 14
 DEFAULT_MOMENTUM_PERIOD = 20
 DEFAULT_ATR_PERIOD = 14
+
+# ML defaults
+DEFAULT_FEATURE_WINDOW = 20
+DEFAULT_PREDICTION_HORIZON = 5  # days ahead
 
 # Thresholds
 MA_CROSSOVER_THRESHOLD = 0.02  # 2% difference for MA crossover signal
@@ -357,112 +365,147 @@ def generate_relative_views(
     return views
 
 
-# def generate_ml_views(
-#     prices: pd.DataFrame,
-#     model: Optional[object] = None,
-#     feature_window: int = 20,
-#     prediction_threshold: float = 0.01,
-# ) -> list[dict]:
-#     """
-#     ML-based View Generator
-    
-#     Uses a trained ML model to predict returns and generate views.
-#     If no model is provided, uses a simple linear regression as fallback.
-    
-#     Parameters
-#     ----------
-#     prices : pd.DataFrame
-#         Price data with assets as columns
-#     model : object, optional
-#         Trained model with .predict() method. If None, uses simple regression.
-#     feature_window : int
-#         Window size for feature calculation
-#     prediction_threshold : float
-#         Minimum predicted return to generate a view
-    
-#     Returns
-#     -------
-#     list[dict]
-#         List of ML-based view dictionaries
-#     """
-#     views = []
-    
-#     for asset in prices.columns:
-#         price_series = prices[asset].dropna()
-#         if len(price_series) < feature_window + 10:
-#             continue
-        
-#         # Compute features
-#         features = _compute_ml_features(price_series, feature_window)
-        
-#         if model is not None:
-#             # Use provided model
-#             try:
-#                 features_array = np.array(list(features.values())).reshape(1, -1)
-#                 predicted_return = model.predict(features_array)[0]
-                
-#                 # Get confidence from model if available
-#                 if hasattr(model, "predict_proba"):
-#                     proba = model.predict_proba(features_array)
-#                     confidence = float(max(proba[0]))
-#                 else:
-#                     confidence = 0.5
-#             except Exception:
-#                 continue
-#         else:
-#             # Fallback: simple momentum-based prediction
-#             predicted_return = _simple_return_prediction(price_series, feature_window)
-#             confidence = 0.4  # Lower confidence for simple prediction
-        
-#         # Only generate view if prediction exceeds threshold
-#         if abs(predicted_return) < prediction_threshold:
-#             continue
-        
-#         # Annualize the prediction
-#         view_return_annual = predicted_return * TRADING_DAYS_PER_YEAR / feature_window
-#         view_return_annual = max(-0.50, min(0.50, view_return_annual))  # Cap at 50%
-        
-#         views.append({
-#             "name": f"{asset}_ml_pred",
-#             "legs": {asset: 1.0},
-#             "view_return_annual": view_return_annual,
-#             "confidence": confidence,
-#             "indicators": features,
-#         })
-    
-#     return views
+# ====================== ML VIEW GENERATION (prediction -> BL views) =========
 
 
-# def _compute_ml_features(prices: pd.Series, window: int) -> dict:
-#     """Compute features for ML model."""
-#     return {
-#         "momentum_5": compute_momentum(prices, 5),
-#         "momentum_10": compute_momentum(prices, 10),
-#         "momentum_20": compute_momentum(prices, 20),
-#         "rsi": compute_rsi(prices, 14),
-#         "ma_ratio_10_30": (
-#             compute_ema(prices, 10).iloc[-1] / compute_ema(prices, 30).iloc[-1] - 1
-#         ),
-#         "volatility": prices.pct_change().tail(window).std(),
-#         "macd_hist": compute_macd(prices)[2],
-#     }
+def generate_ml_views(
+    predictions: dict[str, tuple[float, float]],
+    prediction_horizon: int = DEFAULT_PREDICTION_HORIZON,
+    min_return_threshold: float = 0.005,
+    model_type: str = "xgboost",
+) -> list[dict]:
+    """
+    Convert ML predictions into Black-Litterman view dicts.
+
+    This function is the bridge between the ML layer (predictions) and the
+    portfolio layer (BL views).  It knows the view-dict schema but nothing
+    about how the predictions were produced.
+
+    Parameters
+    ----------
+    predictions : dict
+        {asset_name: (predicted_return, confidence)}  as returned by
+        ``XGBoostReturnPredictor.predict()``
+    prediction_horizon : int
+        Days ahead the prediction covers (used for annualization)
+    min_return_threshold : float
+        Minimum absolute predicted return to emit a view
+    model_type : str
+        Label stored in the view dict for provenance
+
+    Returns
+    -------
+    list[dict]
+        List of view dictionaries compatible with Black-Litterman
+    """
+    views = []
+
+    for asset, (pred_return, confidence) in predictions.items():
+        if abs(pred_return) < min_return_threshold:
+            continue
+
+        view_return_annual = pred_return * (
+            TRADING_DAYS_PER_YEAR / prediction_horizon
+        )
+        view_return_annual = max(-0.50, min(0.50, view_return_annual))
+
+        views.append({
+            "name": f"{asset}_ml_{model_type}",
+            "legs": {asset: 1.0},
+            "view_return_annual": view_return_annual,
+            "confidence": confidence,
+            "source": "traditional_ml",
+            "model_type": model_type,
+            "predicted_return_horizon": pred_return,
+        })
+
+    return views
 
 
-# def _simple_return_prediction(prices: pd.Series, window: int) -> float:
-#     """Simple return prediction based on momentum and mean reversion."""
-#     momentum = compute_momentum(prices, window)
-#     rsi = compute_rsi(prices, 14)
-    
-#     # Combine momentum and mean reversion
-#     if rsi > 70:
-#         # Overbought: predict reversal
-#         return momentum * 0.5 - 0.02
-#     elif rsi < 30:
-#         # Oversold: predict reversal
-#         return momentum * 0.5 + 0.02
-#     else:
-#         # Trend continuation
-#         return momentum * 0.8
+# ====================== CONVENIENCE WRAPPER (backward compat) ================
+
+
+class TraditionalMLViewGenerator:
+    """
+    Convenience wrapper that composes ``XGBoostReturnPredictor`` +
+    ``generate_ml_views()``.
+
+    Kept for backward compatibility with existing code that uses this class
+    directly.  New code should prefer the two separate components::
+
+        predictor = XGBoostReturnPredictor(...)
+        predictor.train(prices)
+        preds   = predictor.predict(prices)
+        views   = generate_ml_views(preds, predictor.prediction_horizon)
+    """
+
+    def __init__(
+        self,
+        model_type: str = "xgboost",
+        feature_window: int = DEFAULT_FEATURE_WINDOW,
+        prediction_horizon: int = DEFAULT_PREDICTION_HORIZON,
+        model_params: Optional[dict] = None,
+    ):
+        if model_type != "xgboost":
+            raise ValueError(
+                "TraditionalMLViewGenerator now supports only model_type='xgboost'."
+            )
+        self.model_type = model_type
+        # Lazy import to avoid circular dependency (view_ml.predictor -> view_generators)
+        from xgboost.predictor import XGBoostReturnPredictor
+        self._predictor = XGBoostReturnPredictor(
+            feature_window=feature_window,
+            prediction_horizon=prediction_horizon,
+            model_params=model_params,
+        )
+
+    # -- delegate predictor attributes --
+    @property
+    def feature_window(self) -> int:
+        return self._predictor.feature_window
+
+    @property
+    def prediction_horizon(self) -> int:
+        return self._predictor.prediction_horizon
+
+    @property
+    def model_params(self) -> dict:
+        return self._predictor.model_params
+
+    @property
+    def models(self) -> dict:
+        return self._predictor.models
+
+    @property
+    def feature_cols(self) -> list[str]:
+        return self._predictor.feature_cols
+
+    # -- delegate core methods --
+    def train(self, prices: pd.DataFrame, verbose: bool = True):
+        return self._predictor.train(prices, verbose=verbose)
+
+    def predict(self, prices: pd.DataFrame) -> dict[str, tuple[float, float]]:
+        return self._predictor.predict(prices)
+
+    def save(self, filepath: Union[str, Path]):
+        return self._predictor.save(filepath)
+
+    def load(self, filepath: Union[str, Path]):
+        return self._predictor.load(filepath)
+
+    # -- view generation (the BL-aware part) --
+    def generate_views(
+        self,
+        prices: pd.DataFrame,
+        min_return_threshold: float = 0.005,
+    ) -> list[dict]:
+        predictions = self._predictor.predict(prices)
+        return generate_ml_views(
+            predictions,
+            prediction_horizon=self._predictor.prediction_horizon,
+            min_return_threshold=min_return_threshold,
+            model_type=self.model_type,
+        )
 
 
 # ====================== UTILITY FUNCTIONS ======================

@@ -1,0 +1,77 @@
+Dang load va dong bo du lieu 4 tai san...
+Phase=test | Data mode=split | Period=2023-10-01 -> 2026-03-01
+View mode=ml
+Assets: E1VFVN30, GOLD, DCDS, MBBOND
+Khoang du lieu dung backtest: 2023-10-02 -> 2026-02-27 (630 phien)
+
+======================================================================
+BANG RETURN TUNG ASSET
+======================================================================
+          Total Return  Annualized Return  Annualized Vol
+E1VFVN30        23.48%              8.82%          35.73%
+GOLD           162.61%             47.23%          21.49%
+DCDS            72.82%             24.51%          19.92%
+MBBOND          19.78%              7.50%           0.59%
+
+======================================================================
+BLACK-LITTERMAN VIEW MODE: ML
+======================================================================
+Views duoc sinh dong tai moi lan rebalance dua tren ml indicators
+  - Su dung: ML model predictions (xgboost)
+
+======================================================================
+LOAD ML VIEW GENERATOR (xgboost)
+======================================================================
+Models loaded from /Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/view_llm/.cache/xgboost_models.pkl
+
+======================================================================
+KET QUA BACKTEST (2023-10-01 den 2026-03-01, theo du lieu kha dung)
+======================================================================
+EW   | NAV cuoi:     1.79 | Sharpe:   1.76 | MDD:  -8.11%
+MVO  | NAV cuoi:     1.18 | Sharpe:   0.16 | MDD: -34.33%
+BL   | NAV cuoi:     2.10 | Sharpe:   1.09 | MDD: -21.95%
+
+======================================================================
+MAU VIEWS SINH RA TRONG QUA TRINH BACKTEST
+======================================================================
+
+2023-10-31:
+  - E1VFVN30_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - DCDS_ml_xgboost: Q=-0.001984 (daily), conf=0.30
+
+2023-11-07:
+  - E1VFVN30_ml_xgboost: Q=0.001984 (daily), conf=0.30
+
+2023-11-14:
+  - E1VFVN30_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - DCDS_ml_xgboost: Q=0.001916 (daily), conf=0.30
+
+2026-02-10:
+  - E1VFVN30_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - GOLD_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - DCDS_ml_xgboost: Q=0.001256 (daily), conf=0.30
+
+2026-02-17:
+  - GOLD_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - DCDS_ml_xgboost: Q=0.001256 (daily), conf=0.30
+
+2026-02-24:
+  - E1VFVN30_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - GOLD_ml_xgboost: Q=0.001984 (daily), conf=0.30
+  - DCDS_ml_xgboost: Q=0.001863 (daily), conf=0.30
+
+======================================================================
+TRONG SO GOI Y CHO GIAI DOAN TIEP THEO SAU 2026-03-01
+(Uoc luong tu cua so 20 phien gan nhat den 2026-02-27)
+======================================================================
+MVO:
+  E1VFVN30:   0.00%
+  GOLD    : 100.00%
+  DCDS    :   0.00%
+  MBBOND  :   0.00%
+BL:
+  E1VFVN30:   0.00%
+  GOLD    :  50.81%
+  DCDS    :  49.19%
+  MBBOND  :   0.00%
+  Views used: E1VFVN30_ml_xgboost, GOLD_ml_xgboost, DCDS_ml_xgboost

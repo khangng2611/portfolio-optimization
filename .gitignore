@@ -210,5 +210,4 @@ __marimo__/
 # datasets
 # datasets/
 
-gen-view-llm/
 .vscode/launch.json

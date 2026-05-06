@@ -2,22 +2,27 @@
 View Generators for Black-Litterman Model
 ==========================================
 
-This module provides 3 approaches to generate dynamic views for Black-Litterman:
-1. Rule-based View Generator (using MA, RSI, Momentum)
-2. Relative View Generator (comparing pairs of assets)
-3. ML-based View Generator (using trained model predictions)
+This module provides all approaches to generate views for Black-Litterman:
+1. Static View Generator (predefined views from config)
+2. Rule-based View Generator (using MA, RSI, Momentum)
+3. Relative View Generator (comparing pairs of assets)
+4. ML-based View Generator (XGBoost supervised learning)
 
 Each generator returns a list of view dicts compatible with Black-Litterman.
 """
 
+import warnings
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-# ====================== CONSTANTS ======================
-TRADING_DAYS_PER_YEAR = 252
+from config import STATIC_VIEWS, TRADING_DAYS_PER_YEAR
+from gen_view.xgboost.config import DEFAULT_PREDICTION_HORIZON
 
+warnings.filterwarnings("ignore")
+
+# ====================== CONSTANTS ======================
 # Rule-based defaults
 DEFAULT_MA_SHORT = 10
 DEFAULT_MA_LONG = 30
@@ -172,6 +177,22 @@ def compute_bollinger_bands(
 
 
 # ====================== VIEW GENERATORS ======================
+
+
+def generate_static_views() -> list[dict]:
+    """
+    Static View Generator
+
+    Returns the predefined static views from config (STATIC_VIEWS).
+    These views are fixed and do not change with market conditions.
+
+    Returns
+    -------
+    list[dict]
+        List of static view dictionaries for Black-Litterman.
+        Compatible with :func:`build_views_matrix`.
+    """
+    return list(STATIC_VIEWS)
 
 
 def generate_rule_based_views(
@@ -357,112 +378,61 @@ def generate_relative_views(
     return views
 
 
-# def generate_ml_views(
-#     prices: pd.DataFrame,
-#     model: Optional[object] = None,
-#     feature_window: int = 20,
-#     prediction_threshold: float = 0.01,
-# ) -> list[dict]:
-#     """
-#     ML-based View Generator
-    
-#     Uses a trained ML model to predict returns and generate views.
-#     If no model is provided, uses a simple linear regression as fallback.
-    
-#     Parameters
-#     ----------
-#     prices : pd.DataFrame
-#         Price data with assets as columns
-#     model : object, optional
-#         Trained model with .predict() method. If None, uses simple regression.
-#     feature_window : int
-#         Window size for feature calculation
-#     prediction_threshold : float
-#         Minimum predicted return to generate a view
-    
-#     Returns
-#     -------
-#     list[dict]
-#         List of ML-based view dictionaries
-#     """
-#     views = []
-    
-#     for asset in prices.columns:
-#         price_series = prices[asset].dropna()
-#         if len(price_series) < feature_window + 10:
-#             continue
-        
-#         # Compute features
-#         features = _compute_ml_features(price_series, feature_window)
-        
-#         if model is not None:
-#             # Use provided model
-#             try:
-#                 features_array = np.array(list(features.values())).reshape(1, -1)
-#                 predicted_return = model.predict(features_array)[0]
-                
-#                 # Get confidence from model if available
-#                 if hasattr(model, "predict_proba"):
-#                     proba = model.predict_proba(features_array)
-#                     confidence = float(max(proba[0]))
-#                 else:
-#                     confidence = 0.5
-#             except Exception:
-#                 continue
-#         else:
-#             # Fallback: simple momentum-based prediction
-#             predicted_return = _simple_return_prediction(price_series, feature_window)
-#             confidence = 0.4  # Lower confidence for simple prediction
-        
-#         # Only generate view if prediction exceeds threshold
-#         if abs(predicted_return) < prediction_threshold:
-#             continue
-        
-#         # Annualize the prediction
-#         view_return_annual = predicted_return * TRADING_DAYS_PER_YEAR / feature_window
-#         view_return_annual = max(-0.50, min(0.50, view_return_annual))  # Cap at 50%
-        
-#         views.append({
-#             "name": f"{asset}_ml_pred",
-#             "legs": {asset: 1.0},
-#             "view_return_annual": view_return_annual,
-#             "confidence": confidence,
-#             "indicators": features,
-#         })
-    
-#     return views
+# ====================== ML VIEW GENERATION (prediction -> BL views) =========
 
 
-# def _compute_ml_features(prices: pd.Series, window: int) -> dict:
-#     """Compute features for ML model."""
-#     return {
-#         "momentum_5": compute_momentum(prices, 5),
-#         "momentum_10": compute_momentum(prices, 10),
-#         "momentum_20": compute_momentum(prices, 20),
-#         "rsi": compute_rsi(prices, 14),
-#         "ma_ratio_10_30": (
-#             compute_ema(prices, 10).iloc[-1] / compute_ema(prices, 30).iloc[-1] - 1
-#         ),
-#         "volatility": prices.pct_change().tail(window).std(),
-#         "macd_hist": compute_macd(prices)[2],
-#     }
+def generate_ml_views(
+    predictions: dict[str, tuple[float, float]],
+    prediction_horizon: int = DEFAULT_PREDICTION_HORIZON,
+    min_return_threshold: float = 0.005,
+    model_type: str = "xgboost",
+) -> list[dict]:
+    """
+    Convert ML predictions into Black-Litterman view dicts.
 
+    This function is the bridge between the ML layer (predictions) and the
+    portfolio layer (BL views).  It knows the view-dict schema but nothing
+    about how the predictions were produced.
 
-# def _simple_return_prediction(prices: pd.Series, window: int) -> float:
-#     """Simple return prediction based on momentum and mean reversion."""
-#     momentum = compute_momentum(prices, window)
-#     rsi = compute_rsi(prices, 14)
-    
-#     # Combine momentum and mean reversion
-#     if rsi > 70:
-#         # Overbought: predict reversal
-#         return momentum * 0.5 - 0.02
-#     elif rsi < 30:
-#         # Oversold: predict reversal
-#         return momentum * 0.5 + 0.02
-#     else:
-#         # Trend continuation
-#         return momentum * 0.8
+    Parameters
+    ----------
+    predictions : dict
+        {asset_name: (predicted_return, confidence)}  as returned by
+        ``XGBoostCoreModel.predict()``
+    prediction_horizon : int
+        Days ahead the prediction covers (used for annualization)
+    min_return_threshold : float
+        Minimum absolute predicted return to emit a view
+    model_type : str
+        Label stored in the view dict for provenance
+
+    Returns
+    -------
+    list[dict]
+        List of view dictionaries compatible with Black-Litterman
+    """
+    views = []
+
+    for asset, (pred_return, confidence) in predictions.items():
+        if abs(pred_return) < min_return_threshold:
+            continue
+
+        view_return_annual = pred_return * (
+            TRADING_DAYS_PER_YEAR / prediction_horizon
+        )
+        view_return_annual = max(-0.50, min(0.50, view_return_annual))
+
+        views.append({
+            "name": f"{asset}_ml_{model_type}",
+            "legs": {asset: 1.0},
+            "view_return_annual": view_return_annual,
+            "confidence": confidence,
+            "source": "traditional_ml",
+            "model_type": model_type,
+            "predicted_return_horizon": pred_return,
+        })
+
+    return views
 
 
 # ====================== UTILITY FUNCTIONS ======================
@@ -532,7 +502,8 @@ def combine_views(
     rule_views: list[dict],
     relative_views: list[dict],
     ml_views: list[dict],
-    weights: tuple[float, float, float] = (0.4, 0.4, 0.2),
+    static_views: list[dict],
+    weights: tuple[float, float, float, float] = (0.4, 0.3, 0.3, 0.0),
 ) -> list[dict]:
     """
     Combine views from multiple generators with confidence weighting.
@@ -545,8 +516,10 @@ def combine_views(
         Views from relative generator
     ml_views : list[dict]
         Views from ML generator
-    weights : tuple[float, float, float]
-        Weights for (rule, relative, ml) generators
+    static_views : list[dict]
+        Views from static (predefined) generator
+    weights : tuple[float, float, float, float]
+        Weights for (rule, relative, ml, static) generators
     
     Returns
     -------
@@ -555,7 +528,7 @@ def combine_views(
     """
     combined = []
     
-    w_rule, w_rel, w_ml = weights
+    w_rule, w_rel, w_ml, w_static = weights
     
     for view in rule_views:
         view = view.copy()
@@ -575,107 +548,12 @@ def combine_views(
         view["source"] = "ml"
         combined.append(view)
     
+    for view in static_views:
+        view = view.copy()
+        view["confidence"] *= w_static
+        view["source"] = "static"
+        combined.append(view)
+    
     return combined
 
 
-# ====================== VISUALIZATION ======================
-
-
-def plot_indicators(
-    prices: pd.Series,
-    asset_name: str,
-    save_path: Optional[str] = None,
-    show: bool = True,
-):
-    """
-    Plot price with technical indicators for visualization.
-    
-    Creates a 3-panel chart:
-    1. Price + MA lines + Bollinger Bands
-    2. RSI
-    3. MACD
-    """
-    import matplotlib.pyplot as plt
-    
-    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
-    fig.suptitle(f"Technical Indicators: {asset_name}", fontsize=14)
-    
-    # Panel 1: Price + MAs + Bollinger Bands
-    ax1 = axes[0]
-    ax1.plot(prices.index, prices.values, label="Price", color="black", linewidth=1)
-    
-    ema_10 = compute_ema(prices, 10)
-    ema_30 = compute_ema(prices, 30)
-    ax1.plot(prices.index, ema_10.values, label="EMA 10", color="blue", linewidth=0.8)
-    ax1.plot(prices.index, ema_30.values, label="EMA 30", color="red", linewidth=0.8)
-    
-    bb_lower, bb_middle, bb_upper = [], [], []
-    for i in range(len(prices)):
-        if i < 20:
-            bb_lower.append(np.nan)
-            bb_middle.append(np.nan)
-            bb_upper.append(np.nan)
-        else:
-            l, m, u = compute_bollinger_bands(prices.iloc[:i+1], 20, 2.0)
-            bb_lower.append(l)
-            bb_middle.append(m)
-            bb_upper.append(u)
-    
-    ax1.fill_between(prices.index, bb_lower, bb_upper, alpha=0.2, color="gray", label="Bollinger Bands")
-    ax1.set_ylabel("Price")
-    ax1.legend(loc="upper left")
-    ax1.grid(True, alpha=0.3)
-    
-    # Panel 2: RSI
-    ax2 = axes[1]
-    rsi_values = []
-    for i in range(len(prices)):
-        if i < 14:
-            rsi_values.append(50)
-        else:
-            rsi_values.append(compute_rsi(prices.iloc[:i+1], 14))
-    
-    ax2.plot(prices.index, rsi_values, label="RSI (14)", color="purple", linewidth=1)
-    ax2.axhline(y=70, color="red", linestyle="--", linewidth=0.8, label="Overbought (70)")
-    ax2.axhline(y=30, color="green", linestyle="--", linewidth=0.8, label="Oversold (30)")
-    ax2.axhline(y=50, color="gray", linestyle="-", linewidth=0.5)
-    ax2.set_ylabel("RSI")
-    ax2.set_ylim(0, 100)
-    ax2.legend(loc="upper left")
-    ax2.grid(True, alpha=0.3)
-    
-    # Panel 3: MACD
-    ax3 = axes[2]
-    macd_line, signal_line, histogram = [], [], []
-    for i in range(len(prices)):
-        if i < 26:
-            macd_line.append(0)
-            signal_line.append(0)
-            histogram.append(0)
-        else:
-            m, s, h = compute_macd(prices.iloc[:i+1])
-            macd_line.append(m)
-            signal_line.append(s)
-            histogram.append(h)
-    
-    ax3.plot(prices.index, macd_line, label="MACD", color="blue", linewidth=1)
-    ax3.plot(prices.index, signal_line, label="Signal", color="red", linewidth=1)
-    colors = ["green" if h >= 0 else "red" for h in histogram]
-    ax3.bar(prices.index, histogram, color=colors, alpha=0.5, label="Histogram")
-    ax3.axhline(y=0, color="gray", linestyle="-", linewidth=0.5)
-    ax3.set_ylabel("MACD")
-    ax3.legend(loc="upper left")
-    ax3.grid(True, alpha=0.3)
-    
-    ax3.set_xlabel("Date")
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Saved indicator chart to: {save_path}")
-    
-    if show:
-        plt.show()
-    else:
-        plt.close()

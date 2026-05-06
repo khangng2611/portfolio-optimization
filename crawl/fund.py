@@ -5,6 +5,7 @@
 # - Build a DataFrame with columns: date, price (nav_per_unit), fund_name
 # - SAVE EACH FUND TO A SEPARATE CSV FILE (filename: <fund_name>_nav_history.csv)
 
+import sys
 import pandas as pd
 from vnstock import Fund
 from datetime import datetime
@@ -14,8 +15,12 @@ import time  # Delay to avoid rate limits when needed
 # ====== CONFIGURATION ======
 START_INDEX = 60  # Starting index in the list
 BATCH_SIZE = 5  # Number of funds to process per run
-TRAIN_START_DATE = "2020-01-01"
-SPLIT_DATE = "2023-10-01"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from config import TRAIN_START_DATE, SPLIT_DATE
+
+# Crawl uses "today" as end date (not the fixed backtest date)
 TEST_END_DATE = datetime.now().strftime("%Y-%m-%d")
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATASETS_DIR = ROOT_DIR / "datasets"

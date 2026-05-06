@@ -420,7 +420,7 @@ def generate_ml_views(
         view_return_annual = pred_return * (
             TRADING_DAYS_PER_YEAR / prediction_horizon
         )
-        view_return_annual = max(-0.50, min(0.50, view_return_annual))
+        view_return_annual = max(-0.30, min(0.30, view_return_annual))
 
         views.append({
             "name": f"{asset}_ml_{model_type}",

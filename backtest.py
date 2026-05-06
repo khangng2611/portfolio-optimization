@@ -20,8 +20,11 @@ from config import (
     BL_TAU,
     COMBINED_VIEW_WEIGHTS,
     INITIAL_NAV,
+    MAX_POSITION_SIZE,
     ML_MIN_RETURN_THRESHOLD,
     ML_MODEL_TYPE,
+    ML_RETRAIN_FREQUENCY,
+    ML_TRAINING_MODE,
     PHASE_PERIODS,
     RISK_FREE_RATE_ANNUAL,
     REBALANCE_FREQ,
@@ -37,7 +40,7 @@ from gen_view.view_generators import (
     build_views_matrix,
     combine_views,
 )
-from gen_view.xgboost.xgboost_core import XGBoostCoreModel
+from gen_view.xgboost.xgboost_core import XGBoostCoreModel, XGBoostEnsembleModel
 
 ROOT_DIR = Path(__file__).resolve().parent
 ML_MODEL_CACHE_DIR = ROOT_DIR / "gen_view" / "xgboost" / ".cache"
@@ -81,6 +84,12 @@ def parse_args():
         default=ML_MODEL_TYPE,
         help="ML model for ml/combined view mode",
     )
+    parser.add_argument(
+        "--ml-training-mode",
+        choices=["pretrained", "walk_forward"],
+        default=ML_TRAINING_MODE,
+        help="ML training mode: pretrained (load cached) or walk_forward (retrain during backtest)",
+    )
     return parser.parse_args()
 
 
@@ -108,7 +117,7 @@ def load_ml_model(model_type: str) -> XGBoostCoreModel:
     return model
 
 
-def optimize_weight(mu, sigma, risk_aversion=0.5):
+def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
     mu = np.asarray(mu, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
     n = len(mu)
@@ -121,7 +130,7 @@ def optimize_weight(mu, sigma, risk_aversion=0.5):
 
     w = cp.Variable(n)
     objective = cp.Maximize(mu @ w - risk_aversion * cp.quad_form(w, sigma))
-    constraints = [cp.sum(w) == 1, w >= 0]
+    constraints = [cp.sum(w) == 1, w >= 0, w <= max_weight]
     problem = cp.Problem(objective, constraints)
 
     installed = set(cp.installed_solvers())
@@ -249,6 +258,8 @@ def backtest(
     view_mode=VIEW_MODE,
     ml_model=None,
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
+    ml_training_mode="pretrained",
+    retrain_frequency=ML_RETRAIN_FREQUENCY,
 ):
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
@@ -267,6 +278,20 @@ def backtest(
     rebalance_dates = []
     views_history = []  # Track generated views at each rebalance
 
+    # Walk-forward state
+    if ml_training_mode == "walk_forward" and ml_model is None:
+        from gen_view.xgboost.config import (
+            DEFAULT_FEATURE_WINDOW,
+            DEFAULT_PREDICTION_HORIZON,
+            MIN_TRAIN_SAMPLES,
+        )
+        ml_model = XGBoostEnsembleModel()
+        last_retrain_t = -retrain_frequency  # force first train ASAP
+    else:
+        last_retrain_t = None
+
+    prediction_horizon = getattr(ml_model, "prediction_horizon", 5) if ml_model else 5
+
     for t in range(window, len(returns)):
         hist = returns.iloc[t - window : t]
         r_t = returns.iloc[t].values
@@ -281,12 +306,31 @@ def backtest(
 
             market_weights = np.full(m, 1.0 / m)
 
-            price_window = prices.iloc[max(0, t - window - 30) : t + window]
+            # Walk-forward: retrain model if due
+            if ml_training_mode == "walk_forward" and last_retrain_t is not None:
+                if t - last_retrain_t >= retrain_frequency:
+                    train_end = t - prediction_horizon  # embargo gap
+                    feature_window = getattr(ml_model, "feature_window", 20)
+                    min_samples = getattr(ml_model, "_min_train_check", 100)
+                    if train_end >= min_samples + feature_window:
+                        train_prices = prices.iloc[:train_end]
+                        ml_model.train(train_prices, verbose=False)
+                        last_retrain_t = t
+
+            # Use data up to current time only (no look-ahead)
+            price_window = prices.iloc[max(0, t - window - 30) : t]
+            
+            # Only generate ML views if model is trained
+            effective_ml_model = ml_model
+            if ml_training_mode == "walk_forward" and hasattr(ml_model, "is_trained"):
+                if not ml_model.is_trained:
+                    effective_ml_model = None
+
             p_view, q_view, conf_view, view_names = generate_dynamic_views(
                 price_window,
                 assets,
                 view_mode,
-                ml_model=ml_model,
+                ml_model=effective_ml_model,
                 ml_min_return_threshold=ml_min_return_threshold,
             )
             views_history.append({
@@ -327,6 +371,7 @@ def backtest(
         "assets": assets,
         "views_history": views_history,
         "view_mode": view_mode,
+        "ml_model": ml_model,
     }
 
 
@@ -411,6 +456,8 @@ def main():
         f"Phase={phase} | Data mode={BACKTEST_DATA_MODE} | Period={start_date} -> {end_date}"
     )
     print(f"View mode={view_mode}")
+    if view_mode in ("ml", "combined"):
+        print(f"ML training mode={args.ml_training_mode}")
     print(f"Assets: {', '.join(assets.keys())}")
 
     prices = build_price_table(
@@ -450,20 +497,31 @@ def main():
         )
 
     ml_model = None
+    ml_training_mode = args.ml_training_mode
     if view_mode in ("ml", "combined"):
         print("\n" + "=" * 70)
-        print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
-        print("=" * 70)
-        try:
-            ml_model = load_ml_model(args.ml_model_type)
-        except FileNotFoundError as e:
-            print(f"\nERROR: {e}")
-            return
+        if ml_training_mode == "walk_forward":
+            print(f"ML VIEW GENERATOR: WALK-FORWARD ({args.ml_model_type} ensemble)")
+            print("=" * 70)
+            print(f"  - Retrain every {ML_RETRAIN_FREQUENCY} trading days (expanding window)")
+            print(f"  - Ensemble size: 5 models per asset")
+            print(f"  - Confidence: ensemble disagreement-based")
+            # ml_model will be created inside backtest() function
+        else:
+            print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
+            print("=" * 70)
+            try:
+                ml_model = load_ml_model(args.ml_model_type)
+            except FileNotFoundError as e:
+                print(f"\nERROR: {e}")
+                return
 
     result = backtest(
         prices,
         view_mode=view_mode,
         ml_model=ml_model,
+        ml_training_mode=ml_training_mode,
+        retrain_frequency=ML_RETRAIN_FREQUENCY,
     )
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]
@@ -501,13 +559,15 @@ def main():
                 print("  - Khong co view (BL fallback ve mu lich su)")
 
     as_of_date = pd.Timestamp(end_date)
+    # Use the model from backtest (in walk_forward mode it's the trained ensemble)
+    final_ml_model = result.get("ml_model", ml_model)
     w_mvo_next, w_bl_next, last_hist_date, next_view_names = get_next_period_weights(
         result["returns"],
         prices,
         as_of_date=as_of_date,
         window=WINDOW,
         view_mode=view_mode,
-        ml_model=ml_model,
+        ml_model=final_ml_model,
     )
 
     print("\n" + "=" * 70)

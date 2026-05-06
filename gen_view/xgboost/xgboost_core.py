@@ -15,9 +15,27 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
-from gen_view.view_generators import (
+from gen_view.xgboost.config import (
+    CONFIDENCE_BASE,
+    CONFIDENCE_MAX,
+    CONFIDENCE_MIN,
+    CONFIDENCE_VAR_SCALE,
     DEFAULT_FEATURE_WINDOW,
     DEFAULT_PREDICTION_HORIZON,
+    DEFAULT_XGB_PARAMS,
+    MACD_FAST,
+    MACD_SIGNAL,
+    MACD_SLOW,
+    MA_LONG_PERIOD,
+    MA_SHORT_PERIOD,
+    MIN_DATA_SAMPLES,
+    MIN_VALID_SAMPLES,
+    MOMENTUM_PERIODS,
+    PRICE_STD_WINDOW,
+    RSI_PERIOD,
+    VOLATILITY_WINDOW,
+)
+from gen_view.view_generators import (
     compute_ema,
     compute_macd,
     compute_momentum,
@@ -66,19 +84,19 @@ class XGBoostCoreModel:
             price_slice = prices.iloc[: i + 1]
 
             feature_dict = {
-                "momentum_5": compute_momentum(price_slice, 5),
-                "momentum_10": compute_momentum(price_slice, 10),
-                "momentum_20": compute_momentum(price_slice, 20),
-                "rsi_14": compute_rsi(price_slice, 14),
+                "momentum_5": compute_momentum(price_slice, MOMENTUM_PERIODS[0]),
+                "momentum_10": compute_momentum(price_slice, MOMENTUM_PERIODS[1]),
+                "momentum_20": compute_momentum(price_slice, MOMENTUM_PERIODS[2]),
+                "rsi_14": compute_rsi(price_slice, RSI_PERIOD),
                 "ma_ratio_10_30": (
-                    compute_ema(price_slice, 10).iloc[-1]
-                    / compute_ema(price_slice, 30).iloc[-1]
+                    compute_ema(price_slice, MA_SHORT_PERIOD).iloc[-1]
+                    / compute_ema(price_slice, MA_LONG_PERIOD).iloc[-1]
                     - 1
                 ),
-                "volatility_20": price_slice.pct_change().tail(20).std(),
-                "macd_hist": compute_macd(price_slice)[2],
-                "price_std_20": price_slice.tail(20).std()
-                / price_slice.tail(20).mean(),
+                "volatility_20": price_slice.pct_change().tail(VOLATILITY_WINDOW).std(),
+                "macd_hist": compute_macd(price_slice, MACD_FAST, MACD_SLOW, MACD_SIGNAL)[2],
+                "price_std_20": price_slice.tail(PRICE_STD_WINDOW).std()
+                / price_slice.tail(PRICE_STD_WINDOW).mean(),
             }
 
             features.append(feature_dict)
@@ -124,14 +142,7 @@ class XGBoostCoreModel:
                 "XGBoost is required. Install with: pip install xgboost"
             ) from e
 
-        default_params = {
-            "n_estimators": 100,
-            "max_depth": 6,
-            "learning_rate": 0.1,
-            "random_state": 42,
-        }
-
-        params = {**default_params, **self.model_params}
+        params = {**DEFAULT_XGB_PARAMS, **self.model_params}
 
         for asset in prices.columns:
             if verbose:
@@ -139,7 +150,7 @@ class XGBoostCoreModel:
 
             price_series = prices[asset].dropna()
 
-            if len(price_series) < self.feature_window + self.prediction_horizon + 50:
+            if len(price_series) < self.feature_window + self.prediction_horizon + MIN_DATA_SAMPLES:
                 if verbose:
                     print(f"  Skipping {asset}: not enough data")
                 continue
@@ -155,7 +166,7 @@ class XGBoostCoreModel:
             X = X[valid_mask]
             y = y[valid_mask]
 
-            if len(X) < 50:
+            if len(X) < MIN_VALID_SAMPLES:
                 if verbose:
                     print(f"  Skipping {asset}: not enough valid samples")
                 continue
@@ -209,7 +220,10 @@ class XGBoostCoreModel:
             # Confidence heuristic: higher feature variance -> lower confidence
             feature_values = latest_features.values[0]
             feature_variance = np.var(feature_values)
-            confidence = max(0.3, min(0.9, 0.6 - feature_variance * 5))
+            confidence = max(
+                CONFIDENCE_MIN,
+                min(CONFIDENCE_MAX, CONFIDENCE_BASE - feature_variance * CONFIDENCE_VAR_SCALE),
+            )
 
             predictions[asset] = (pred_return, confidence)
 

@@ -16,21 +16,18 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from config import TRADING_DAYS_PER_YEAR
+from gen_view.xgboost.config import DEFAULT_PREDICTION_HORIZON
+
 warnings.filterwarnings("ignore")
 
 # ====================== CONSTANTS ======================
-TRADING_DAYS_PER_YEAR = 252
-
 # Rule-based defaults
 DEFAULT_MA_SHORT = 10
 DEFAULT_MA_LONG = 30
 DEFAULT_RSI_PERIOD = 14
 DEFAULT_MOMENTUM_PERIOD = 20
 DEFAULT_ATR_PERIOD = 14
-
-# ML defaults
-DEFAULT_FEATURE_WINDOW = 20
-DEFAULT_PREDICTION_HORIZON = 5  # days ahead
 
 # Thresholds
 MA_CROSSOVER_THRESHOLD = 0.02  # 2% difference for MA crossover signal

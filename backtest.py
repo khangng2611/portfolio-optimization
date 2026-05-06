@@ -14,6 +14,25 @@ from utils.data_loader import (
     summarize_asset_returns,
 )
 
+from config import (
+    BACKTEST_DATA_MODE,
+    BACKTEST_PHASE,
+    BL_DELTA,
+    BL_TAU,
+    BL_VIEW_CONFIDENCE,
+    COMBINED_VIEW_WEIGHTS,
+    INITIAL_NAV,
+    ML_FEATURE_WINDOW,
+    ML_MIN_RETURN_THRESHOLD,
+    ML_MODEL_TYPE,
+    ML_PREDICTION_HORIZON,
+    RISK_FREE_RATE_ANNUAL,
+    REBALANCE_FREQ,
+    STATIC_VIEWS,
+    TRADING_DAYS_PER_YEAR,
+    VIEW_MODE,
+    WINDOW,
+)
 from gen_view.view_generators import (
     generate_ml_views,
     generate_rule_based_views,
@@ -25,47 +44,6 @@ from gen_view.xgboost.xgboost_core import XGBoostCoreModel
 
 ROOT_DIR = Path(__file__).resolve().parent
 ML_MODEL_CACHE_DIR = ROOT_DIR / "gen_view" / "xgboost" / ".cache"
-
-# ====================== CONFIG ======================
-BACKTEST_PHASE = "train"
-BACKTEST_DATA_MODE = "split"
-
-WINDOW = 20
-REBALANCE_FREQ = 5
-INITIAL_NAV = 1.0
-TRADING_DAYS_PER_YEAR = 252
-RISK_FREE_RATE_ANNUAL = 0.06
-
-BL_TAU = 0.05
-BL_DELTA = 2.5
-BL_VIEW_CONFIDENCE = 0.5
-
-# View generation mode: "static", "rule_based", "relative", "ml", "combined"
-VIEW_MODE = "rule_based"
-
-# Static views (used when VIEW_MODE = "static")
-STATIC_VIEWS = [
-    {
-        "name": "GOLD_over_E1VFVN30",
-        "legs": {"GOLD": 1.0, "E1VFVN30": -1.0},
-        "view_return_annual": 0.06,
-        "confidence": 0.70,
-    },
-    {
-        "name": "MBBOND_over_DCDS",
-        "legs": {"MBBOND": 1.0, "DCDS": -1.0},
-        "view_return_annual": 0.015,
-        "confidence": 0.60,
-    },
-]
-
-# Combined view weights: (rule_based, relative, ml)
-COMBINED_VIEW_WEIGHTS = (0.4, 0.4, 0.2)
-
-ML_MODEL_TYPE = "xgboost"
-ML_FEATURE_WINDOW = 20
-ML_PREDICTION_HORIZON = 5
-ML_MIN_RETURN_THRESHOLD = 0.005
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -113,7 +91,6 @@ def load_ml_view_generator(model_type: str) -> XGBoostCoreModel:
     model_candidates = {
         "xgboost": [
             ML_MODEL_CACHE_DIR / "xgboost_models.pkl",
-            ROOT_DIR / ".cache" / "xgb_models.pkl",
             ROOT_DIR / ".cache" / "xgboost_models.pkl",
         ],
     }

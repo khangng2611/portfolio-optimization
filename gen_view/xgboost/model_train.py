@@ -23,14 +23,18 @@ from gen_view.xgboost.xgboost_core import XGBoostCoreModel
 from gen_view.view_generators import generate_ml_views
 
 
-# ====================== CONFIG ======================
-MODEL_DIR = Path(__file__).resolve().parent
-CACHE_DIR = MODEL_DIR / ".cache"
+from gen_view.xgboost.config import (
+    CACHE_DIR,
+    DEFAULT_FEATURE_WINDOW,
+    DEFAULT_PREDICTION_HORIZON,
+    DEFAULT_XGB_PARAMS,
+)
+
 CACHE_DIR.mkdir(exist_ok=True)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train traditional ML models (XGBoost)")
+    parser = argparse.ArgumentParser(description="Train ML models")
     parser.add_argument(
         "--method",
         type=str,
@@ -103,14 +107,9 @@ def train_xgboost(prices: pd.DataFrame, verbose: bool = True):
 
     try:
         model = XGBoostCoreModel(
-            feature_window=20,
-            prediction_horizon=5,
-            model_params={
-                "n_estimators": 100,
-                "max_depth": 6,
-                "learning_rate": 0.1,
-                "random_state": 42,
-            },
+            feature_window=DEFAULT_FEATURE_WINDOW,
+            prediction_horizon=DEFAULT_PREDICTION_HORIZON,
+            model_params=DEFAULT_XGB_PARAMS.copy(),
         )
         model.train(prices, verbose=verbose)
 

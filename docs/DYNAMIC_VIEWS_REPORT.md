@@ -28,7 +28,7 @@ Xây dựng cơ chế sinh views động để thay cho hardcoded views, nhằm:
    - Sinh relative views (long tài sản mạnh, short tài sản yếu)
 
 4. `ml` (Máy học)
-   - Dùng `TraditionalMLViewGenerator`
+   - Dùng `XGBoostCoreModel`
    - Hiện tại chỉ hỗ trợ model `xgboost`
    - Cần model đã train trước và lưu cache
 
@@ -93,7 +93,7 @@ Với mọi cặp `(A, B)`:
 
 ### 5.3 ML (XGBoost) - Máy học
 
-Class: `TraditionalMLViewGenerator` trong `view_llm/llm_view_generators.py`.
+Class: `XGBoostCoreModel` trong `gen_view/xgboost/xgboost_core.py`.
 
 Bộ feature chính:
 - momentum_5, momentum_10, momentum_20
@@ -109,7 +109,7 @@ Nhãn:
 Train script:
 
 ```bash
-python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 ```
 
 ## 6. Kết quả và đánh giá

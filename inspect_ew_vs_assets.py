@@ -2,11 +2,10 @@ import argparse
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 import backtest as bt
-from data_loader import PHASE_PERIODS, build_price_table, load_assets_config, resolve_period
+from utils.data_loader import PHASE_PERIODS, build_price_table, load_assets_config, resolve_period
 
 
 def parse_args():
@@ -156,7 +155,7 @@ def main():
     result_rule = bt.backtest(
         prices,
         view_mode="rule_based",
-        ml_generator=None,
+        ml_predictor=None,
     )
     ew_rule = result_rule["ew_nav"]
     bl_rule = result_rule["bl_nav"]
@@ -182,7 +181,7 @@ def main():
     result_xgb = bt.backtest(
         prices,
         view_mode="ml",
-        ml_generator=xgb_generator,
+        ml_predictor=xgb_generator,
     )
     ew_xgb = result_xgb["ew_nav"]
     bl_xgb = result_xgb["bl_nav"]

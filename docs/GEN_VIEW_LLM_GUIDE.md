@@ -12,9 +12,9 @@ Sinh views cho Black-Litterman theo cách tự động, có thể lậ lại và
 
 ### 1.2 Thành phần đang dùng
 
-1. Rule-based views (`view_generators.py`)
-2. Relative views (`view_generators.py`)
-3. ML views từ XGBoost (`view_llm/llm_view_generators.py`)
+1. Rule-based views (`gen_view/view_generators.py`)
+2. Relative views (`gen_view/view_generators.py`)
+3. ML views từ XGBoost (`gen_view/xgboost/xgboost_core.py`)
 
 ### 1.3 Luồng ML XGBoost
 
@@ -31,7 +31,7 @@ Historical prices
 Train command:
 
 ```bash
-python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 ```
 
 Run ML backtest:
@@ -93,7 +93,7 @@ Rui ro chính:
 5. Lưu report vào `reports/`
 
 ```bash
-python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 python backtest.py --phase test --view-mode rule_based --no-plot
 python backtest.py --phase test --view-mode ml --ml-model-type xgboost --no-plot
 python run_compare_backtests.py --phase test --no-plot

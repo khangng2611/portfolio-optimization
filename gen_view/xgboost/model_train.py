@@ -5,7 +5,7 @@ Train Traditional ML Models Script
 Train XGBoost models once, then reuse in backtests.
 
 Usage:
-    python view_ml/xgboost_train.py --method xgboost --validate
+    python gen_view/xgboost/model_train.py --method xgboost --validate
 """
 
 import argparse
@@ -14,13 +14,13 @@ from pathlib import Path
 
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from data_loader import PHASE_PERIODS, build_price_table, load_assets_config
-from xgboost.predictor import XGBoostReturnPredictor
-from view_generators import generate_ml_views
+from utils.data_loader import PHASE_PERIODS, build_price_table, load_assets_config
+from gen_view.xgboost.xgboost_core import XGBoostCoreModel
+from gen_view.view_generators import generate_ml_views
 
 
 # ====================== CONFIG ======================
@@ -102,7 +102,7 @@ def train_xgboost(prices: pd.DataFrame, verbose: bool = True):
     print("=" * 70)
 
     try:
-        predictor = XGBoostReturnPredictor(
+        model = XGBoostCoreModel(
             feature_window=20,
             prediction_horizon=5,
             model_params={
@@ -112,28 +112,28 @@ def train_xgboost(prices: pd.DataFrame, verbose: bool = True):
                 "random_state": 42,
             },
         )
-        predictor.train(prices, verbose=verbose)
+        model.train(prices, verbose=verbose)
 
         model_path = CACHE_DIR / "xgboost_models.pkl"
-        predictor.save(model_path)
+        model.save(model_path)
 
         print(f"\nSaved XGBoost model to: {model_path}")
-        return predictor
+        return model
     except ImportError:
         print("\nERROR: XGBoost is not installed.")
         print("Install with: pip install xgboost")
         return None
 
 
-def validate_model(predictor, prices: pd.DataFrame, method_name: str):
+def validate_model(generator, prices: pd.DataFrame, method_name: str):
     print(f"\n--- Validating {method_name} ---")
 
-    predictions = predictor.predict(prices)
+    predictions = generator.predict(prices)
     if not predictions:
         print(f"  WARNING: No predictions for {method_name}")
         return
 
-    views = generate_ml_views(predictions, predictor.prediction_horizon)
+    views = generate_ml_views(predictions, generator.prediction_horizon)
     if not views:
         print(f"  WARNING: No views generated for {method_name}")
         return

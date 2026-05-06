@@ -1,10 +1,10 @@
-# Hướng dẫn sử dụng ML View Generator (trong llm_view_generators.py)
+# Hướng dẫn sử dụng ML XGBoost Core Model
 
 ## 1. Tổng quan
 
-Mặc dù tên file là `llm_view_generators.py`, trạng thái code hiện tại:
+Trạng thái code hiện tại:
 
-- Active: `TraditionalMLViewGenerator` (XGBoost)
+- Active: `XGBoostCoreModel` trong `gen_view/xgboost/xgboost_core.py`
 - Không active trong backtest: LSTM/LLM classes (chỉ còn ở dạng ý tưởng/comment)
 
 Tài liệu này hướng dẫn cách dùng luồng đang hoạt động.
@@ -25,25 +25,25 @@ Tối thiểu cần:
 Dùng script train có sẵn:
 
 ```bash
-python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 ```
 
 Tùy chọn:
 
 ```bash
 # Train với danh sách assets cụ thể
-python view_llm/xgboost_train.py \
+python gen_view/xgboost/model_train.py \
   --method xgboost \
   --assets E1VFVN30,GOLD,DCDS,MBBOND \
   --train-phase train \
   --validate
 
 # Train trên full phase
-python view_llm/xgboost_train.py --method xgboost --train-phase full
+python gen_view/xgboost/model_train.py --method xgboost --train-phase full
 ```
 
 Model output:
-- `view_llm/.cache/xgboost_models.pkl`
+- `gen_view/xgboost/.cache/xgboost_models.pkl`
 
 ## 4. Dùng model trong backtest
 
@@ -62,28 +62,34 @@ python backtest.py --phase test --view-mode combined --ml-model-type xgboost
 ```python
 from pathlib import Path
 import pandas as pd
-from view_llm.llm_view_generators import TraditionalMLViewGenerator
+from gen_view.xgboost.xgboost_core import XGBoostCoreModel
+from gen_view.view_generators import generate_ml_views
 
 # prices: DataFrame cột là assets, index là datetime
 prices = pd.read_csv("your_prices.csv", index_col=0, parse_dates=True)
 
-gen = TraditionalMLViewGenerator(
-    model_type="xgboost",
+model = XGBoostCoreModel(
     feature_window=20,
     prediction_horizon=5,
 )
 
 # Huấn luyện
-gen.train(prices, verbose=True)
+model.train(prices, verbose=True)
 
 # Lưu
-gen.save(Path("view_llm/.cache/xgboost_models.pkl"))
+model.save(Path("gen_view/xgboost/.cache/xgboost_models.pkl"))
 
 # Tải lại
-gen.load(Path("view_llm/.cache/xgboost_models.pkl"))
+model = XGBoostCoreModel()
+model.load(Path("gen_view/xgboost/.cache/xgboost_models.pkl"))
 
-# Sinh views
-views = gen.generate_views(prices.tail(120), min_return_threshold=0.005)
+# Dự đoán + sinh views
+predictions = model.predict(prices.tail(120))
+views = generate_ml_views(
+    predictions,
+    prediction_horizon=model.prediction_horizon,
+    min_return_threshold=0.005,
+)
 for v in views:
     print(v["name"], v["view_return_annual"], v["confidence"])
 ```
@@ -108,8 +114,8 @@ Sinh views:
 ## 7. Khắc phục sự cố
 
 1. Lỗi không tìm thấy model khi chạy `--view-mode ml`
-- Huấn luyện trước bằng `view_llm/xgboost_train.py`
-- Kiểm tra file `view_llm/.cache/xgboost_models.pkl`
+- Huấn luyện trước bằng `gen_view/xgboost/model_train.py`
+- Kiểm tra file `gen_view/xgboost/.cache/xgboost_models.pkl`
 
 2. Lỗi import xgboost
 

@@ -1,12 +1,10 @@
 """
-XGBoost Return Predictor
+XGBoost Core Model
 ========================
 
 Pure ML forecasting module: train, predict, save, load.
-Knows nothing about Black-Litterman views.
 
-Use :func:`view_generators.generate_ml_views` to convert predictions
-into BL view dicts.
+Use :func:`view_generators.generate_ml_views` to convert predictions into BL view dicts.
 """
 
 import pickle
@@ -17,7 +15,7 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
-from view_generators import (
+from gen_view.view_generators import (
     DEFAULT_FEATURE_WINDOW,
     DEFAULT_PREDICTION_HORIZON,
     compute_ema,
@@ -29,16 +27,14 @@ from view_generators import (
 warnings.filterwarnings("ignore")
 
 
-class XGBoostReturnPredictor:
+class XGBoostCoreModel:
     """
-    XGBoost Return Predictor
+    XGBoost Core Model
     ------------------------
     Pure ML forecasting: train, predict, save, load.
-    Knows nothing about Black-Litterman views.
 
     Use this when you only need return predictions (e.g. training scripts).
-    Use ``generate_ml_views()`` from ``view_generators`` to convert
-    predictions into BL view dicts.
+    Use ``generate_ml_views()`` from ``view_generators`` to convert predictions into BL view dicts.
     """
 
     def __init__(
@@ -241,7 +237,7 @@ class XGBoostReturnPredictor:
         if save_dict.get("model_type") != "xgboost":
             raise ValueError(
                 "Only XGBoost model artifacts are supported. "
-                "Please retrain with view_ml/xgboost_train.py --method xgboost"
+                "Please retrain with gen_view/xgboost/model_train.py --method xgboost"
             )
 
         self.feature_window = save_dict["feature_window"]

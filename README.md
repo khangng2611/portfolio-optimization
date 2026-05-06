@@ -33,7 +33,7 @@ Danh sách tài sản được quản lý bởi `assets.json` (không hardcode t
 - Test: `2023-10-01 -> 2026-03-01`
 - Full: `2020-01-01 -> 2026-03-01`
 
-(Cấu hình tại `data_loader.py`)
+(Cấu hình tại `utils/data_loader.py`)
 
 ---
 
@@ -42,13 +42,23 @@ Danh sách tài sản được quản lý bởi `assets.json` (không hardcode t
 ```text
 portfolio-optimization/
 |- backtest.py
-|- data_loader.py
-|- view_generators.py
 |- run_compare_backtests.py
+|- inspect_ew_vs_assets.py
 |- assets.json
 |- requirements.txt
 |- README.md
 |- QUICKSTART.md
+|
+|- utils/
+|  |- data_loader.py
+|  |- plotting.py
+|
+|- gen_view/
+|  |- view_generators.py
+|  |- xgboost/
+|     |- xgboost_core.py
+|     |- model_train.py
+|     |- ml_view_generators.py
 |
 |- crawl/
 |  |- stock.py
@@ -59,11 +69,6 @@ portfolio-optimization/
 |  |- stocks/
 |  |- funds/
 |  |- gold/
-|
-|- view_llm/
-|  |- llm_view_generators.py
-|  |- xgboost_train.py
-|  |- .cache/
 |
 |- docs/
 |  |- DYNAMIC_VIEWS_REPORT.md
@@ -131,7 +136,7 @@ pip install -r requirements.txt
 python backtest.py --phase train
 
 # 3) Train model XGBoost
-python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 
 # 4) Chạy BL với views từ ML
 python backtest.py --phase test --view-mode ml --ml-model-type xgboost
@@ -159,8 +164,8 @@ Khuyến nghị:
 ## Files quan trọng
 
 - `backtest.py`: luồng backtest chính + CLI
-- `data_loader.py`: load assets config + đồng bộ dữ liệu
-- `view_generators.py`: rule-based/relative + utilities P,Q,confidence
-- `view_llm/llm_view_generators.py`: `TraditionalMLViewGenerator` (XGBoost)
-- `view_llm/xgboost_train.py`: train model XGBoost
+- `utils/data_loader.py`: load assets config + đồng bộ dữ liệu
+- `gen_view/view_generators.py`: rule-based/relative + utilities P,Q,confidence
+- `gen_view/xgboost/xgboost_core.py`: `XGBoostCoreModel` (train, predict, save, load)
+- `gen_view/xgboost/model_train.py`: train model XGBoost
 - `assets.json`: cấu hình universe assets

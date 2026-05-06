@@ -99,25 +99,25 @@ python backtest.py --view-mode combined --ml-model-type xgboost
 ML mode cần model đã train trước. Script train:
 
 ```bash
-python view_llm/xgboost_train.py --method xgboost --train-phase train --validate
+python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 ```
 
 Tùy chọn thường dùng:
 
 ```bash
 # Train với tập assets chỉ định
-python view_llm/xgboost_train.py \
+python gen_view/xgboost/model_train.py \
   --method xgboost \
   --train-phase train \
   --assets E1VFVN30,GOLD,DCDS,MBBOND \
   --validate
 
 # Train trên full phase
-python view_llm/xgboost_train.py --method xgboost --train-phase full
+python gen_view/xgboost/model_train.py --method xgboost --train-phase full
 ```
 
 Model được lưu tại:
-- `view_llm/.cache/xgboost_models.pkl`
+- `gen_view/xgboost/.cache/xgboost_models.pkl`
 
 Sau khi train, chạy backtest với ML:
 
@@ -138,7 +138,7 @@ Output mặc định:
 ## 8. Lỗi thường gặp
 
 1. Báo không tìm thấy model khi chạy `--view-mode ml`:
-- Train model trước bằng `view_llm/xgboost_train.py`
+- Train model trước bằng `gen_view/xgboost/model_train.py`
 
 2. Báo lỗi không tìm thấy asset trong config:
 - Kiểm tra tên asset trong `assets.json` và giá trị `--assets`

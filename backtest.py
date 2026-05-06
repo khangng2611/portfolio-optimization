@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from data_loader import (
+from utils.data_loader import (
     PHASE_PERIODS,
     build_price_table,
     load_assets_config,
@@ -14,17 +14,17 @@ from data_loader import (
     summarize_asset_returns,
 )
 
-from view_generators import (
+from gen_view.view_generators import (
     generate_ml_views,
     generate_rule_based_views,
     generate_relative_views,
     build_views_matrix,
     combine_views,
 )
-from xgboost.predictor import XGBoostReturnPredictor
+from gen_view.xgboost.xgboost_core import XGBoostCoreModel
 
 ROOT_DIR = Path(__file__).resolve().parent
-ML_MODEL_CACHE_DIR = ROOT_DIR / "view_ml" / ".cache"
+ML_MODEL_CACHE_DIR = ROOT_DIR / "gen_view" / "xgboost" / ".cache"
 
 # ====================== CONFIG ======================
 BACKTEST_PHASE = "train"
@@ -109,7 +109,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_ml_view_generator(model_type: str) -> XGBoostReturnPredictor:
+def load_ml_view_generator(model_type: str) -> XGBoostCoreModel:
     model_candidates = {
         "xgboost": [
             ML_MODEL_CACHE_DIR / "xgboost_models.pkl",
@@ -125,11 +125,11 @@ def load_ml_view_generator(model_type: str) -> XGBoostReturnPredictor:
         searched = "\n".join(str(p) for p in candidates)
         raise FileNotFoundError(
             "Khong tim thay model da train truoc do.\n"
-            "Hay train model truoc bang: python view_ml/xgboost_train.py --method xgboost\n"
+            "Hay train model truoc bang: python gen_view/xgboost/model_train.py --method xgboost\n"
             f"Da tim o:\n{searched}"
         )
 
-    predictor = XGBoostReturnPredictor()
+    predictor = XGBoostCoreModel()
     predictor.load(model_path)
     return predictor
 
@@ -221,7 +221,7 @@ def generate_dynamic_views(
         List of asset names
     mode : str
         View generation mode: "static", "rule_based", "relative", "ml", "combined"
-    ml_predictor : XGBoostReturnPredictor, optional
+    ml_predictor : XGBoostCoreModel, optional
         Trained ML predictor (used when mode is "ml" or "combined")
     ml_min_return_threshold : float
         Minimum predicted return to generate a view

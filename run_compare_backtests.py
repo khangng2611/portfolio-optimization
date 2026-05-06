@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import backtest as bt
-from data_loader import PHASE_PERIODS, build_price_table, load_assets_config
+from utils.data_loader import PHASE_PERIODS, build_price_table, load_assets_config
 
 
 def parse_args():

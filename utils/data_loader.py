@@ -1,4 +1,3 @@
-from datetime import datetime
 import json
 from pathlib import Path
 
@@ -9,9 +8,9 @@ TRAIN_START_DATE = "2020-01-01"
 SPLIT_DATE = "2023-10-01"
 TEST_END_DATE = "2026-03-01"
 
-ROOT_DIR = Path(__file__).resolve().parents[0]
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DATASETS_DIR = ROOT_DIR / "datasets"
-DEFAULT_ASSETS_CONFIG_PATH = ROOT_DIR /"assets.json"
+DEFAULT_ASSETS_CONFIG_PATH = ROOT_DIR / "assets.json"
 
 PHASE_PERIODS = {
     "train": (TRAIN_START_DATE, SPLIT_DATE),

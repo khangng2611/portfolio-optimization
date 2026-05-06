@@ -1,6 +1,6 @@
 # Technical Indicators for Dynamic View Generation
 
-Tài liệu này mô tả các chỉ báo kỹ thuật được dùng trong `view_generators.py` và một phần trong `view_llm/llm_view_generators.py`.
+Tài liệu này mô tả các chỉ báo kỹ thuật được dùng trong `gen_view/view_generators.py` và một phần trong `gen_view/xgboost/xgboost_core.py`.
 
 ## 1. Tổng quan
 
@@ -80,7 +80,7 @@ Nhiệt biểu = MACD - Tín hiệu
 
 `compute_macd(prices)`
 
-Trong code hiện tại, nhiệt biểu MACD được dùng trong bộ feature của `TraditionalMLViewGenerator`.
+Trong code hiện tại, nhiệt biểu MACD được dùng trong bộ feature của `XGBoostCoreModel`.
 
 ## 6. Dải Bollinger và ATR (Phạm vi dao động thực)
 
@@ -111,4 +111,4 @@ Trạng thái sử dụng:
 - Kết hợp quan điểm: `combine_views()`
 
 Logic máy học XGBoost nằm ở:
-- `view_llm/llm_view_generators.py` (`TraditionalMLViewGenerator`)
+- `gen_view/xgboost/xgboost_core.py` (`XGBoostCoreModel`)

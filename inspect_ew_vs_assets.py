@@ -155,7 +155,7 @@ def main():
     result_rule = bt.backtest(
         prices,
         view_mode="rule_based",
-        ml_predictor=None,
+        ml_model=None,
     )
     ew_rule = result_rule["ew_nav"]
     bl_rule = result_rule["bl_nav"]
@@ -177,11 +177,11 @@ def main():
 
     # 2) xgboost
     print("Running backtest for xgboost...")
-    xgb_generator = bt.load_ml_view_generator("xgboost")
+    xgb_model = bt.load_ml_model("xgboost")
     result_xgb = bt.backtest(
         prices,
         view_mode="ml",
-        ml_predictor=xgb_generator,
+        ml_model=xgb_model,
     )
     ew_xgb = result_xgb["ew_nav"]
     bl_xgb = result_xgb["bl_nav"]

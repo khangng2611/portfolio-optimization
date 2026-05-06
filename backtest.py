@@ -19,16 +19,12 @@ from config import (
     BACKTEST_PHASE,
     BL_DELTA,
     BL_TAU,
-    BL_VIEW_CONFIDENCE,
     COMBINED_VIEW_WEIGHTS,
     INITIAL_NAV,
-    ML_FEATURE_WINDOW,
     ML_MIN_RETURN_THRESHOLD,
     ML_MODEL_TYPE,
-    ML_PREDICTION_HORIZON,
     RISK_FREE_RATE_ANNUAL,
     REBALANCE_FREQ,
-    STATIC_VIEWS,
     TRADING_DAYS_PER_YEAR,
     VIEW_MODE,
     WINDOW,
@@ -37,6 +33,7 @@ from gen_view.view_generators import (
     generate_ml_views,
     generate_rule_based_views,
     generate_relative_views,
+    generate_static_views,
     build_views_matrix,
     combine_views,
 )
@@ -74,7 +71,7 @@ def parse_args():
     )
     parser.add_argument(
         "--view-mode",
-        choices=["static", "rule_based", "relative", "ml", "combined"],
+        choices=["rule_based", "relative", "ml", "combined"],
         default=VIEW_MODE,
         help="View generation mode",
     )
@@ -87,7 +84,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_ml_view_generator(model_type: str) -> XGBoostCoreModel:
+def load_ml_model(model_type: str) -> XGBoostCoreModel:
     model_candidates = {
         "xgboost": [
             ML_MODEL_CACHE_DIR / "xgboost_models.pkl",
@@ -106,9 +103,9 @@ def load_ml_view_generator(model_type: str) -> XGBoostCoreModel:
             f"Da tim o:\n{searched}"
         )
 
-    predictor = XGBoostCoreModel()
-    predictor.load(model_path)
-    return predictor
+    model = XGBoostCoreModel()
+    model.load(model_path)
+    return model
 
 
 def optimize_weight(mu, sigma, risk_aversion=0.5):
@@ -146,45 +143,11 @@ def optimize_weight(mu, sigma, risk_aversion=0.5):
     return np.full(n, 1.0 / n)
 
 
-def build_static_views(assets, trading_days_per_year=TRADING_DAYS_PER_YEAR):
-    """Build views from STATIC_VIEWS config (legacy hardcoded views)."""
-    asset_to_idx = {asset: i for i, asset in enumerate(assets)}
-    p_rows = []
-    q_vals = []
-    conf_vals = []
-    active_names = []
-
-    for view in STATIC_VIEWS:
-        row = np.zeros(len(assets), dtype=float)
-        is_valid = True
-        for asset, coeff in view["legs"].items():
-            if asset not in asset_to_idx:
-                is_valid = False
-                break
-            row[asset_to_idx[asset]] = coeff
-
-        if not is_valid:
-            continue
-
-        p_rows.append(row)
-        q_vals.append(view["view_return_annual"] / trading_days_per_year)
-        conf_vals.append(view.get("confidence", BL_VIEW_CONFIDENCE))
-        active_names.append(view["name"])
-
-    if len(p_rows) == 0:
-        return None, None, None, []
-
-    p = np.array(p_rows, dtype=float)
-    q = np.array(q_vals, dtype=float)
-    conf = np.array(conf_vals, dtype=float)
-    return p, q, conf, active_names
-
-
 def generate_dynamic_views(
     price_window: pd.DataFrame,
     assets: list,
     mode: str = VIEW_MODE,
-    ml_predictor=None,
+    ml_model=None,
     ml_min_return_threshold: float = ML_MIN_RETURN_THRESHOLD,
 ):
     """
@@ -197,9 +160,9 @@ def generate_dynamic_views(
     assets : list
         List of asset names
     mode : str
-        View generation mode: "static", "rule_based", "relative", "ml", "combined"
-    ml_predictor : XGBoostCoreModel, optional
-        Trained ML predictor (used when mode is "ml" or "combined")
+        View generation mode: "rule_based", "relative", "ml", "combined"
+    ml_model : XGBoostCoreModel, optional
+        Trained ML Model (used when mode is "ml" or "combined")
     ml_min_return_threshold : float
         Minimum predicted return to generate a view
     
@@ -208,9 +171,6 @@ def generate_dynamic_views(
     tuple
         (P matrix, Q vector, confidence vector, view names)
     """
-    if mode == "static":
-        return build_static_views(assets)
-    
     views = []
     
     if mode == "rule_based":
@@ -218,30 +178,30 @@ def generate_dynamic_views(
     elif mode == "relative":
         views = generate_relative_views(price_window)
     elif mode == "ml":
-        if ml_predictor is None:
+        if ml_model is None:
             return None, None, None, []
-        predictions = ml_predictor.predict(price_window)
+        predictions = ml_model.predict(price_window)
         views = generate_ml_views(
             predictions,
-            prediction_horizon=ml_predictor.prediction_horizon,
+            prediction_horizon=ml_model.prediction_horizon,
             min_return_threshold=ml_min_return_threshold,
         )
     elif mode == "combined":
         rule_views = generate_rule_based_views(price_window)
         rel_views = generate_relative_views(price_window)
-        if ml_predictor is not None:
-            predictions = ml_predictor.predict(price_window)
+        static_views = generate_static_views()
+        if ml_model is not None:
+            predictions = ml_model.predict(price_window)
             ml_views = generate_ml_views(
                 predictions,
-                prediction_horizon=ml_predictor.prediction_horizon,
+                prediction_horizon=ml_model.prediction_horizon,
                 min_return_threshold=ml_min_return_threshold,
             )
         else:
             ml_views = []
-        views = combine_views(rule_views, rel_views, ml_views, COMBINED_VIEW_WEIGHTS)
-    else:
-        # Unknown mode, fallback to static
-        return build_static_views(assets)
+        views = combine_views(
+            rule_views, rel_views, ml_views, static_views, COMBINED_VIEW_WEIGHTS
+        )
     
     return build_views_matrix(views, assets)
 
@@ -287,19 +247,13 @@ def backtest(
     rebalance_freq=REBALANCE_FREQ,
     initial_nav=INITIAL_NAV,
     view_mode=VIEW_MODE,
-    ml_predictor=None,
+    ml_model=None,
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
 ):
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
     m = len(assets)
     
-    # For static mode, compute views once upfront
-    if view_mode == "static":
-        p_view, q_view, conf_view, _ = build_static_views(assets)
-    else:
-        p_view, q_view, conf_view = None, None, None
-
     ew_weight = np.full(m, 1.0 / m)
     mvo_weight = np.full(m, 1.0 / m)
     bl_weight = np.full(m, 1.0 / m)
@@ -326,25 +280,21 @@ def backtest(
             mvo_weight = optimize_weight(mu, sigma)
 
             market_weights = np.full(m, 1.0 / m)
-            
-            # Generate views dynamically (except for static mode which is precomputed)
-            if view_mode != "static":
-                # Get price window for indicator calculation
-                # Use prices up to current point (not returns)
-                price_window = prices.iloc[max(0, t - window - 30) : t + window]
-                p_view, q_view, conf_view, view_names = generate_dynamic_views(
-                    price_window,
-                    assets,
-                    view_mode,
-                    ml_predictor=ml_predictor,
-                    ml_min_return_threshold=ml_min_return_threshold,
-                )
-                views_history.append({
-                    "date": returns.index[t],
-                    "view_names": view_names if p_view is not None else [],
-                    "q_values": q_view.tolist() if q_view is not None else [],
-                    "confidences": conf_view.tolist() if conf_view is not None else [],
-                })
+
+            price_window = prices.iloc[max(0, t - window - 30) : t + window]
+            p_view, q_view, conf_view, view_names = generate_dynamic_views(
+                price_window,
+                assets,
+                view_mode,
+                ml_model=ml_model,
+                ml_min_return_threshold=ml_min_return_threshold,
+            )
+            views_history.append({
+                "date": returns.index[t],
+                "view_names": view_names if p_view is not None else [],
+                "q_values": q_view.tolist() if q_view is not None else [],
+                "confidences": conf_view.tolist() if conf_view is not None else [],
+            })
             
             if p_view is not None:
                 mu_bl = black_litterman_posterior_mu(
@@ -404,7 +354,7 @@ def get_next_period_weights(
     as_of_date,
     window=WINDOW,
     view_mode=VIEW_MODE,
-    ml_predictor=None,
+    ml_model=None,
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
 ):
     eligible = returns.loc[returns.index <= as_of_date]
@@ -420,19 +370,15 @@ def get_next_period_weights(
     assets = list(returns.columns)
     
     # Generate views based on mode
-    if view_mode == "static":
-        p_view, q_view, conf_view, view_names = build_static_views(assets)
-    else:
-        # Get price window for dynamic view generation
-        price_eligible = prices.loc[prices.index <= as_of_date]
-        price_window = price_eligible.iloc[-window - 30:] if len(price_eligible) > window + 30 else price_eligible
-        p_view, q_view, conf_view, view_names = generate_dynamic_views(
-            price_window,
-            assets,
-            view_mode,
-            ml_predictor=ml_predictor,
-            ml_min_return_threshold=ml_min_return_threshold,
-        )
+    price_eligible = prices.loc[prices.index <= as_of_date]
+    price_window = price_eligible.iloc[-window - 30:] if len(price_eligible) > window + 30 else price_eligible
+    p_view, q_view, conf_view, view_names = generate_dynamic_views(
+        price_window,
+        assets,
+        view_mode,
+        ml_model=ml_model,
+        ml_min_return_threshold=ml_min_return_threshold,
+    )
     
     if p_view is not None:
         mu_bl = black_litterman_posterior_mu(
@@ -489,32 +435,27 @@ def main():
     print("\n" + "=" * 70)
     print(f"BLACK-LITTERMAN VIEW MODE: {view_mode.upper()}")
     print("=" * 70)
-    if view_mode == "static":
-        _, _, _, active_view_names = build_static_views(list(prices.columns))
-        if len(active_view_names) == 0:
-            print("Khong co view hop le voi tap assets hien tai -> BL fallback ve mu lich su")
-        else:
-            print("Static views:")
-            for name in active_view_names:
-                print(f"  - {name}")
-    else:
-        print(f"Views duoc sinh dong tai moi lan rebalance dua tren {view_mode} indicators")
-        if view_mode == "rule_based":
-            print("  - Su dung: MA Crossover, RSI, Momentum")
-        elif view_mode == "relative":
-            print("  - Su dung: Momentum comparison giua cac cap assets")
-        elif view_mode == "ml":
-            print(f"  - Su dung: ML model predictions ({args.ml_model_type})")
-        elif view_mode == "combined":
-            print(f"  - Ket hop: rule_based ({COMBINED_VIEW_WEIGHTS[0]:.0%}), relative ({COMBINED_VIEW_WEIGHTS[1]:.0%}), ml ({COMBINED_VIEW_WEIGHTS[2]:.0%})")
+    if view_mode == "rule_based":
+        print("  - Su dung: MA Crossover, RSI, Momentum")
+    elif view_mode == "relative":
+        print("  - Su dung: Momentum comparison giua cac cap assets")
+    elif view_mode == "ml":
+        print(f"  - Su dung: ML model predictions ({args.ml_model_type})")
+    elif view_mode == "combined":
+        print(
+            f"  - Ket hop: rule_based ({COMBINED_VIEW_WEIGHTS[0]:.0%}),"
+            f" relative ({COMBINED_VIEW_WEIGHTS[1]:.0%}),"
+            f" ml ({COMBINED_VIEW_WEIGHTS[2]:.0%}),"
+            f" static ({COMBINED_VIEW_WEIGHTS[3]:.0%})"
+        )
 
-    ml_predictor = None
+    ml_model = None
     if view_mode in ("ml", "combined"):
         print("\n" + "=" * 70)
         print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
         print("=" * 70)
         try:
-            ml_predictor = load_ml_view_generator(args.ml_model_type)
+            ml_model = load_ml_model(args.ml_model_type)
         except FileNotFoundError as e:
             print(f"\nERROR: {e}")
             return
@@ -522,7 +463,7 @@ def main():
     result = backtest(
         prices,
         view_mode=view_mode,
-        ml_predictor=ml_predictor,
+        ml_model=ml_model,
     )
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]
@@ -542,7 +483,7 @@ def main():
     )
 
     # Show sample of dynamic views generated during backtest
-    if view_mode != "static" and result.get("views_history"):
+    if result.get("views_history"):
         print("\n" + "=" * 70)
         print("MAU VIEWS SINH RA TRONG QUA TRINH BACKTEST")
         print("=" * 70)
@@ -566,7 +507,7 @@ def main():
         as_of_date=as_of_date,
         window=WINDOW,
         view_mode=view_mode,
-        ml_predictor=ml_predictor,
+        ml_model=ml_model,
     )
 
     print("\n" + "=" * 70)

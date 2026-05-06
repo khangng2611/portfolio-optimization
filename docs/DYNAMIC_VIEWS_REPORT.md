@@ -14,27 +14,25 @@ Xây dựng cơ chế sinh views động để thay cho hardcoded views, nhằm:
 
 ## 2. View modes đang hỗ trợ
 
-`backtest.py` đang hỗ trợ 5 chế độ:
+`backtest.py` đang hỗ trợ 4 chế độ:
 
-1. `static`
-   - Dùng `STATIC_VIEWS` hardcoded trong code
-
-2. `rule_based` (Quy tắc)
+1. `rule_based` (Quy tắc)
    - Sử dụng EMA crossover + RSI + động lực
    - Sinh absolute views cho từng tài sản
 
-3. `relative` (So sánh tương đối)
-   - So sánh động lực giữ a các cặp tài sản
+2. `relative` (So sánh tương đối)
+   - So sánh động lực giữa các cặp tài sản
    - Sinh relative views (long tài sản mạnh, short tài sản yếu)
 
-4. `ml` (Máy học)
+3. `ml` (Máy học)
    - Dùng `XGBoostCoreModel`
    - Hiện tại chỉ hỗ trợ model `xgboost`
    - Cần model đã train trước và lưu cache
 
-5. `combined` (Kết hợp)
-   - Trộn rule_based + relative + ml
-   - Trọng số mặc định: `(0.4, 0.4, 0.2)`
+4. `combined` (Kết hợp)
+   - Trộn rule_based + relative + ml + static
+   - Trọng số mặc định: `(0.4, 0.3, 0.3, 0.0)` (cấu hình tại `config.py`: `COMBINED_VIEW_WEIGHTS`)
+   - Static views từ `STATIC_VIEWS` trong `config.py` được gộp vào combined với trọng số riêng
 
 ## 3. Công thức Black-Litterman
 
@@ -42,9 +40,10 @@ $$\pi = \delta \times \Sigma \times w_{market}$$
 $$\mu_{BL} = \left[(\tau \Sigma)^{-1} + P^T \Omega^{-1} P\right]^{-1} \times \left[(\tau \Sigma)^{-1} \pi + P^T \Omega^{-1} Q\right]$$
 $$\Omega = \text{diag}(P \times \tau \times \Sigma \times P^T) / \text{confidence}$$
 
-Tham số mặc định:
-- `tau = 0.05` - Tham số điểu của mo hình
-- `delta = 2.5` - Hệ số cãi đặt
+Tham số mặc định (cấu hình tại `config.py`):
+- `tau = 0.05` (`BL_TAU`) - Tham số điều chỉnh mô hình
+- `delta = 2.5` (`BL_DELTA`) - Hệ số rủi ro
+- `confidence = 0.5` (`BL_VIEW_CONFIDENCE`) - Độ tin cậy mặc định cho views
 
 ## 4. Luồng xử lý trong backtest
 
@@ -94,6 +93,7 @@ Với mọi cặp `(A, B)`:
 ### 5.3 ML (XGBoost) - Máy học
 
 Class: `XGBoostCoreModel` trong `gen_view/xgboost/xgboost_core.py`.
+Cấu hình riêng tại `gen_view/xgboost/config.py`.
 
 Bộ feature chính:
 - momentum_5, momentum_10, momentum_20

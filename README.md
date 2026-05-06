@@ -42,6 +42,7 @@ Danh sách tài sản được quản lý bởi `assets.json` (không hardcode t
 ```text
 portfolio-optimization/
 |- backtest.py
+|- config.py              # project-wide configuration constants
 |- run_compare_backtests.py
 |- inspect_ew_vs_assets.py
 |- assets.json
@@ -54,11 +55,11 @@ portfolio-optimization/
 |  |- plotting.py
 |
 |- gen_view/
-|  |- view_generators.py
+|  |- view_generators.py    # rule-based, relative, ML view generation + utilities
 |  |- xgboost/
+|     |- config.py           # XGBoost module configuration
 |     |- xgboost_core.py
 |     |- model_train.py
-|     |- ml_view_generators.py
 |
 |- crawl/
 |  |- stock.py
@@ -110,17 +111,17 @@ mu_BL = [(tau Sigma)^-1 + P^T Omega^-1 P]^-1 * [(tau Sigma)^-1 pi + P^T Omega^-1
 
 ## View generation modes
 
-`backtest.py` hỗ trợ đầy đủ 5 modes:
+`backtest.py` hỗ trợ 4 modes:
 
-1. `static`: views cố định trong code
-2. `rule_based`: EMA crossover + RSI + momentum
-3. `relative`: so sánh momentum giữa các cặp assets
-4. `ml`: views từ model XGBoost đã train trước
-5. `combined`: kết hợp rule_based + relative + ml theo trọng số
+1. `rule_based`: EMA crossover + RSI + momentum
+2. `relative`: so sánh momentum giữa các cặp assets
+3. `ml`: views từ model XGBoost đã train trước
+4. `combined`: kết hợp rule_based + relative + ml + static theo trọng số
 
 Lưu ý:
 - ML mode hiện tại chỉ hỗ trợ `xgboost`
 - Cần train model trước, sau đó backtest chỉ load model từ cache
+- Static views (`STATIC_VIEWS` trong `config.py`) được gộp vào combined mode với trọng số riêng
 
 ---
 
@@ -163,9 +164,11 @@ Khuyến nghị:
 
 ## Files quan trọng
 
+- `config.py`: cấu hình toàn dự án (BL params, view mode, ML defaults, static views)
+- `gen_view/xgboost/config.py`: cấu hình riêng module XGBoost (hyperparams, feature periods, confidence heuristic)
 - `backtest.py`: luồng backtest chính + CLI
 - `utils/data_loader.py`: load assets config + đồng bộ dữ liệu
-- `gen_view/view_generators.py`: rule-based/relative + utilities P,Q,confidence
+- `gen_view/view_generators.py`: rule-based/relative/ML views + utilities P,Q,confidence
 - `gen_view/xgboost/xgboost_core.py`: `XGBoostCoreModel` (train, predict, save, load)
 - `gen_view/xgboost/model_train.py`: train model XGBoost
-- `assets.json`: cấu hình universe assets
+- `assets.json`: cấu hình universe tài sản

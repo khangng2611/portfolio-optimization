@@ -24,17 +24,55 @@ python crawl/fund.py
 python crawl/gold.py
 ```
 
-## 3. Chạy backtest nhanh
+## 3. Cấu hình dự án
+
+Tất cả tham số mặc định đã được tập trung vào `config.py` (ở root dự án):
+
+```python
+# config.py - Tham số chung
+TRADING_DAYS_PER_YEAR = 252
+RISK_FREE_RATE_ANNUAL = 0.06
+
+# Backtest
+BACKTEST_PHASE = "test"
+WINDOW = 20
+REBALANCE_FREQ = 5
+INITIAL_NAV = 1.0
+
+# Black-Litterman
+BL_TAU = 0.05
+BL_DELTA = 2.5
+BL_VIEW_CONFIDENCE = 0.5
+
+# View generation
+VIEW_MODE = "combined"        # mặc định hiện tại
+CCOMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0) # (rule, relative, ml, static)
+
+# ML defaults
+ML_MODEL_TYPE = "xgboost"
+ML_FEATURE_WINDOW = 20
+ML_PREDICTION_HORIZON = 5
+ML_MIN_RETURN_THRESHOLD = 0.005
+```
+
+Module XGBoost có thêm file cấu hình riêng tại `gen_view/xgboost/config.py` (hyperparams, feature periods, confidence heuristic).
+
+Chỉnh trực tiếp `config.py` để thay đổi mặc định, hoặc dùng CLI flags để ghi đè khi chạy.
+
+## 4. Chạy backtest nhanh
 
 ```bash
-# Mặc định: phase=train, view_mode=rule_based
+# Mặc định: phase=test, view_mode=combined
 python backtest.py
 
 # Không vẽ chart
 python backtest.py --no-plot
 
-# Chạy theo test period
-python backtest.py --phase test
+# Chạy theo train period
+python backtest.py --phase train
+
+# Chạy với mode rule_based
+python backtest.py --phase test --view-mode rule_based
 
 # Chạy với mode relative
 python backtest.py --phase test --view-mode relative
@@ -43,7 +81,7 @@ python backtest.py --phase test --view-mode relative
 python backtest.py --assets E1VFVN30,GOLD,DCDS
 ```
 
-## 4. Cấu hình assets bằng JSON
+## 5. Cấu hình assets bằng JSON
 
 Backtest đọc danh sách tài sản từ `assets.json` (mặc định ở root dự án).
 
@@ -75,12 +113,9 @@ Dùng file config khác:
 python backtest.py --assets-config path/to/custom_assets.json
 ```
 
-## 5. View modes hiện có
+## 6. View modes hiện có
 
 ```bash
-# static views hardcoded
-python backtest.py --view-mode static
-
 # rule-based: EMA + RSI + momentum
 python backtest.py --view-mode rule_based
 
@@ -90,11 +125,11 @@ python backtest.py --view-mode relative
 # ML views (XGBoost)
 python backtest.py --view-mode ml --ml-model-type xgboost
 
-# kết hợp rule_based + relative + ml
+# kết hợp rule_based + relative + ml + static (mặc định)
 python backtest.py --view-mode combined --ml-model-type xgboost
 ```
 
-## 6. Train model XGBoost cho ML views
+## 7. Train model XGBoost cho ML views
 
 ML mode cần model đã train trước. Script train:
 
@@ -125,7 +160,7 @@ Sau khi train, chạy backtest với ML:
 python backtest.py --phase test --view-mode ml --ml-model-type xgboost
 ```
 
-## 7. So sánh nhanh rule-based và ML
+## 8. So sánh nhanh rule-based và ML
 
 ```bash
 python run_compare_backtests.py --phase test
@@ -135,7 +170,7 @@ Output mặc định:
 - `reports/backtest_compare_views.csv`
 - `reports/backtest_compare_views.png`
 
-## 8. Lỗi thường gặp
+## 9. Lỗi thường gặp
 
 1. Báo không tìm thấy model khi chạy `--view-mode ml`:
 - Train model trước bằng `gen_view/xgboost/model_train.py`

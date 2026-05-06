@@ -16,6 +16,10 @@ Sinh views cho Black-Litterman theo cách tự động, có thể lậ lại và
 2. Relative views (`gen_view/view_generators.py`)
 3. ML views từ XGBoost (`gen_view/xgboost/xgboost_core.py`)
 
+Cấu hình tập trung tại:
+- `config.py`: tham số toàn dự án (BL params, view mode mặc định, combined weights, ML defaults)
+- `gen_view/xgboost/config.py`: tham số riêng module XGBoost (hyperparams, feature periods, confidence heuristic)
+
 ### 1.3 Luồng ML XGBoost
 
 ```text
@@ -72,8 +76,8 @@ Rui ro chính:
 
 ## 3. Kháy ngị cho luận văn
 
-1. Báo cáo kết quả chính dựa trên 5 modes đang hỗ trợ trong `backtest.py`:
-   - `static`, `rule_based`, `relative`, `ml`, `combined`
+1. Báo cáo kết quả chính dựa trên 4 modes đang hỗ trợ trong `backtest.py`:
+   - `rule_based`, `relative`, `ml`, `combined`
 
 2. Trình bày LSTM/LLM dưới dạng hướng phát triển:
    - Nếu có demo riêng thì tách bàng appendix/prototype
@@ -83,6 +87,7 @@ Rui ro chính:
    - Ghi rõ train phase
    - Ghi rõ tập assets
    - Ghi rõ model cache và ngày train
+   - Ghi rõ version `config.py` và `gen_view/xgboost/config.py` đang dùng
 
 ## 4. Checklist thực thi
 

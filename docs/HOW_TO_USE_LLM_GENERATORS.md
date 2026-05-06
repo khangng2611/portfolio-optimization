@@ -63,15 +63,20 @@ python backtest.py --phase test --view-mode combined --ml-model-type xgboost
 from pathlib import Path
 import pandas as pd
 from gen_view.xgboost.xgboost_core import XGBoostCoreModel
+from gen_view.xgboost.config import DEFAULT_FEATURE_WINDOW, DEFAULT_PREDICTION_HORIZON
 from gen_view.view_generators import generate_ml_views
 
 # prices: DataFrame cột là assets, index là datetime
 prices = pd.read_csv("your_prices.csv", index_col=0, parse_dates=True)
 
+# Sử dụng mặc định từ config
 model = XGBoostCoreModel(
-    feature_window=20,
-    prediction_horizon=5,
+    feature_window=DEFAULT_FEATURE_WINDOW,
+    prediction_horizon=DEFAULT_PREDICTION_HORIZON,
 )
+
+# Hoặc ghi đè tham số
+# model = XGBoostCoreModel(feature_window=20, prediction_horizon=5)
 
 # Huấn luyện
 model.train(prices, verbose=True)
@@ -105,9 +110,10 @@ Features mặc định:
 - price_std_20
 
 Nhãn:
-- Forward return theo `prediction_horizon` ngày
+- Forward return theo `prediction_horizon` ngày (mặc định từ `gen_view/xgboost/config.py`)
 
 Sinh views:
+- Ngưỡng `min_return_threshold` mặc định lấy từ `config.py` (`ML_MIN_RETURN_THRESHOLD = 0.005`)
 - Nếu `abs(pred_return) < min_return_threshold` thì bỏ qua
 - Ngược lại annualize return và tạo absolute view cho tài sản
 

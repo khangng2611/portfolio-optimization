@@ -2,6 +2,10 @@
 
 Tài liệu này mô tả các chỉ báo kỹ thuật được dùng trong `gen_view/view_generators.py` và một phần trong `gen_view/xgboost/xgboost_core.py`.
 
+Tham số cấu hình nằm tại:
+- `config.py`: tham số toàn dự án (BL, view mode, ML defaults)
+- `gen_view/xgboost/config.py`: tham số riêng module XGBoost (hyperparams, feature periods, confidence heuristic)
+
 ## 1. Tổng quan
 
 Pipeline tổng quát:
@@ -94,6 +98,7 @@ Trạng thái sử dụng:
 
 ## 7. Ngưỡng mặc định trong code
 
+Rule-based (trong `view_generators.py`):
 - `DEFAULT_MA_SHORT = 10` - Độ dài EMA ngắn hạn
 - `DEFAULT_MA_LONG = 30` - Độ dài EMA dài hạn
 - `DEFAULT_RSI_PERIOD = 14` - Chu kỳ RSI
@@ -103,10 +108,26 @@ Trạng thái sử dụng:
 - `RSI_OVERBOUGHT = 70` - Mức RSI quá mua
 - `RSI_OVERSOLD = 30` - Mức RSI quá bán
 
+Black-Litterman (trong `config.py`):
+- `BL_TAU = 0.05` - Tham số điều chỉnh mô hình
+- `BL_DELTA = 2.5` - Hệ số rủi ro
+- `BL_VIEW_CONFIDENCE = 0.5` - Độ tin cậy mặc định
+
+XGBoost (trong `gen_view/xgboost/config.py`):
+- `DEFAULT_FEATURE_WINDOW = 20` - Cửa sổ feature
+- `DEFAULT_PREDICTION_HORIZON = 5` - Horizon dự đoán
+- `MOMENTUM_PERIODS = [5, 10, 20]` - Các chu kỳ động lực
+- `RSI_PERIOD = 14` - Chu kỳ RSI
+- `MA_SHORT_PERIOD = 10` / `MA_LONG_PERIOD = 30` - Chu kỳ MA
+- `VOLATILITY_WINDOW = 20` - Cửa sổ biến động
+- `CONFIDENCE_MIN/MAX/BASE = 0.3/0.9/0.6` - Heuristic độ tin cậy
+
 ## 8. Các hàm liên quan
 
+- Static (Cố định): `generate_static_views()`
 - Rule-based (Quy tắc): `generate_rule_based_views()`
 - Relative (So sánh tương đối): `generate_relative_views()`
+- ML views: `generate_ml_views()`
 - Xây dựng P/Q/độ tin cậy: `build_views_matrix()`
 - Kết hợp quan điểm: `combine_views()`
 

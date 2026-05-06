@@ -2,10 +2,11 @@
 View Generators for Black-Litterman Model
 ==========================================
 
-This module provides all approaches to generate dynamic views for Black-Litterman:
-1. Rule-based View Generator (using MA, RSI, Momentum)
-2. Relative View Generator (comparing pairs of assets)
-3. ML-based View Generator (XGBoost supervised learning)
+This module provides all approaches to generate views for Black-Litterman:
+1. Static View Generator (predefined views from config)
+2. Rule-based View Generator (using MA, RSI, Momentum)
+3. Relative View Generator (comparing pairs of assets)
+4. ML-based View Generator (XGBoost supervised learning)
 
 Each generator returns a list of view dicts compatible with Black-Litterman.
 """
@@ -16,7 +17,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from config import TRADING_DAYS_PER_YEAR
+from config import STATIC_VIEWS, TRADING_DAYS_PER_YEAR
 from gen_view.xgboost.config import DEFAULT_PREDICTION_HORIZON
 
 warnings.filterwarnings("ignore")
@@ -176,6 +177,22 @@ def compute_bollinger_bands(
 
 
 # ====================== VIEW GENERATORS ======================
+
+
+def generate_static_views() -> list[dict]:
+    """
+    Static View Generator
+
+    Returns the predefined static views from config (STATIC_VIEWS).
+    These views are fixed and do not change with market conditions.
+
+    Returns
+    -------
+    list[dict]
+        List of static view dictionaries for Black-Litterman.
+        Compatible with :func:`build_views_matrix`.
+    """
+    return list(STATIC_VIEWS)
 
 
 def generate_rule_based_views(
@@ -485,7 +502,8 @@ def combine_views(
     rule_views: list[dict],
     relative_views: list[dict],
     ml_views: list[dict],
-    weights: tuple[float, float, float] = (0.4, 0.4, 0.2),
+    static_views: list[dict],
+    weights: tuple[float, float, float, float] = (0.4, 0.3, 0.3, 0.0),
 ) -> list[dict]:
     """
     Combine views from multiple generators with confidence weighting.
@@ -498,8 +516,10 @@ def combine_views(
         Views from relative generator
     ml_views : list[dict]
         Views from ML generator
-    weights : tuple[float, float, float]
-        Weights for (rule, relative, ml) generators
+    static_views : list[dict]
+        Views from static (predefined) generator
+    weights : tuple[float, float, float, float]
+        Weights for (rule, relative, ml, static) generators
     
     Returns
     -------
@@ -508,7 +528,7 @@ def combine_views(
     """
     combined = []
     
-    w_rule, w_rel, w_ml = weights
+    w_rule, w_rel, w_ml, w_static = weights
     
     for view in rule_views:
         view = view.copy()
@@ -526,6 +546,12 @@ def combine_views(
         view = view.copy()
         view["confidence"] *= w_ml
         view["source"] = "ml"
+        combined.append(view)
+    
+    for view in static_views:
+        view = view.copy()
+        view["confidence"] *= w_static
+        view["source"] = "static"
         combined.append(view)
     
     return combined

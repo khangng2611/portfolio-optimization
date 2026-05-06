@@ -70,12 +70,12 @@ def run_one_mode(
     prices: pd.DataFrame,
     scenario_name: str,
     view_mode: str,
-    ml_predictor=None,
+    ml_model=None,
 ) -> tuple[dict, list[dict]]:
     result = bt.backtest(
         prices,
         view_mode=view_mode,
-        ml_predictor=ml_predictor,
+        ml_model=ml_model,  
     )
 
     ew_final, ew_sharpe, ew_mdd = metric_summary(result["ew_nav"])
@@ -195,9 +195,9 @@ def main():
     )
     results_by_scenario["rule_based"] = result_rule
 
-    print("\nLoading ML predictor: xgboost")
+    print("\nLoading ML model: xgboost")
     try:
-        xgb_predictor = bt.load_ml_view_generator("xgboost")
+        xgb_model = bt.load_ml_model("xgboost")
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         return
@@ -207,7 +207,7 @@ def main():
         prices,
         scenario_name="ml_xgboost",
         view_mode="ml",
-        ml_predictor=xgb_predictor,
+        xgb_model=xgb_model,
     )
     results_by_scenario["ml_xgboost"] = result_xgb
 

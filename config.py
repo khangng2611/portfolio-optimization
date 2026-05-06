@@ -5,7 +5,7 @@ TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_ANNUAL = 0.06
 
 # ====================== BACKTEST ======================
-BACKTEST_PHASE = "train"
+BACKTEST_PHASE = "test"
 BACKTEST_DATA_MODE = "split"
 
 WINDOW = 20
@@ -18,9 +18,9 @@ BL_DELTA = 2.5
 BL_VIEW_CONFIDENCE = 0.5
 
 # ====================== VIEW GENERATION ======================
-VIEW_MODE = "rule_based"
+VIEW_MODE = "combined"
 
-# Static views (used when VIEW_MODE = "static")
+# Static views (used as part of combined view mode)
 STATIC_VIEWS = [
     {
         "name": "GOLD_over_E1VFVN30",
@@ -36,8 +36,8 @@ STATIC_VIEWS = [
     },
 ]
 
-# Combined view weights: (rule_based, relative, ml)
-COMBINED_VIEW_WEIGHTS = (0.4, 0.4, 0.2)
+# Combined view weights: (rule_based, relative, ml, static)
+COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)
 
 # ====================== ML DEFAULTS ======================
 ML_MODEL_TYPE = "xgboost"

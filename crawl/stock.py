@@ -6,6 +6,7 @@
 # - Save each symbol to its own CSV file
 # ===================================================================
 
+import sys
 import pandas as pd
 from vnstock import Quote, Listing
 from datetime import datetime
@@ -13,9 +14,13 @@ from pathlib import Path
 import time
 
 # ====================== SETTINGS ======================
-# Data range used for train/test split
-TRAIN_START_DATE = "2020-01-01"
-SPLIT_DATE = "2023-10-01"
+# Import fixed date constants from project config
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from config import TRAIN_START_DATE, SPLIT_DATE
+
+# Crawl uses "today" as end date (not the fixed backtest date)
 TEST_END_DATE = datetime.now().strftime("%Y-%m-%d")
 
 start_date = TRAIN_START_DATE

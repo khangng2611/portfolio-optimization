@@ -18,7 +18,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from utils.data_loader import PHASE_PERIODS, build_price_table, load_assets_config
+from config import PHASE_PERIODS
+from utils.data_loader import build_price_table, load_assets_config
 from gen_view.xgboost.xgboost_core import XGBoostCoreModel
 from gen_view.view_generators import generate_ml_views
 

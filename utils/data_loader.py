@@ -3,20 +3,9 @@ from pathlib import Path
 
 import pandas as pd
 
-
-TRAIN_START_DATE = "2020-01-01"
-SPLIT_DATE = "2023-10-01"
-TEST_END_DATE = "2026-03-01"
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATASETS_DIR = ROOT_DIR / "datasets"
 DEFAULT_ASSETS_CONFIG_PATH = ROOT_DIR / "assets.json"
-
-PHASE_PERIODS = {
-    "train": (TRAIN_START_DATE, SPLIT_DATE),
-    "test": (SPLIT_DATE, TEST_END_DATE),
-    "full": (TRAIN_START_DATE, TEST_END_DATE),
-}
 
 
 def _resolve_path(path_value: str) -> Path:

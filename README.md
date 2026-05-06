@@ -33,7 +33,7 @@ Danh sách tài sản được quản lý bởi `assets.json` (không hardcode t
 - Test: `2023-10-01 -> 2026-03-01`
 - Full: `2020-01-01 -> 2026-03-01`
 
-(Cấu hình tại `utils/data_loader.py`)
+(Cấu hình tại `config.py`: `TRAIN_START_DATE`, `SPLIT_DATE`, `TEST_END_DATE`)
 
 ---
 

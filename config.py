@@ -4,8 +4,19 @@
 TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_ANNUAL = 0.06
 
+# ====================== DATA SPLIT ======================
+TRAIN_START_DATE = "2020-01-01"
+SPLIT_DATE = "2023-10-01"
+TEST_END_DATE = "2026-03-01"
+
+PHASE_PERIODS = {
+    "train": (TRAIN_START_DATE, SPLIT_DATE),
+    "test": (SPLIT_DATE, TEST_END_DATE),
+    "full": (TRAIN_START_DATE, TEST_END_DATE),
+}
+
 # ====================== BACKTEST ======================
-BACKTEST_PHASE = "test"
+BACKTEST_PHASE = "train"
 BACKTEST_DATA_MODE = "split"
 
 WINDOW = 20
@@ -18,7 +29,11 @@ BL_DELTA = 2.5
 BL_VIEW_CONFIDENCE = 0.5
 
 # ====================== VIEW GENERATION ======================
-VIEW_MODE = "combined"
+# View generation mode: "rule_based", "relative", "ml", "combined"
+VIEW_MODE = "ml" 
+
+# Combined view weights: (rule_based, relative, ml, static)
+COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)
 
 # Static views (used as part of combined view mode)
 STATIC_VIEWS = [
@@ -35,9 +50,6 @@ STATIC_VIEWS = [
         "confidence": 0.60,
     },
 ]
-
-# Combined view weights: (rule_based, relative, ml, static)
-COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)
 
 # ====================== ML DEFAULTS ======================
 ML_MODEL_TYPE = "xgboost"

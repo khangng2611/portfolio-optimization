@@ -33,8 +33,13 @@ Tất cả tham số mặc định đã được tập trung vào `config.py` (�
 TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_ANNUAL = 0.06
 
+# Data split
+TRAIN_START_DATE = "2020-01-01"
+SPLIT_DATE = "2023-10-01"
+TEST_END_DATE = "2026-03-01"
+
 # Backtest
-BACKTEST_PHASE = "test"
+BACKTEST_PHASE = "train"
 WINDOW = 20
 REBALANCE_FREQ = 5
 INITIAL_NAV = 1.0
@@ -46,7 +51,7 @@ BL_VIEW_CONFIDENCE = 0.5
 
 # View generation
 VIEW_MODE = "combined"        # mặc định hiện tại
-CCOMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0) # (rule, relative, ml, static)
+COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)  # (rule, relative, ml, static)
 
 # ML defaults
 ML_MODEL_TYPE = "xgboost"

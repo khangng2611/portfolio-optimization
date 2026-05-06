@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 
 from utils.data_loader import (
-    PHASE_PERIODS,
     build_price_table,
     load_assets_config,
     resolve_period,
@@ -23,6 +22,7 @@ from config import (
     INITIAL_NAV,
     ML_MIN_RETURN_THRESHOLD,
     ML_MODEL_TYPE,
+    PHASE_PERIODS,
     RISK_FREE_RATE_ANNUAL,
     REBALANCE_FREQ,
     TRADING_DAYS_PER_YEAR,
@@ -44,7 +44,7 @@ ML_MODEL_CACHE_DIR = ROOT_DIR / "gen_view" / "xgboost" / ".cache"
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Backtest EW/MVO/BL on TRAIN data only"
+        description="Backtest EW/MVO/BL on dataset"
     )
     parser.add_argument(
         "--start-date", default=None, help="Override start date YYYY-MM-DD"

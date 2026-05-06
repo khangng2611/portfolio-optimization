@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import backtest as bt
-from config import PHASE_PERIODS
+from config import (
+    PHASE_PERIODS,
+    BACKTEST_PHASE
+)
 from utils.data_loader import build_price_table, load_assets_config
 
 
@@ -18,7 +21,7 @@ def parse_args():
     parser.add_argument(
         "--phase",
         choices=list(PHASE_PERIODS.keys()),
-        default="test",
+        default=BACKTEST_PHASE,
         help="Backtest phase (train/test/full)",
     )
     parser.add_argument("--start-date", default=None, help="Override start date YYYY-MM-DD")
@@ -208,7 +211,7 @@ def main():
         prices,
         scenario_name="ml_xgboost",
         view_mode="ml",
-        xgb_model=xgb_model,
+        ml_model=xgb_model,
     )
     results_by_scenario["ml_xgboost"] = result_xgb
 

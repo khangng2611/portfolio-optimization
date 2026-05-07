@@ -19,7 +19,7 @@ PHASE_PERIODS = {
 BACKTEST_PHASE = "train"
 BACKTEST_DATA_MODE = "split"
 
-ASSETS_CONFIG_FILENAME = "assets.json"
+ASSETS_CONFIG_FILENAME = "assets_0.json"
 
 WINDOW = 20
 REBALANCE_FREQ = 5
@@ -36,7 +36,7 @@ BL_VIEW_CONFIDENCE = 0.5
 VIEW_MODE = "ml" 
 
 # Combined view weights: (rule_based, relative, ml, static)
-COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)
+COMBINED_VIEW_WEIGHTS = (0.3, 0.3, 0.4, 0.0)
 
 # Static views (used as part of combined view mode)
 STATIC_VIEWS = [

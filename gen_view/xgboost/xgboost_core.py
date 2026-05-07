@@ -299,13 +299,16 @@ class XGBoostEnsembleModel:
         self.scalers: dict = {}  # {asset: StandardScaler}
         self.feature_cols: list[str] = []
         self._trained = False
+        # Directional accuracy tracking
+        self._prediction_history: dict[str, list] = {}  # {asset: [(pred_sign, actual_sign), ...]}
+        self._accuracy_window = 20  # track last N predictions for accuracy
 
     @property
     def is_trained(self) -> bool:
         return self._trained and len(self.ensemble_models) > 0
 
     def _compute_features(self, prices: pd.Series) -> pd.DataFrame:
-        """Compute technical indicator features (same as XGBoostCoreModel)."""
+        """Compute technical indicator features for prediction."""
         features = []
 
         for i in range(self.feature_window, len(prices)):
@@ -465,10 +468,74 @@ class XGBoostEnsembleModel:
         confidence = ENSEMBLE_CONF_MAX - (pred_std / ENSEMBLE_CONF_SCALE)
         return float(np.clip(confidence, ENSEMBLE_CONF_MIN, ENSEMBLE_CONF_MAX))
 
+    def _get_directional_accuracy(self, asset: str) -> float:
+        """
+        Get the directional accuracy for an asset over recent predictions.
+        Returns accuracy in [0, 1]. Returns 0.5 (neutral) if no history.
+        """
+        if asset not in self._prediction_history or len(self._prediction_history[asset]) < 10:
+            return 0.5  # neutral if not enough history
+        history = self._prediction_history[asset][-self._accuracy_window:]
+        correct = sum(1 for pred_sign, actual_sign in history if pred_sign == actual_sign)
+        return correct / len(history)
+
+    def update_accuracy(self, prices: pd.DataFrame, prediction_date_idx: int):
+        """
+        Update directional accuracy by comparing previous predictions with
+        realized returns. Call this before making new predictions.
+
+        Parameters
+        ----------
+        prices : pd.DataFrame
+            Full price history available at current time
+        prediction_date_idx : int
+            Index in prices where the prediction was made (prediction_horizon ago)
+        """
+        if prediction_date_idx < 0:
+            return
+
+        for asset in self.ensemble_models.keys():
+            if asset not in prices.columns:
+                continue
+            price_series = prices[asset].dropna()
+            if prediction_date_idx + self.prediction_horizon >= len(price_series):
+                continue
+            if prediction_date_idx < self.feature_window:
+                continue
+
+            # Compute what the model predicted at prediction_date_idx
+            features_df = self._compute_features(price_series.iloc[:prediction_date_idx + 1])
+            if features_df.empty:
+                continue
+
+            latest_features = features_df.iloc[-1:][self.feature_cols]
+            if asset in self.scalers:
+                latest_scaled = pd.DataFrame(
+                    self.scalers[asset].transform(latest_features),
+                    columns=latest_features.columns,
+                    index=latest_features.index,
+                )
+            else:
+                latest_scaled = latest_features
+
+            ensemble_preds = np.array([m.predict(latest_scaled)[0] for m in self.ensemble_models[asset]])
+            pred_sign = 1 if np.mean(ensemble_preds) > 0 else -1
+
+            # Actual return over the prediction horizon
+            actual_return = (
+                price_series.iloc[prediction_date_idx + self.prediction_horizon]
+                - price_series.iloc[prediction_date_idx]
+            ) / price_series.iloc[prediction_date_idx]
+            actual_sign = 1 if actual_return > 0 else -1
+
+            if asset not in self._prediction_history:
+                self._prediction_history[asset] = []
+            self._prediction_history[asset].append((pred_sign, actual_sign))
+
     def predict(self, prices: pd.DataFrame) -> dict[str, tuple[float, float]]:
         """
         Predict future returns using ensemble and compute confidence
-        from prediction disagreement.
+        from prediction disagreement + directional accuracy penalty.
 
         Parameters
         ----------
@@ -514,6 +581,14 @@ class XGBoostEnsembleModel:
             mean_pred = float(np.mean(ensemble_preds))
             confidence = self._compute_ensemble_confidence(ensemble_preds)
 
+            # Directional accuracy penalty: only penalize truly poor accuracy (<40%)
+            accuracy = self._get_directional_accuracy(asset)
+            if accuracy < 0.40:
+                # Scale confidence down for near-random predictions
+                accuracy_penalty = accuracy / 0.40
+                confidence *= accuracy_penalty
+
+            confidence = float(np.clip(confidence, ENSEMBLE_CONF_MIN, ENSEMBLE_CONF_MAX))
             predictions[asset] = (mean_pred, confidence)
 
         return predictions

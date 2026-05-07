@@ -33,6 +33,11 @@ from config import (
     VIEW_MODE,
     WINDOW,
 )
+from gen_view.xgboost.config import (
+    DEFAULT_FEATURE_WINDOW,
+    DEFAULT_PREDICTION_HORIZON,
+    MIN_TRAIN_SAMPLES,
+)
 from gen_view.view_generators import (
     generate_ml_views,
     generate_rule_based_views,
@@ -118,8 +123,7 @@ def load_ml_model(model_type: str) -> XGBoostCoreModel:
     return model
 
 
-# def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
-def optimize_weight(mu, sigma, risk_aversion=0.5):
+def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
     mu = np.asarray(mu, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
     n = len(mu)
@@ -132,8 +136,7 @@ def optimize_weight(mu, sigma, risk_aversion=0.5):
 
     w = cp.Variable(n)
     objective = cp.Maximize(mu @ w - risk_aversion * cp.quad_form(w, sigma))
-    # constraints = [cp.sum(w) == 1, w >= 0, w <= max_weight]
-    constraints = [cp.sum(w) == 1, w >= 0]
+    constraints = [cp.sum(w) == 1, w >= 0, w <= max_weight]
     problem = cp.Problem(objective, constraints)
 
     installed = set(cp.installed_solvers())
@@ -282,18 +285,13 @@ def backtest(
     views_history = []  # Track generated views at each rebalance
 
     # Walk-forward state
-    if view_mode == "ml" and ml_training_mode == "walk_forward" and ml_model is None:
-        from gen_view.xgboost.config import (
-            DEFAULT_FEATURE_WINDOW,
-            DEFAULT_PREDICTION_HORIZON,
-            MIN_TRAIN_SAMPLES,
-        )
+    if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and ml_model is None:
         ml_model = XGBoostEnsembleModel()
         last_retrain_t = -retrain_frequency  # force first train ASAP
     else:
         last_retrain_t = None
 
-    prediction_horizon = getattr(ml_model, "prediction_horizon", 5) if ml_model else 5
+    prediction_horizon = getattr(ml_model, "prediction_horizon", DEFAULT_PREDICTION_HORIZON) if ml_model else DEFAULT_PREDICTION_HORIZON
 
     for t in range(window, len(returns)):
         hist = returns.iloc[t - window : t]
@@ -310,22 +308,23 @@ def backtest(
             market_weights = np.full(m, 1.0 / m)
 
             # Walk-forward: retrain model if due
-            if view_mode == "ml" and ml_training_mode == "walk_forward" and last_retrain_t is not None:
+            if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and last_retrain_t is not None:
                 if t - last_retrain_t >= retrain_frequency:
                     train_end = t - prediction_horizon  # embargo gap
-                    feature_window = getattr(ml_model, "feature_window", 20)
-                    min_samples = getattr(ml_model, "_min_train_check", 100)
+                    feature_window = getattr(ml_model, "feature_window", DEFAULT_FEATURE_WINDOW)
+                    min_samples = getattr(ml_model, "_min_train_check", MIN_TRAIN_SAMPLES)
                     if train_end >= min_samples + feature_window:
                         train_prices = prices.iloc[:train_end]
                         ml_model.train(train_prices, verbose=False)
                         last_retrain_t = t
 
+
             # Use data up to current time only (no look-ahead)
             price_window = prices.iloc[max(0, t - window - 30) : t]
-            
+
             # Only generate ML views if model is trained
             effective_ml_model = ml_model
-            if view_mode == "ml" and ml_training_mode == "walk_forward" and hasattr(ml_model, "is_trained"):
+            if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and hasattr(ml_model, "is_trained"):
                 if not ml_model.is_trained:
                     effective_ml_model = None
 
@@ -336,6 +335,16 @@ def backtest(
                 ml_model=effective_ml_model,
                 ml_min_return_threshold=ml_min_return_threshold,
             )
+
+            # Volatility-based confidence dampener: reduce confidence when
+            # recent volatility spikes vs historical (detects crash onset)
+            if conf_view is not None and view_mode in ("ml", "combined"):
+                recent_vol = returns.iloc[max(0, t - 20) : t].std().mean()
+                hist_vol = returns.iloc[max(0, t - 120) : t].std().mean()
+                vol_ratio = recent_vol / hist_vol if hist_vol > 0 else 1.0
+                if vol_ratio > 1.3:
+                    dampener = 1.3 / vol_ratio
+                    conf_view = conf_view * dampener
             views_history.append({
                 "date": returns.index[t],
                 "view_names": view_names if p_view is not None else [],
@@ -350,6 +359,16 @@ def backtest(
             else:
                 mu_bl = mu
             bl_weight = optimize_weight(mu_bl, sigma)
+
+            # Cap BL deviation from MVO: BL can tilt towards its view
+            # but not deviate too far from MVO's market-based allocation.
+            # This protects against catastrophic wrong views while preserving alpha.
+            BL_DEVIATION_ALPHA = 0.25  # BL keeps 25% of its deviation from MVO
+            bl_weight = mvo_weight + BL_DEVIATION_ALPHA * (bl_weight - mvo_weight)
+            # Re-normalize to sum to 1 and clip negatives
+            bl_weight = np.maximum(bl_weight, 0)
+            bl_weight = bl_weight / bl_weight.sum()
+
             rebalance_dates.append(returns.index[t])
 
         mvo_nav.append(mvo_nav[-1] * (1 + np.dot(mvo_weight, r_t)))
@@ -503,7 +522,7 @@ def main():
         if ml_training_mode == "walk_forward":
             print(f"ML VIEW GENERATOR: WALK-FORWARD ({args.ml_model_type} ensemble)")
             print(f"  - Retrain every {ML_RETRAIN_FREQUENCY} trading days (expanding window)")
-            print(f"  - Ensemble size: 5 models per asset")
+            # print(f"  - Ensemble size: 5 models per asset")
             print(f"  - Confidence: ensemble disagreement-based")
             # ml_model will be created inside backtest() function
         else:

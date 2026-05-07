@@ -413,14 +413,16 @@ def generate_ml_views(
     """
     views = []
 
+    # Scaling parameters
+    MAX_ANNUAL_VIEW = 0.30    # max annual view magnitude (hard cap)
+
     for asset, (pred_return, confidence) in predictions.items():
         if abs(pred_return) < min_return_threshold:
             continue
 
-        view_return_annual = pred_return * (
-            TRADING_DAYS_PER_YEAR / prediction_horizon
-        )
-        view_return_annual = max(-0.30, min(0.30, view_return_annual))
+        # Annualize and clip
+        view_return_annual = pred_return * (TRADING_DAYS_PER_YEAR / prediction_horizon)
+        view_return_annual = max(-MAX_ANNUAL_VIEW, min(MAX_ANNUAL_VIEW, view_return_annual))
 
         views.append({
             "name": f"{asset}_ml_{model_type}",

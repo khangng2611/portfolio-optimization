@@ -3,9 +3,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from config import ASSETS_CONFIG_FILENAME
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATASETS_DIR = ROOT_DIR / "datasets"
-DEFAULT_ASSETS_CONFIG_PATH = ROOT_DIR / "assets.json"
+DEFAULT_ASSETS_CONFIG_PATH = ROOT_DIR / ASSETS_CONFIG_FILENAME
 
 
 def _resolve_path(path_value: str) -> Path:

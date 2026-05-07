@@ -19,6 +19,8 @@ PHASE_PERIODS = {
 BACKTEST_PHASE = "train"
 BACKTEST_DATA_MODE = "split"
 
+ASSETS_CONFIG_FILENAME = "assets.json"
+
 WINDOW = 20
 REBALANCE_FREQ = 5
 INITIAL_NAV = 1.0
@@ -31,7 +33,7 @@ BL_VIEW_CONFIDENCE = 0.5
 
 # ====================== VIEW GENERATION ======================
 # View generation mode: "rule_based", "relative", "ml", "combined"
-VIEW_MODE = "rule_based" 
+VIEW_MODE = "ml" 
 
 # Combined view weights: (rule_based, relative, ml, static)
 COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)

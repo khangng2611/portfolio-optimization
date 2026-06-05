@@ -12,6 +12,7 @@ from utils.data_loader import (
     resolve_period,
     summarize_asset_returns,
 )
+from utils.view_logger import log_view_history
 
 from config import (
     BACKTEST_DATA_MODE,
@@ -20,14 +21,22 @@ from config import (
     BL_TAU,
     COMBINED_VIEW_WEIGHTS,
     INITIAL_NAV,
+    MAX_POSITION_SIZE,
     ML_MIN_RETURN_THRESHOLD,
     ML_MODEL_TYPE,
+    ML_RETRAIN_FREQUENCY,
+    ML_TRAINING_MODE,
     PHASE_PERIODS,
     RISK_FREE_RATE_ANNUAL,
     REBALANCE_FREQ,
     TRADING_DAYS_PER_YEAR,
     VIEW_MODE,
     WINDOW,
+)
+from gen_view.xgboost.config import (
+    DEFAULT_FEATURE_WINDOW,
+    DEFAULT_PREDICTION_HORIZON,
+    MIN_TRAIN_SAMPLES,
 )
 from gen_view.view_generators import (
     generate_ml_views,
@@ -37,7 +46,7 @@ from gen_view.view_generators import (
     build_views_matrix,
     combine_views,
 )
-from gen_view.xgboost.xgboost_core import XGBoostCoreModel
+from gen_view.xgboost.xgboost_core import XGBoostCoreModel, XGBoostEnsembleModel
 
 ROOT_DIR = Path(__file__).resolve().parent
 ML_MODEL_CACHE_DIR = ROOT_DIR / "gen_view" / "xgboost" / ".cache"
@@ -81,6 +90,12 @@ def parse_args():
         default=ML_MODEL_TYPE,
         help="ML model for ml/combined view mode",
     )
+    parser.add_argument(
+        "--ml-training-mode",
+        choices=["pretrained", "walk_forward"],
+        default=ML_TRAINING_MODE,
+        help="ML training mode: pretrained (load cached) or walk_forward (retrain during backtest)",
+    )
     return parser.parse_args()
 
 
@@ -108,7 +123,7 @@ def load_ml_model(model_type: str) -> XGBoostCoreModel:
     return model
 
 
-def optimize_weight(mu, sigma, risk_aversion=0.5):
+def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
     mu = np.asarray(mu, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
     n = len(mu)
@@ -121,7 +136,7 @@ def optimize_weight(mu, sigma, risk_aversion=0.5):
 
     w = cp.Variable(n)
     objective = cp.Maximize(mu @ w - risk_aversion * cp.quad_form(w, sigma))
-    constraints = [cp.sum(w) == 1, w >= 0]
+    constraints = [cp.sum(w) == 1, w >= 0, w <= max_weight]
     problem = cp.Problem(objective, constraints)
 
     installed = set(cp.installed_solvers())
@@ -249,6 +264,8 @@ def backtest(
     view_mode=VIEW_MODE,
     ml_model=None,
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
+    ml_training_mode="pretrained",
+    retrain_frequency=ML_RETRAIN_FREQUENCY,
 ):
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
@@ -267,6 +284,15 @@ def backtest(
     rebalance_dates = []
     views_history = []  # Track generated views at each rebalance
 
+    # Walk-forward state
+    if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and ml_model is None:
+        ml_model = XGBoostEnsembleModel()
+        last_retrain_t = -retrain_frequency  # force first train ASAP
+    else:
+        last_retrain_t = None
+
+    prediction_horizon = getattr(ml_model, "prediction_horizon", DEFAULT_PREDICTION_HORIZON) if ml_model else DEFAULT_PREDICTION_HORIZON
+
     for t in range(window, len(returns)):
         hist = returns.iloc[t - window : t]
         r_t = returns.iloc[t].values
@@ -281,14 +307,44 @@ def backtest(
 
             market_weights = np.full(m, 1.0 / m)
 
-            price_window = prices.iloc[max(0, t - window - 30) : t + window]
+            # Walk-forward: retrain model if due
+            if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and last_retrain_t is not None:
+                if t - last_retrain_t >= retrain_frequency:
+                    train_end = t - prediction_horizon  # embargo gap
+                    feature_window = getattr(ml_model, "feature_window", DEFAULT_FEATURE_WINDOW)
+                    min_samples = getattr(ml_model, "_min_train_check", MIN_TRAIN_SAMPLES)
+                    if train_end >= min_samples + feature_window:
+                        train_prices = prices.iloc[:train_end]
+                        ml_model.train(train_prices, verbose=False)
+                        last_retrain_t = t
+
+
+            # Use data up to current time only (no look-ahead)
+            price_window = prices.iloc[max(0, t - window - 30) : t]
+
+            # Only generate ML views if model is trained
+            effective_ml_model = ml_model
+            if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and hasattr(ml_model, "is_trained"):
+                if not ml_model.is_trained:
+                    effective_ml_model = None
+
             p_view, q_view, conf_view, view_names = generate_dynamic_views(
                 price_window,
                 assets,
                 view_mode,
-                ml_model=ml_model,
+                ml_model=effective_ml_model,
                 ml_min_return_threshold=ml_min_return_threshold,
             )
+
+            # Volatility-based confidence dampener: reduce confidence when
+            # recent volatility spikes vs historical (detects crash onset)
+            if conf_view is not None and view_mode in ("ml", "combined"):
+                recent_vol = returns.iloc[max(0, t - 20) : t].std().mean()
+                hist_vol = returns.iloc[max(0, t - 120) : t].std().mean()
+                vol_ratio = recent_vol / hist_vol if hist_vol > 0 else 1.0
+                if vol_ratio > 1.3:
+                    dampener = 1.3 / vol_ratio
+                    conf_view = conf_view * dampener
             views_history.append({
                 "date": returns.index[t],
                 "view_names": view_names if p_view is not None else [],
@@ -303,6 +359,16 @@ def backtest(
             else:
                 mu_bl = mu
             bl_weight = optimize_weight(mu_bl, sigma)
+
+            # Cap BL deviation from MVO: BL can tilt towards its view
+            # but not deviate too far from MVO's market-based allocation.
+            # This protects against catastrophic wrong views while preserving alpha.
+            BL_DEVIATION_ALPHA = 0.25  # BL keeps 25% of its deviation from MVO
+            bl_weight = mvo_weight + BL_DEVIATION_ALPHA * (bl_weight - mvo_weight)
+            # Re-normalize to sum to 1 and clip negatives
+            bl_weight = np.maximum(bl_weight, 0)
+            bl_weight = bl_weight / bl_weight.sum()
+
             rebalance_dates.append(returns.index[t])
 
         mvo_nav.append(mvo_nav[-1] * (1 + np.dot(mvo_weight, r_t)))
@@ -327,6 +393,7 @@ def backtest(
         "assets": assets,
         "views_history": views_history,
         "view_mode": view_mode,
+        "ml_model": ml_model,
     }
 
 
@@ -406,11 +473,12 @@ def main():
         selected_assets=selected_assets,
     )
 
-    print(f"Dang load va dong bo du lieu {len(assets)} tai san...")
     print(
         f"Phase={phase} | Data mode={BACKTEST_DATA_MODE} | Period={start_date} -> {end_date}"
     )
     print(f"View mode={view_mode}")
+    if view_mode in ("ml", "combined"):
+        print(f"ML training mode={args.ml_training_mode}")
     print(f"Assets: {', '.join(assets.keys())}")
 
     prices = build_price_table(
@@ -429,12 +497,10 @@ def main():
 
     print("\n" + "=" * 70)
     print("BANG RETURN TUNG ASSET")
-    print("=" * 70)
     print(asset_summary.to_string(float_format=lambda x: f"{x:,.2%}"))
 
     print("\n" + "=" * 70)
     print(f"BLACK-LITTERMAN VIEW MODE: {view_mode.upper()}")
-    print("=" * 70)
     if view_mode == "rule_based":
         print("  - Su dung: MA Crossover, RSI, Momentum")
     elif view_mode == "relative":
@@ -450,20 +516,29 @@ def main():
         )
 
     ml_model = None
+    ml_training_mode = args.ml_training_mode
     if view_mode in ("ml", "combined"):
         print("\n" + "=" * 70)
-        print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
-        print("=" * 70)
-        try:
-            ml_model = load_ml_model(args.ml_model_type)
-        except FileNotFoundError as e:
-            print(f"\nERROR: {e}")
-            return
+        if ml_training_mode == "walk_forward":
+            print(f"ML VIEW GENERATOR: WALK-FORWARD ({args.ml_model_type} ensemble)")
+            print(f"  - Retrain every {ML_RETRAIN_FREQUENCY} trading days (expanding window)")
+            # print(f"  - Ensemble size: 5 models per asset")
+            print(f"  - Confidence: ensemble disagreement-based")
+            # ml_model will be created inside backtest() function
+        else:
+            print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
+            try:
+                ml_model = load_ml_model(args.ml_model_type)
+            except FileNotFoundError as e:
+                print(f"\nERROR: {e}")
+                return
 
     result = backtest(
         prices,
         view_mode=view_mode,
         ml_model=ml_model,
+        ml_training_mode=ml_training_mode,
+        retrain_frequency=ML_RETRAIN_FREQUENCY,
     )
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]
@@ -471,7 +546,6 @@ def main():
 
     print("\n" + "=" * 70)
     print(f"KET QUA BACKTEST ({start_date} den {end_date}, theo du lieu kha dung)")
-    print("=" * 70)
     print(
         f"EW   | NAV cuoi: {ew_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(ew_nav):6.2f} | MDD: {max_drawdown(ew_nav):7.2%}"
     )
@@ -482,53 +556,83 @@ def main():
         f"BL   | NAV cuoi: {bl_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(bl_nav):6.2f} | MDD: {max_drawdown(bl_nav):7.2%}"
     )
 
-    # Show sample of dynamic views generated during backtest
-    if result.get("views_history"):
-        print("\n" + "=" * 70)
-        print("MAU VIEWS SINH RA TRONG QUA TRINH BACKTEST")
-        print("=" * 70)
-        views_hist = result["views_history"]
-        # Show first 3 and last 3 rebalance dates
-        sample_indices = list(range(min(3, len(views_hist)))) + list(range(max(0, len(views_hist) - 3), len(views_hist)))
-        sample_indices = sorted(set(sample_indices))
-        for i in sample_indices:
-            vh = views_hist[i]
-            print(f"\n{vh['date'].strftime('%Y-%m-%d')}:")
-            if vh['view_names']:
-                for name, q, conf in zip(vh['view_names'], vh['q_values'], vh['confidences']):
-                    print(f"  - {name}: Q={q:.6f} (daily), conf={conf:.2f}")
-            else:
-                print("  - Khong co view (BL fallback ve mu lich su)")
+    # # Show sample of dynamic views generated during backtest
+    # if result.get("views_history"):
+    #     print("\n" + "=" * 70)
+    #     print("MAU VIEWS SINH RA TRONG QUA TRINH BACKTEST")
+    #     print("=" * 70)
+    #     views_hist = result["views_history"]
+    #     # Show first 3 and last 3 rebalance dates
+    #     sample_indices = list(range(min(3, len(views_hist)))) + list(range(max(0, len(views_hist) - 3), len(views_hist)))
+    #     sample_indices = sorted(set(sample_indices))
+    #     for i in sample_indices:
+    #         vh = views_hist[i]
+    #         print(f"\n{vh['date'].strftime('%Y-%m-%d')}:")
+    #         if vh['view_names']:
+    #             for name, q, conf in zip(vh['view_names'], vh['q_values'], vh['confidences']):
+    #                 print(f"  - {name}: Q={q:.6f} (daily), conf={conf:.2f}")
+    #         else:
+    #             print("  - Khong co view (BL fallback ve mu lich su)")
 
-    as_of_date = pd.Timestamp(end_date)
-    w_mvo_next, w_bl_next, last_hist_date, next_view_names = get_next_period_weights(
-        result["returns"],
-        prices,
-        as_of_date=as_of_date,
-        window=WINDOW,
+    # Log view history to file
+    log_path = log_view_history(
+        result["views_history"],
         view_mode=view_mode,
-        ml_model=ml_model,
+        phase=phase,
+        assets=result["assets"],
+        backtest_metrics={
+            "EW": {
+                "final_nav": float(ew_nav.iloc[-1]),
+                "sharpe": float(sharpe_ratio(ew_nav)),
+                "mdd": float(max_drawdown(ew_nav)),
+            },
+            "MVO": {
+                "final_nav": float(mvo_nav.iloc[-1]),
+                "sharpe": float(sharpe_ratio(mvo_nav)),
+                "mdd": float(max_drawdown(mvo_nav)),
+            },
+            "BL": {
+                "final_nav": float(bl_nav.iloc[-1]),
+                "sharpe": float(sharpe_ratio(bl_nav)),
+                "mdd": float(max_drawdown(bl_nav)),
+            },
+        },
+        ml_training_mode=ml_training_mode if view_mode in ("ml", "combined") else None,
     )
 
-    print("\n" + "=" * 70)
-    print(f"TRONG SO GOI Y CHO GIAI DOAN TIEP THEO SAU {end_date}")
-    print(f"(Uoc luong tu cua so {WINDOW} phien gan nhat den {last_hist_date.date()})")
-    print("=" * 70)
-    print("MVO:")
-    for asset, weight in zip(result["assets"], w_mvo_next):
-        print(f"  {asset:8}: {weight:7.2%}")
-    print("BL:")
-    for asset, weight in zip(result["assets"], w_bl_next):
-        print(f"  {asset:8}: {weight:7.2%}")
-    if next_view_names:
-        print(f"  Views used: {', '.join(next_view_names)}")
+
+    # ## PREDICT NEXT PERIOD WEIGHTS
+    # as_of_date = pd.Timestamp(end_date)
+    # # Use the model from backtest (in walk_forward mode it's the trained ensemble)
+    # final_ml_model = result.get("ml_model", ml_model)
+    # w_mvo_next, w_bl_next, last_hist_date, next_view_names = get_next_period_weights(
+    #     result["returns"],
+    #     prices,
+    #     as_of_date=as_of_date,
+    #     window=WINDOW,
+    #     view_mode=view_mode,
+    #     ml_model=final_ml_model,
+    # )
+
+    # print("\n" + "=" * 70)
+    # print(f"TRONG SO GOI Y CHO GIAI DOAN TIEP THEO SAU {end_date}")
+    # print(f"(Uoc luong tu cua so {WINDOW} phien gan nhat den {last_hist_date.date()})")
+    # print("=" * 70)
+    # print("MVO:")
+    # for asset, weight in zip(result["assets"], w_mvo_next):
+    #     print(f"  {asset:8}: {weight:7.2%}")
+    # print("BL:")
+    # for asset, weight in zip(result["assets"], w_bl_next):
+    #     print(f"  {asset:8}: {weight:7.2%}")
+    # if next_view_names:
+    #     print(f"  Views used: {', '.join(next_view_names)}")
 
     if not args.no_plot:
         plt.figure(figsize=(12, 6))
         plt.plot(ew_nav.index, ew_nav.values, label="EW")
         plt.plot(mvo_nav.index, mvo_nav.values, label="MVO")
         plt.plot(bl_nav.index, bl_nav.values, label=f"BL ({view_mode})")
-        plt.title(f"Backtest 4 Assets ({phase}): EW vs MVO vs BL ({view_mode})")
+        plt.title(f"Backtest with Assets ({phase}): EW vs MVO vs BL ({view_mode})")
         plt.ylabel("NAV (initial = 100,000)")
         plt.grid(True)
         plt.legend()

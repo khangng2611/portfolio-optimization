@@ -16,11 +16,11 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import PHASE_PERIODS
 from utils.data_loader import build_price_table, load_assets_config
-from gen_view.xgboost.xgboost_core import XGBoostCoreModel
+from gen_view.xgboost.xgboost_core import XGBoostCoreModel, XGBoostEnsembleModel
 from gen_view.view_generators import generate_ml_views
 
 
@@ -29,6 +29,8 @@ from gen_view.xgboost.config import (
     DEFAULT_FEATURE_WINDOW,
     DEFAULT_PREDICTION_HORIZON,
     DEFAULT_XGB_PARAMS,
+    ENSEMBLE_SIZE,
+    ENSEMBLE_BASE_SEED,
 )
 
 CACHE_DIR.mkdir(exist_ok=True)
@@ -64,6 +66,11 @@ def parse_args():
         "--validate",
         action="store_true",
         help="Validate models after training",
+    )
+    parser.add_argument(
+        "--ensemble",
+        action="store_true",
+        help="Train ensemble model (5 models per asset with different seeds)",
     )
     return parser.parse_args()
 
@@ -125,6 +132,32 @@ def train_xgboost(prices: pd.DataFrame, verbose: bool = True):
         return None
 
 
+def train_xgboost_ensemble(prices: pd.DataFrame, verbose: bool = True):
+    print("\n" + "=" * 70)
+    print(f"TRAINING XGBOOST ENSEMBLE ({ENSEMBLE_SIZE} models per asset)")
+    print("=" * 70)
+
+    try:
+        model = XGBoostEnsembleModel(
+            feature_window=DEFAULT_FEATURE_WINDOW,
+            prediction_horizon=DEFAULT_PREDICTION_HORIZON,
+            model_params=DEFAULT_XGB_PARAMS.copy(),
+            n_ensemble=ENSEMBLE_SIZE,
+            base_seed=ENSEMBLE_BASE_SEED,
+        )
+        model.train(prices, verbose=verbose)
+
+        model_path = CACHE_DIR / "xgboost_ensemble.pkl"
+        model.save(model_path)
+
+        print(f"\nSaved ensemble model to: {model_path}")
+        return model
+    except ImportError:
+        print("\nERROR: XGBoost or scikit-learn is not installed.")
+        print("Install with: pip install xgboost scikit-learn")
+        return None
+
+
 def validate_model(generator, prices: pd.DataFrame, method_name: str):
     print(f"\n--- Validating {method_name} ---")
 
@@ -170,6 +203,12 @@ def main():
         if xgb_gen:
             trained_generators.append(("XGBoost", xgb_gen))
 
+        # Also train ensemble if --ensemble flag is set
+        if args.ensemble:
+            ens_gen = train_xgboost_ensemble(prices, verbose=True)
+            if ens_gen:
+                trained_generators.append(("XGBoost Ensemble", ens_gen))
+
     if args.validate and trained_generators:
         print("\n" + "=" * 70)
         print("VALIDATION")
@@ -181,12 +220,14 @@ def main():
     print("\n" + "=" * 70)
     print("TRAINING SUMMARY")
     print("=" * 70)
-    print(f"\n✓ Training complete. Trained {len(trained_generators)} model(s)")
+    print(f"\n Training complete. Trained {len(trained_generators)} model(s)")
     print(f"Models saved to: {CACHE_DIR}")
     print("\nNext steps:")
-    print("  1. Run backtest without retraining:")
-    print("     python backtest.py --phase test --view-mode ml --ml-model-type xgboost")
-    print("  2. Compare all modes:")
+    print("  1. Run backtest with pretrained model:")
+    print("     python backtest.py --phase test --view-mode ml --ml-training-mode pretrained")
+    print("  2. Run backtest with walk-forward (no pre-train needed):")
+    print("     python backtest.py --phase train --view-mode ml --ml-training-mode walk_forward")
+    print("  3. Compare all modes:")
     print("     python run_compare_backtests.py --phase test")
 
 

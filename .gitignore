@@ -211,3 +211,11 @@ __marimo__/
 # datasets/
 
 .vscode/launch.json
+
+# View history logs
+logs/*
+!logs/.gitkeep
+
+.qoder/
+reference/
+reports/

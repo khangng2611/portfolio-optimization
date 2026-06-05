@@ -19,9 +19,12 @@ PHASE_PERIODS = {
 BACKTEST_PHASE = "train"
 BACKTEST_DATA_MODE = "split"
 
+ASSETS_CONFIG_FILENAME = "assets_0.json"
+
 WINDOW = 20
 REBALANCE_FREQ = 5
 INITIAL_NAV = 1.0
+MAX_POSITION_SIZE = 0.40            # Max weight per asset (diversification constraint)
 
 # ====================== BLACK-LITTERMAN ======================
 BL_TAU = 0.05
@@ -33,7 +36,7 @@ BL_VIEW_CONFIDENCE = 0.5
 VIEW_MODE = "ml" 
 
 # Combined view weights: (rule_based, relative, ml, static)
-COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)
+COMBINED_VIEW_WEIGHTS = (0.3, 0.3, 0.4, 0.0)
 
 # Static views (used as part of combined view mode)
 STATIC_VIEWS = [
@@ -56,3 +59,7 @@ ML_MODEL_TYPE = "xgboost"
 ML_FEATURE_WINDOW = 20
 ML_PREDICTION_HORIZON = 5
 ML_MIN_RETURN_THRESHOLD = 0.005
+
+# ML Training mode: "pretrained" (load from cache) or "walk_forward" (retrain during backtest)
+ML_TRAINING_MODE = "walk_forward"
+ML_RETRAIN_FREQUENCY = 20

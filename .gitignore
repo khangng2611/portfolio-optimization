@@ -215,3 +215,7 @@ __marimo__/
 # View history logs
 logs/*
 !logs/.gitkeep
+
+.qoder/
+reference/
+reports/

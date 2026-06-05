@@ -17,8 +17,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from config import STATIC_VIEWS, TRADING_DAYS_PER_YEAR
-from gen_view.xgboost.config import DEFAULT_PREDICTION_HORIZON
+from config import DEFAULT_PREDICTION_HORIZON, STATIC_VIEWS, TRADING_DAYS_PER_YEAR
 
 warnings.filterwarnings("ignore")
 

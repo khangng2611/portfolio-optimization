@@ -56,8 +56,9 @@ STATIC_VIEWS = [
 
 # ====================== ML DEFAULTS ======================
 ML_MODEL_TYPE = "xgboost"
-ML_FEATURE_WINDOW = 20
-ML_PREDICTION_HORIZON = 5
+
+DEFAULT_FEATURE_WINDOW = 20
+DEFAULT_PREDICTION_HORIZON = 5
 ML_MIN_RETURN_THRESHOLD = 0.005
 
 # ML Training mode: "pretrained" (load from cache) or "walk_forward" (retrain during backtest)

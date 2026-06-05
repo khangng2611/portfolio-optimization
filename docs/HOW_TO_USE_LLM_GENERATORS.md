@@ -63,7 +63,7 @@ python backtest.py --phase test --view-mode combined --ml-model-type xgboost
 from pathlib import Path
 import pandas as pd
 from gen_view.xgboost.xgboost_core import XGBoostCoreModel
-from gen_view.xgboost.config import DEFAULT_FEATURE_WINDOW, DEFAULT_PREDICTION_HORIZON
+from config import DEFAULT_FEATURE_WINDOW, DEFAULT_PREDICTION_HORIZON
 from gen_view.view_generators import generate_ml_views
 
 # prices: DataFrame cột là assets, index là datetime

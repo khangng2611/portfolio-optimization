@@ -22,6 +22,8 @@ from config import (
     COMBINED_VIEW_WEIGHTS,
     INITIAL_NAV,
     MAX_POSITION_SIZE,
+    DEFAULT_FEATURE_WINDOW,
+    DEFAULT_PREDICTION_HORIZON,
     ML_MIN_RETURN_THRESHOLD,
     ML_MODEL_TYPE,
     ML_RETRAIN_FREQUENCY,
@@ -33,11 +35,7 @@ from config import (
     VIEW_MODE,
     WINDOW,
 )
-from gen_view.xgboost.config import (
-    DEFAULT_FEATURE_WINDOW,
-    DEFAULT_PREDICTION_HORIZON,
-    MIN_TRAIN_SAMPLES,
-)
+from gen_view.xgboost.config import MIN_TRAIN_SAMPLES
 from gen_view.view_generators import (
     generate_ml_views,
     generate_rule_based_views,

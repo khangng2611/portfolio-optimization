@@ -6,10 +6,6 @@ from pathlib import Path
 MODEL_DIR = Path(__file__).resolve().parent
 CACHE_DIR = MODEL_DIR / ".cache"
 
-# Model architecture defaults
-DEFAULT_FEATURE_WINDOW = 20
-DEFAULT_PREDICTION_HORIZON = 5
-
 # XGBoost hyperparameters
 DEFAULT_XGB_PARAMS = {
     "n_estimators": 200,

@@ -113,9 +113,11 @@ Black-Litterman (trong `config.py`):
 - `BL_DELTA = 2.5` - Hệ số rủi ro
 - `BL_VIEW_CONFIDENCE = 0.5` - Độ tin cậy mặc định
 
-XGBoost (trong `gen_view/xgboost/config.py`):
+ML Defaults (trong `config.py`):
 - `DEFAULT_FEATURE_WINDOW = 20` - Cửa sổ feature
 - `DEFAULT_PREDICTION_HORIZON = 5` - Horizon dự đoán
+
+XGBoost (trong `gen_view/xgboost/config.py`):
 - `MOMENTUM_PERIODS = [5, 10, 20]` - Các chu kỳ động lực
 - `RSI_PERIOD = 14` - Chu kỳ RSI
 - `MA_SHORT_PERIOD = 10` / `MA_LONG_PERIOD = 30` - Chu kỳ MA

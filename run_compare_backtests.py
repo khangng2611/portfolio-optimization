@@ -2,12 +2,22 @@ import argparse
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from scipy import stats  # noqa: F401  (kept for Spearman correlation utility)
 
 import backtest as bt
 from config import (
     PHASE_PERIODS,
-    BACKTEST_PHASE
+    BACKTEST_PHASE,
+    RANKING_K,
+    RANKING_RETRAIN_FREQUENCY,
+    RANKING_RESELECT_FREQUENCY,
+    RANKING_VIEW_SPREAD,
+    TRADING_DAYS_PER_YEAR,
+    RISK_FREE_RATE_ANNUAL,
+    VN30_LIST_PATH,
+    WINDOW,
 )
 from utils.data_loader import build_price_table, load_assets_config
 
@@ -15,7 +25,7 @@ from utils.data_loader import build_price_table, load_assets_config
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Run portfolio backtests for rule-based views and ML XGBoost views in one command."
+            "Run portfolio backtests for rule-based, ML XGBoost, and ranking views in one command."
         )
     )
     parser.add_argument(
@@ -62,29 +72,82 @@ def resolve_period(args):
     return PHASE_PERIODS[args.phase]
 
 
-def metric_summary(nav_series: pd.Series) -> tuple[float, float, float]:
-    return (
-        float(nav_series.iloc[-1]),
-        float(bt.sharpe_ratio(nav_series)),
-        float(bt.max_drawdown(nav_series)),
-    )
+# ====================== EXTENDED PORTFOLIO METRICS ======================
 
+def annual_return(nav_series: pd.Series) -> float:
+    """Annualized return."""
+    total_days = len(nav_series) - 1
+    if total_days <= 0:
+        return np.nan
+    total_return = nav_series.iloc[-1] / nav_series.iloc[0] - 1
+    return (1 + total_return) ** (TRADING_DAYS_PER_YEAR / total_days) - 1
+
+
+def annual_volatility(nav_series: pd.Series) -> float:
+    """Annualized volatility."""
+    ret = nav_series.pct_change().dropna()
+    if len(ret) == 0:
+        return np.nan
+    return ret.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+
+
+def sortino_ratio(nav_series: pd.Series) -> float:
+    """Sortino ratio using downside deviation."""
+    ret = nav_series.pct_change().dropna()
+    if len(ret) == 0:
+        return np.nan
+    rf_daily = (1 + RISK_FREE_RATE_ANNUAL) ** (1 / TRADING_DAYS_PER_YEAR) - 1
+    excess_ret = ret - rf_daily
+    downside = excess_ret[excess_ret < 0]
+    downside_std = np.sqrt(np.mean(downside ** 2)) if len(downside) > 0 else 0.0
+    if downside_std == 0:
+        return np.nan
+    return np.sqrt(TRADING_DAYS_PER_YEAR) * excess_ret.mean() / downside_std
+
+
+def calmar_ratio(nav_series: pd.Series) -> float:
+    """Calmar ratio = annualized return / max drawdown."""
+    total_days = len(nav_series) - 1
+    if total_days <= 0:
+        return np.nan
+    total_return = nav_series.iloc[-1] / nav_series.iloc[0] - 1
+    ann_ret = (1 + total_return) ** (TRADING_DAYS_PER_YEAR / total_days) - 1
+    mdd = bt.max_drawdown(nav_series)
+    if mdd == 0:
+        return np.nan
+    return ann_ret / abs(mdd)
+
+
+def metric_summary(nav_series: pd.Series) -> dict:
+    """Comprehensive performance metrics for a NAV series."""
+    return {
+        "final_nav": float(nav_series.iloc[-1]),
+        "ann_return": float(annual_return(nav_series)),
+        "ann_volatility": float(annual_volatility(nav_series)),
+        "sharpe": float(bt.sharpe_ratio(nav_series)),
+        "sortino": float(sortino_ratio(nav_series)),
+        "max_drawdown": float(bt.max_drawdown(nav_series)),
+        "calmar": float(calmar_ratio(nav_series)),
+    }
+
+
+# ====================== SCENARIO RUNNER ======================
 
 def run_one_mode(
     prices: pd.DataFrame,
     scenario_name: str,
     view_mode: str,
     ml_model=None,
+    ranking_universe_prices: pd.DataFrame = None,
+    ranking_market_prices: pd.Series = None,
 ) -> tuple[dict, list[dict]]:
     result = bt.backtest(
         prices,
         view_mode=view_mode,
-        ml_model=ml_model,  
+        ml_model=ml_model,
+        ranking_universe_prices=ranking_universe_prices,
+        ranking_market_prices=ranking_market_prices,
     )
-
-    ew_final, ew_sharpe, ew_mdd = metric_summary(result["ew_nav"])
-    mvo_final, mvo_sharpe, mvo_mdd = metric_summary(result["mvo_nav"])
-    bl_final, bl_sharpe, bl_mdd = metric_summary(result["bl_nav"])
 
     views_history = result.get("views_history", [])
     total_views = sum(len(v.get("view_names", [])) for v in views_history)
@@ -93,42 +156,38 @@ def run_one_mode(
     rows = [
         {
             "scenario": scenario_name,
-            "strategy": "EW",
-            "final_nav": ew_final,
-            "sharpe": ew_sharpe,
-            "max_drawdown": ew_mdd,
+            "strategy": strategy_name,
+            **metric_summary(nav_series),
             "rebalance_count": rebalance_count,
             "total_generated_views": total_views,
-        },
-        {
-            "scenario": scenario_name,
-            "strategy": "MVO",
-            "final_nav": mvo_final,
-            "sharpe": mvo_sharpe,
-            "max_drawdown": mvo_mdd,
-            "rebalance_count": rebalance_count,
-            "total_generated_views": total_views,
-        },
-        {
-            "scenario": scenario_name,
-            "strategy": "BL",
-            "final_nav": bl_final,
-            "sharpe": bl_sharpe,
-            "max_drawdown": bl_mdd,
-            "rebalance_count": rebalance_count,
-            "total_generated_views": total_views,
-        },
+        }
+        for strategy_name, nav_series in [
+            ("EW", result["ew_nav"]),
+            ("MVO", result["mvo_nav"]),
+            ("BL", result["bl_nav"]),
+        ]
     ]
     return result, rows
 
 
-def plot_scenarios(results_by_scenario: dict, output_path: str, show_plot: bool = True):
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+# ====================== PLOTTING ======================
 
+def plot_scenarios(results_by_scenario: dict, output_path: str, show_plot: bool = True):
     scenario_order = [
         ("rule_based", "BL (rule_based)"),
         ("ml_xgboost", "BL (ml_xgboost)"),
+        ("ranking", "BL (ranking)"),
     ]
+    # Only plot scenarios that actually ran
+    scenario_order = [s for s in scenario_order if s[0] in results_by_scenario]
+    n = len(scenario_order)
+    if n == 0:
+        print("No scenarios to plot.")
+        return
+
+    fig, axes = plt.subplots(1, n, figsize=(7 * n, 6), sharey=True)
+    if n == 1:
+        axes = [axes]
 
     for ax, (scenario_key, bl_label) in zip(axes, scenario_order):
         result = results_by_scenario[scenario_key]
@@ -158,6 +217,8 @@ def plot_scenarios(results_by_scenario: dict, output_path: str, show_plot: bool 
         plt.close(fig)
 
 
+# ====================== MAIN ======================
+
 def main():
     args = parse_args()
     start_date, end_date = resolve_period(args)
@@ -172,10 +233,14 @@ def main():
     )
 
     print("=" * 80)
-    print("COMPARE BACKTESTS: EW, MVO, BL(rule_based), BL(ml-xgb)")
+    print("COMPARE BACKTESTS: EW, MVO, BL(rule_based), BL(ml-xgb), BL(ranking)")
     print("=" * 80)
     print(f"Phase={args.phase} | Period={start_date} -> {end_date}")
     print(f"Assets: {', '.join(assets.keys())}")
+    print(
+        f"Ranking config: K={RANKING_K}, retrain_freq={RANKING_RETRAIN_FREQUENCY}, "
+        f"reselect_freq={RANKING_RESELECT_FREQUENCY}, view_spread={RANKING_VIEW_SPREAD}"
+    )
 
     prices = build_price_table(
         start_date=start_date,
@@ -189,16 +254,20 @@ def main():
         f"Aligned price window: {prices.index.min().date()} -> {prices.index.max().date()} ({len(prices)} rows)"
     )
 
-    results_by_scenario = {}
+    results_by_scenario: dict = {}
+    all_rows: list = []
 
-    print("\n[1/2] Running BL with rule-based views...")
+    # ---------- [1/3] rule_based ----------
+    print("\n[1/3] Running BL with rule-based views...")
     result_rule, rows_rule = run_one_mode(
         prices,
         scenario_name="rule_based",
         view_mode="rule_based",
     )
     results_by_scenario["rule_based"] = result_rule
+    all_rows.extend(rows_rule)
 
+    # ---------- [2/3] ml_xgboost ----------
     print("\nLoading ML model: xgboost")
     try:
         xgb_model = bt.load_ml_model("xgboost")
@@ -206,7 +275,7 @@ def main():
         print(f"ERROR: {e}")
         return
 
-    print("\n[2/2] Running BL with ML xgboost views...")
+    print("\n[2/3] Running BL with ML xgboost views...")
     result_xgb, rows_xgb = run_one_mode(
         prices,
         scenario_name="ml_xgboost",
@@ -214,8 +283,59 @@ def main():
         ml_model=xgb_model,
     )
     results_by_scenario["ml_xgboost"] = result_xgb
+    all_rows.extend(rows_xgb)
 
-    df = pd.DataFrame(rows_rule + rows_xgb)
+    # ---------- [3/3] ranking ----------
+    print("\n[3/3] Running BL with ranking views...")
+    try:
+        vn30_list_path = Path(VN30_LIST_PATH)
+        if not vn30_list_path.is_absolute():
+            vn30_list_path = Path(__file__).resolve().parent / VN30_LIST_PATH
+        if not vn30_list_path.exists():
+            raise FileNotFoundError(f"VN30 list not found: {vn30_list_path}")
+
+        ranking_universe_prices = bt.load_vn30_universe_prices(
+            start_date, end_date, args.phase, bt.WINDOW
+        )
+        ranking_market_prices = bt.load_market_proxy_prices(
+            start_date, end_date, args.phase, bt.WINDOW
+        )
+
+        # Align all three indices
+        common_idx = (
+            prices.index
+            .intersection(ranking_universe_prices.index)
+            .intersection(ranking_market_prices.index)
+        )
+        if len(common_idx) < WINDOW + 60:
+            raise ValueError(
+                f"Insufficient overlap between portfolio assets and VN30 universe "
+                f"(common rows = {len(common_idx)})"
+            )
+
+        prices_aligned = prices.loc[common_idx]
+        ranking_universe_aligned = ranking_universe_prices.loc[common_idx]
+        ranking_market_aligned = ranking_market_prices.loc[common_idx]
+
+        print(
+            f"  Aligned: {len(common_idx)} rows | "
+            f"{len(ranking_universe_aligned.columns)} VN30 stocks"
+        )
+
+        result_ranking, rows_ranking = run_one_mode(
+            prices_aligned,
+            scenario_name="ranking",
+            view_mode="ranking",
+            ranking_universe_prices=ranking_universe_aligned,
+            ranking_market_prices=ranking_market_aligned,
+        )
+        results_by_scenario["ranking"] = result_ranking
+        all_rows.extend(rows_ranking)
+    except Exception as e:
+        print(f"WARNING: Skipping ranking scenario - {type(e).__name__}: {e}")
+
+    # ---------- RESULT TABLE ----------
+    df = pd.DataFrame(all_rows)
 
     print("\n" + "=" * 80)
     print("RESULT TABLE")
@@ -225,26 +345,63 @@ def main():
             index=False,
             formatters={
                 "final_nav": lambda x: f"{x:.3f}",
+                "ann_return": lambda x: f"{x:.2%}",
+                "ann_volatility": lambda x: f"{x:.2%}",
                 "sharpe": lambda x: f"{x:.3f}",
+                "sortino": lambda x: f"{x:.3f}",
                 "max_drawdown": lambda x: f"{x:.2%}",
+                "calmar": lambda x: f"{x:.3f}",
             },
         )
     )
 
+    # ---------- BL RANKING (by Sharpe) ----------
     bl_only = (
         df[df["strategy"] == "BL"]
-        .sort_values("final_nav", ascending=False)
+        .sort_values("sharpe", ascending=False)
         .reset_index(drop=True)
     )
 
     print("\n" + "=" * 80)
-    print("BL RANKING (by final NAV)")
+    print("BL SCENARIOS RANKED (by Sharpe)")
     print("=" * 80)
     for i, row in bl_only.iterrows():
         print(
-            f"{i + 1}. {row['scenario']}: NAV={row['final_nav']:.3f}, "
-            f"Sharpe={row['sharpe']:.3f}, MDD={row['max_drawdown']:.2%}"
+            f"{i + 1}. {row['scenario']:<12} | "
+            f"NAV={row['final_nav']:.3f} | "
+            f"AnnRet={row['ann_return']:.2%} | "
+            f"Vol={row['ann_volatility']:.2%} | "
+            f"Sharpe={row['sharpe']:.3f} | "
+            f"Sortino={row['sortino']:.3f} | "
+            f"MDD={row['max_drawdown']:.2%} | "
+            f"Calmar={row['calmar']:.3f}"
         )
+
+    # Side-by-side baseline (ml_xgboost) vs new (ranking)
+    if "ml_xgboost" in results_by_scenario and "ranking" in results_by_scenario:
+        print("\n" + "=" * 80)
+        print("BASELINE (ml_xgboost) vs NEW (ranking) - BL strategy")
+        print("=" * 80)
+        baseline = bl_only[bl_only["scenario"] == "ml_xgboost"].iloc[0]
+        new = bl_only[bl_only["scenario"] == "ranking"].iloc[0]
+        metric_keys = [
+            ("final_nav", "{:.3f}"),
+            ("ann_return", "{:.2%}"),
+            ("ann_volatility", "{:.2%}"),
+            ("sharpe", "{:.3f}"),
+            ("sortino", "{:.3f}"),
+            ("max_drawdown", "{:.2%}"),
+            ("calmar", "{:.3f}"),
+        ]
+        print(f"  {'Metric':<16} {'ml_xgboost':>14} {'ranking':>14} {'Δ':>14}")
+        for key, fmt in metric_keys:
+            b_val = baseline[key]
+            n_val = new[key]
+            delta = n_val - b_val
+            print(
+                f"  {key:<16} {fmt.format(b_val):>14} "
+                f"{fmt.format(n_val):>14} {fmt.format(delta):>14}"
+            )
 
     out_path = Path(args.output_csv)
     if not out_path.is_absolute():

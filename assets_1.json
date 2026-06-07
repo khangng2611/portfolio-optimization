@@ -1,0 +1,253 @@
+{
+  "default_selection": [
+    "ACB",
+    "BID",
+    "CTG",
+    "DGC",
+    "FPT",
+    "GAS",
+    "GVR",
+    "HDB",
+    "HPG",
+    "LPB",
+    "MBB",
+    "MSN",
+    "MWG",
+    "PLX",
+    "SAB",
+    "SHB",
+    "SSI",
+    "STB",
+    "TCB",
+    "TPB",
+    "VCB",
+    "VHM",
+    "VIB",
+    "VIC",
+    "VJC",
+    "VNM",
+    "VPB",
+    "VRE",
+    "GOLD",
+    "MBBOND"
+  ],
+  "assets": {
+    "ACB": {
+      "full_path": "datasets/stocks/full/ACB.csv",
+      "train_path": "datasets/stocks/train/ACB_train.csv",
+      "test_path": "datasets/stocks/test/ACB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "BID": {
+      "full_path": "datasets/stocks/full/BID.csv",
+      "train_path": "datasets/stocks/train/BID_train.csv",
+      "test_path": "datasets/stocks/test/BID_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "CTG": {
+      "full_path": "datasets/stocks/full/CTG.csv",
+      "train_path": "datasets/stocks/train/CTG_train.csv",
+      "test_path": "datasets/stocks/test/CTG_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "DGC": {
+      "full_path": "datasets/stocks/full/DGC.csv",
+      "train_path": "datasets/stocks/train/DGC_train.csv",
+      "test_path": "datasets/stocks/test/DGC_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "FPT": {
+      "full_path": "datasets/stocks/full/FPT.csv",
+      "train_path": "datasets/stocks/train/FPT_train.csv",
+      "test_path": "datasets/stocks/test/FPT_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "GAS": {
+      "full_path": "datasets/stocks/full/GAS.csv",
+      "train_path": "datasets/stocks/train/GAS_train.csv",
+      "test_path": "datasets/stocks/test/GAS_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "GVR": {
+      "full_path": "datasets/stocks/full/GVR.csv",
+      "train_path": "datasets/stocks/train/GVR_train.csv",
+      "test_path": "datasets/stocks/test/GVR_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "HDB": {
+      "full_path": "datasets/stocks/full/HDB.csv",
+      "train_path": "datasets/stocks/train/HDB_train.csv",
+      "test_path": "datasets/stocks/test/HDB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "HPG": {
+      "full_path": "datasets/stocks/full/HPG.csv",
+      "train_path": "datasets/stocks/train/HPG_train.csv",
+      "test_path": "datasets/stocks/test/HPG_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "LPB": {
+      "full_path": "datasets/stocks/full/LPB.csv",
+      "train_path": "datasets/stocks/train/LPB_train.csv",
+      "test_path": "datasets/stocks/test/LPB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "MBB": {
+      "full_path": "datasets/stocks/full/MBB.csv",
+      "train_path": "datasets/stocks/train/MBB_train.csv",
+      "test_path": "datasets/stocks/test/MBB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "MSN": {
+      "full_path": "datasets/stocks/full/MSN.csv",
+      "train_path": "datasets/stocks/train/MSN_train.csv",
+      "test_path": "datasets/stocks/test/MSN_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "MWG": {
+      "full_path": "datasets/stocks/full/MWG.csv",
+      "train_path": "datasets/stocks/train/MWG_train.csv",
+      "test_path": "datasets/stocks/test/MWG_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "PLX": {
+      "full_path": "datasets/stocks/full/PLX.csv",
+      "train_path": "datasets/stocks/train/PLX_train.csv",
+      "test_path": "datasets/stocks/test/PLX_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "SAB": {
+      "full_path": "datasets/stocks/full/SAB.csv",
+      "train_path": "datasets/stocks/train/SAB_train.csv",
+      "test_path": "datasets/stocks/test/SAB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "SHB": {
+      "full_path": "datasets/stocks/full/SHB.csv",
+      "train_path": "datasets/stocks/train/SHB_train.csv",
+      "test_path": "datasets/stocks/test/SHB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "SSI": {
+      "full_path": "datasets/stocks/full/SSI.csv",
+      "train_path": "datasets/stocks/train/SSI_train.csv",
+      "test_path": "datasets/stocks/test/SSI_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "STB": {
+      "full_path": "datasets/stocks/full/STB.csv",
+      "train_path": "datasets/stocks/train/STB_train.csv",
+      "test_path": "datasets/stocks/test/STB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "TCB": {
+      "full_path": "datasets/stocks/full/TCB.csv",
+      "train_path": "datasets/stocks/train/TCB_train.csv",
+      "test_path": "datasets/stocks/test/TCB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "TPB": {
+      "full_path": "datasets/stocks/full/TPB.csv",
+      "train_path": "datasets/stocks/train/TPB_train.csv",
+      "test_path": "datasets/stocks/test/TPB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VCB": {
+      "full_path": "datasets/stocks/full/VCB.csv",
+      "train_path": "datasets/stocks/train/VCB_train.csv",
+      "test_path": "datasets/stocks/test/VCB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VHM": {
+      "full_path": "datasets/stocks/full/VHM.csv",
+      "train_path": "datasets/stocks/train/VHM_train.csv",
+      "test_path": "datasets/stocks/test/VHM_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VIB": {
+      "full_path": "datasets/stocks/full/VIB.csv",
+      "train_path": "datasets/stocks/train/VIB_train.csv",
+      "test_path": "datasets/stocks/test/VIB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VIC": {
+      "full_path": "datasets/stocks/full/VIC.csv",
+      "train_path": "datasets/stocks/train/VIC_train.csv",
+      "test_path": "datasets/stocks/test/VIC_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VJC": {
+      "full_path": "datasets/stocks/full/VJC.csv",
+      "train_path": "datasets/stocks/train/VJC_train.csv",
+      "test_path": "datasets/stocks/test/VJC_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VNM": {
+      "full_path": "datasets/stocks/full/VNM.csv",
+      "train_path": "datasets/stocks/train/VNM_train.csv",
+      "test_path": "datasets/stocks/test/VNM_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VPB": {
+      "full_path": "datasets/stocks/full/VPB.csv",
+      "train_path": "datasets/stocks/train/VPB_train.csv",
+      "test_path": "datasets/stocks/test/VPB_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "VRE": {
+      "full_path": "datasets/stocks/full/VRE.csv",
+      "train_path": "datasets/stocks/train/VRE_train.csv",
+      "test_path": "datasets/stocks/test/VRE_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "GOLD": {
+      "full_path": "datasets/gold/gold_test.csv",
+      "train_path": "datasets/gold/gold_train.csv",
+      "test_path": "datasets/gold/gold_test.csv",
+      "date_col": "date",
+      "price_col": "sjc_sell"
+    },
+    "MBBOND": {
+      "full_path": "datasets/funds/full/MBBOND.csv",
+      "train_path": "datasets/funds/train/MBBOND_train.csv",
+      "test_path": "datasets/funds/test/MBBOND_test.csv",
+      "date_col": "date",
+      "price_col": "price"
+    },
+    "E1VFVN30": {
+      "full_path": "datasets/stocks/full/E1VFVN30.csv",
+      "train_path": "datasets/stocks/train/E1VFVN30_train.csv",
+      "test_path": "datasets/stocks/test/E1VFVN30_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    }
+  }
+}

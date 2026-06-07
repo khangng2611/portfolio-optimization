@@ -134,7 +134,36 @@ python backtest.py --view-mode ml --ml-model-type xgboost
 python backtest.py --view-mode combined --ml-model-type xgboost
 ```
 
-## 7. Train model XGBoost cho ML views
+## 7. Ranking Mode (Enhanced Pipeline)
+
+The ranking mode implements a representative stock selection + pairwise ranking approach:
+
+### Quick Start
+
+```bash
+# Run ranking backtest on training period
+python backtest.py --phase train --view-mode ranking --assets-config assets_1.json --no-plot
+
+# Compare all view modes
+python run_compare_backtests.py --phase train --no-plot
+```
+
+### Pipeline
+
+1. **K-Medoids Selection**: Selects K=5 representative stocks from VN30 universe
+2. **XGBoost Ranker**: Predicts relative stock performance using LambdaMART
+3. **Relative Views**: Generates pairwise BL views (Stock A > Stock B)
+4. **Black-Litterman**: Incorporates relative views with dynamic confidence
+5. **MVO**: Optimizes combined portfolio (K stocks + Gold + MBBOND)
+
+### Configuration (config.py)
+
+- `RANKING_K`: Number of representative stocks (default: 5)
+- `RANKING_RETRAIN_FREQUENCY`: Retrain ranker every N days (default: 20)
+- `RANKING_RESELECT_FREQUENCY`: Re-run K-Medoids every N days (default: 60)
+- `RANKING_VIEW_SPREAD`: Annual spread for relative views (default: 0.03)
+
+## 8. Train model XGBoost cho ML views
 
 ML mode cần model đã train trước. Script train:
 
@@ -165,7 +194,7 @@ Sau khi train, chạy backtest với ML:
 python backtest.py --phase test --view-mode ml --ml-model-type xgboost
 ```
 
-## 8. So sánh nhanh rule-based và ML
+## 9. So sánh nhanh rule-based và ML
 
 ```bash
 python run_compare_backtests.py --phase test
@@ -175,7 +204,7 @@ Output mặc định:
 - `reports/backtest_compare_views.csv`
 - `reports/backtest_compare_views.png`
 
-## 9. Lỗi thường gặp
+## 10. Lỗi thường gặp
 
 1. Báo không tìm thấy model khi chạy `--view-mode ml`:
 - Train model trước bằng `gen_view/xgboost/model_train.py`

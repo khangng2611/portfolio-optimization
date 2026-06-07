@@ -558,3 +558,17 @@ def combine_views(
     return combined
 
 
+def generate_ranking_views_bridge(
+    rank_scores: dict,
+    ensemble_std: dict,
+    assets: list,
+    spread: float = 0.03,
+):
+    """
+    Bridge function to ranking relative view generation.
+
+    Delegates to gen_view.ranking.relative_views.generate_ranking_relative_views().
+    """
+    from gen_view.ranking.relative_views import generate_ranking_relative_views
+    return generate_ranking_relative_views(rank_scores, ensemble_std, assets, spread)
+

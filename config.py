@@ -57,10 +57,30 @@ STATIC_VIEWS = [
 # ====================== ML DEFAULTS ======================
 ML_MODEL_TYPE = "xgboost"
 
-DEFAULT_FEATURE_WINDOW = 20
+DEFAULT_FEATURE_WINDOW = 30
 DEFAULT_PREDICTION_HORIZON = 5
 ML_MIN_RETURN_THRESHOLD = 0.005
 
 # ML Training mode: "pretrained" (load from cache) or "walk_forward" (retrain during backtest)
 ML_TRAINING_MODE = "walk_forward"
 ML_RETRAIN_FREQUENCY = 20
+
+# ====================== RANKING MODE ======================
+RANKING_K = 5                          # Number of representative stocks to select
+RANKING_PREDICTION_HORIZON = 5         # Forward-looking days for ranking labels
+RANKING_FEATURE_WINDOW = 60            # Lookback window for feature computation
+RANKING_RETRAIN_FREQUENCY = 20         # Retrain ranking model every N days
+RANKING_RESELECT_FREQUENCY = 60        # Re-run K-Medoids every N days
+RANKING_VIEW_SPREAD = 0.03             # Annual spread for relative views
+VN30_LIST_PATH = "datasets/vn30_list.txt"
+
+# ====================== RANKING RISK MANAGEMENT ======================
+RANKING_MIN_DEFENSIVE_WEIGHT = 0.25    # Min 25% in Gold + MBBOND combined
+RANKING_MAX_EQUITY_EXPOSURE = 0.70     # Max 70% total in stocks
+RANKING_VOL_DAMPENER_THRESHOLD = 1.3   # Vol ratio threshold for confidence reduction
+RANKING_VOL_DAMPENER_SEVERE = 1.8      # Severe vol -> more aggressive dampening
+RANKING_DRAWDOWN_LOOKBACK = 60         # Days to compute recent drawdown
+RANKING_DRAWDOWN_THRESHOLD = -0.10     # 10% drawdown triggers defensive mode
+RANKING_DEFENSIVE_CONFIDENCE = 0.80    # Confidence for defensive views in stress
+RANKING_RISK_AVERSION_BASE = 2.5       # Higher risk aversion for ranking mode (vs 0.5 default)
+RANKING_RISK_AVERSION_STRESS = 5.0     # Even higher during stress regime

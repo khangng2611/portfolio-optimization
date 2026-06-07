@@ -34,6 +34,19 @@ from config import (
     TRADING_DAYS_PER_YEAR,
     VIEW_MODE,
     WINDOW,
+    RANKING_K,
+    RANKING_FEATURE_WINDOW,
+    RANKING_PREDICTION_HORIZON,
+    RANKING_RETRAIN_FREQUENCY,
+    RANKING_RESELECT_FREQUENCY,
+    RANKING_VIEW_SPREAD,
+    VN30_LIST_PATH,
+    RANKING_MIN_DEFENSIVE_WEIGHT,
+    RANKING_MAX_EQUITY_EXPOSURE,
+    RANKING_VOL_DAMPENER_THRESHOLD,
+    RANKING_VOL_DAMPENER_SEVERE,
+    RANKING_RISK_AVERSION_BASE,
+    RANKING_RISK_AVERSION_STRESS,
 )
 from gen_view.xgboost.config import MIN_TRAIN_SAMPLES
 from gen_view.view_generators import (
@@ -45,6 +58,10 @@ from gen_view.view_generators import (
     combine_views,
 )
 from gen_view.xgboost.xgboost_core import XGBoostCoreModel, XGBoostEnsembleModel
+from gen_view.ranking.stock_selection import select_representatives
+from gen_view.ranking.ranking_model import XGBoostRankingModel
+from gen_view.ranking.relative_views import generate_ranking_relative_views
+from gen_view.ranking.risk_management import detect_market_regime, generate_defensive_views
 
 ROOT_DIR = Path(__file__).resolve().parent
 ML_MODEL_CACHE_DIR = ROOT_DIR / "gen_view" / "xgboost" / ".cache"
@@ -78,7 +95,7 @@ def parse_args():
     )
     parser.add_argument(
         "--view-mode",
-        choices=["rule_based", "relative", "ml", "combined"],
+        choices=["rule_based", "relative", "ml", "combined", "ranking", "ranking_absolute"],
         default=VIEW_MODE,
         help="View generation mode",
     )
@@ -95,6 +112,56 @@ def parse_args():
         help="ML training mode: pretrained (load cached) or walk_forward (retrain during backtest)",
     )
     return parser.parse_args()
+
+
+def load_vn30_universe_prices(start_date, end_date, phase, window):
+    """Load price data for the full VN30 stock universe (for K-Medoids selection)."""
+    vn30_list_path = ROOT_DIR / VN30_LIST_PATH
+    with open(vn30_list_path, "r") as f:
+        vn30_tickers = [line.strip() for line in f if line.strip()]
+
+    # Build asset config for VN30 stocks
+    vn30_assets = {}
+    for ticker in vn30_tickers:
+        vn30_assets[ticker] = {
+            "full_path": ROOT_DIR / f"datasets/stocks/full/{ticker}.csv",
+            "train_path": ROOT_DIR / f"datasets/stocks/train/{ticker}_train.csv",
+            "test_path": ROOT_DIR / f"datasets/stocks/test/{ticker}_test.csv",
+            "date_col": "date",
+            "price_col": "close",
+        }
+
+    prices = build_price_table(
+        start_date=start_date,
+        end_date=end_date,
+        assets=vn30_assets,
+        phase=phase,
+        data_mode=BACKTEST_DATA_MODE,
+        window=window,
+    )
+    return prices
+
+
+def load_market_proxy_prices(start_date, end_date, phase, window):
+    """Load E1VFVN30 ETF prices as market proxy."""
+    market_asset = {
+        "E1VFVN30": {
+            "full_path": ROOT_DIR / "datasets/stocks/full/E1VFVN30.csv",
+            "train_path": ROOT_DIR / "datasets/stocks/train/E1VFVN30_train.csv",
+            "test_path": ROOT_DIR / "datasets/stocks/test/E1VFVN30_test.csv",
+            "date_col": "date",
+            "price_col": "close",
+        }
+    }
+    prices = build_price_table(
+        start_date=start_date,
+        end_date=end_date,
+        assets=market_asset,
+        phase=phase,
+        data_mode=BACKTEST_DATA_MODE,
+        window=window,
+    )
+    return prices["E1VFVN30"]
 
 
 def load_ml_model(model_type: str) -> XGBoostCoreModel:
@@ -154,6 +221,86 @@ def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
                 continue
 
     return np.full(n, 1.0 / n)
+
+
+def optimize_weight_ranking(
+    mu,
+    sigma,
+    assets,
+    risk_aversion=RANKING_RISK_AVERSION_BASE,
+    max_weight=MAX_POSITION_SIZE,
+    min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
+    max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
+    defensive_assets=None,
+):
+    """
+    Constrained MVO for ranking mode with downside protection.
+
+    Additional constraints beyond standard MVO:
+    1. sum(defensive_assets weights) >= min_defensive_weight
+    2. sum(stock weights) <= max_equity_exposure
+    3. Higher risk_aversion penalizes variance more heavily
+    """
+    if defensive_assets is None:
+        defensive_assets = ["GOLD", "MBBOND"]
+
+    mu = np.asarray(mu, dtype=float)
+    sigma = np.asarray(sigma, dtype=float)
+    n = len(mu)
+
+    sigma = np.nan_to_num(sigma, nan=0.0, posinf=0.0, neginf=0.0)
+    sigma = 0.5 * (sigma + sigma.T)
+    eigvals, eigvecs = np.linalg.eigh(sigma)
+    eigvals = np.clip(eigvals, 1e-8, None)
+    sigma = eigvecs @ np.diag(eigvals) @ eigvecs.T
+
+    defensive_indices = [i for i, a in enumerate(assets) if a in defensive_assets]
+    stock_indices = [i for i, a in enumerate(assets) if a not in defensive_assets]
+
+    w = cp.Variable(n)
+    objective = cp.Maximize(mu @ w - risk_aversion * cp.quad_form(w, sigma))
+
+    constraints = [
+        cp.sum(w) == 1,
+        w >= 0,
+        w <= max_weight,
+    ]
+
+    if defensive_indices:
+        constraints.append(cp.sum(w[defensive_indices]) >= min_defensive_weight)
+
+    if stock_indices:
+        constraints.append(cp.sum(w[stock_indices]) <= max_equity_exposure)
+
+    problem = cp.Problem(objective, constraints)
+
+    installed = set(cp.installed_solvers())
+    for solver_name in ["ECOS", "OSQP", "SCS"]:
+        if solver_name in installed:
+            try:
+                problem.solve(solver=getattr(cp, solver_name))
+                if (
+                    problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]
+                    and w.value is not None
+                ):
+                    weight = np.maximum(w.value, 0)
+                    total = np.sum(weight)
+                    if total > 0:
+                        return weight / total
+            except Exception:
+                continue
+
+    # Fallback: give min_defensive_weight to defensive, rest equal across stocks
+    fallback = np.zeros(n)
+    if defensive_indices:
+        def_w = min_defensive_weight / len(defensive_indices)
+        for i in defensive_indices:
+            fallback[i] = def_w
+    if stock_indices:
+        stock_w = (1.0 - min_defensive_weight) / len(stock_indices)
+        for i in stock_indices:
+            fallback[i] = stock_w
+    return fallback
 
 
 def generate_dynamic_views(
@@ -264,6 +411,9 @@ def backtest(
     ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
     ml_training_mode="pretrained",
     retrain_frequency=ML_RETRAIN_FREQUENCY,
+    # NEW: ranking mode parameters
+    ranking_universe_prices=None,   # Full VN30 stock prices for selection
+    ranking_market_prices=None,     # E1VFVN30 for features
 ):
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
@@ -291,6 +441,26 @@ def backtest(
 
     prediction_horizon = getattr(ml_model, "prediction_horizon", DEFAULT_PREDICTION_HORIZON) if ml_model else DEFAULT_PREDICTION_HORIZON
 
+    # Ranking mode state (shared for 'ranking' and 'ranking_absolute')
+    ranking_model = None
+    ranking_abs_model = None
+    selected_stocks = None
+    last_reselect_t = -RANKING_RESELECT_FREQUENCY  # force first selection
+    last_ranking_retrain_t = -RANKING_RETRAIN_FREQUENCY  # force first train
+
+    if view_mode == "ranking":
+        ranking_model = XGBoostRankingModel()
+        if ranking_universe_prices is None or ranking_market_prices is None:
+            raise ValueError(
+                "ranking mode requires ranking_universe_prices and ranking_market_prices"
+            )
+    elif view_mode == "ranking_absolute":
+        ranking_abs_model = XGBoostEnsembleModel()
+        if ranking_universe_prices is None or ranking_market_prices is None:
+            raise ValueError(
+                "ranking_absolute mode requires ranking_universe_prices and ranking_market_prices"
+            )
+
     for t in range(window, len(returns)):
         hist = returns.iloc[t - window : t]
         r_t = returns.iloc[t].values
@@ -305,67 +475,261 @@ def backtest(
 
             market_weights = np.full(m, 1.0 / m)
 
-            # Walk-forward: retrain model if due
-            if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and last_retrain_t is not None:
-                if t - last_retrain_t >= retrain_frequency:
-                    train_end = t - prediction_horizon  # embargo gap
-                    feature_window = getattr(ml_model, "feature_window", DEFAULT_FEATURE_WINDOW)
-                    min_samples = getattr(ml_model, "_min_train_check", MIN_TRAIN_SAMPLES)
-                    if train_end >= min_samples + feature_window:
-                        train_prices = prices.iloc[:train_end]
-                        ml_model.train(train_prices, verbose=False)
-                        last_retrain_t = t
+            if view_mode == "ranking":
+                # --- RANKING MODE ---
+                # Re-select representative stocks if due
+                if (
+                    t - last_reselect_t >= RANKING_RESELECT_FREQUENCY
+                    or selected_stocks is None
+                ):
+                    # Use only VN30 prices up to current time for selection
+                    universe_up_to_t = ranking_universe_prices.iloc[: t + window]
+                    selected_stocks = select_representatives(
+                        universe_up_to_t, k=RANKING_K
+                    )
+                    last_reselect_t = t
 
+                # Retrain ranking model if due
+                if (
+                    t - last_ranking_retrain_t >= RANKING_RETRAIN_FREQUENCY
+                    or not ranking_model.is_trained
+                ):
+                    train_end = t - RANKING_PREDICTION_HORIZON  # embargo gap
+                    if train_end > RANKING_FEATURE_WINDOW + 50:
+                        stock_prices_train = ranking_universe_prices[selected_stocks].iloc[
+                            :train_end
+                        ]
+                        market_train = ranking_market_prices.iloc[:train_end]
+                        ranking_model.train(
+                            stock_prices_train, market_train, verbose=False
+                        )
+                        last_ranking_retrain_t = t
 
-            # Use data up to current time only (no look-ahead)
-            price_window = prices.iloc[max(0, t - window - 30) : t]
+                # Predict rankings and generate relative views
+                if ranking_model.is_trained and selected_stocks is not None:
+                    lookback_start = max(0, t - RANKING_FEATURE_WINDOW - 30)
+                    stock_prices_recent = ranking_universe_prices[selected_stocks].iloc[
+                        lookback_start : t + window
+                    ]
+                    market_recent = ranking_market_prices.iloc[
+                        lookback_start : t + window
+                    ]
+                    rank_scores, ensemble_std = ranking_model.predict(
+                        stock_prices_recent, market_recent
+                    )
 
-            # Only generate ML views if model is trained
-            effective_ml_model = ml_model
-            if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and hasattr(ml_model, "is_trained"):
-                if not ml_model.is_trained:
-                    effective_ml_model = None
+                    p_view, q_view, conf_view, view_names = generate_ranking_relative_views(
+                        rank_scores, ensemble_std, assets, spread=RANKING_VIEW_SPREAD
+                    )
+                else:
+                    p_view, q_view, conf_view, view_names = None, None, None, []
 
-            p_view, q_view, conf_view, view_names = generate_dynamic_views(
-                price_window,
-                assets,
-                view_mode,
-                ml_model=effective_ml_model,
-                ml_min_return_threshold=ml_min_return_threshold,
-            )
+                # --- RANKING RISK MANAGEMENT ---
+                # Detect market regime
+                regime = detect_market_regime(returns, t)
 
-            # Volatility-based confidence dampener: reduce confidence when
-            # recent volatility spikes vs historical (detects crash onset)
-            if conf_view is not None and view_mode in ("ml", "combined"):
-                recent_vol = returns.iloc[max(0, t - 20) : t].std().mean()
-                hist_vol = returns.iloc[max(0, t - 120) : t].std().mean()
-                vol_ratio = recent_vol / hist_vol if hist_vol > 0 else 1.0
-                if vol_ratio > 1.3:
-                    dampener = 1.3 / vol_ratio
-                    conf_view = conf_view * dampener
-            views_history.append({
-                "date": returns.index[t],
-                "view_names": view_names if p_view is not None else [],
-                "q_values": q_view.tolist() if q_view is not None else [],
-                "confidences": conf_view.tolist() if conf_view is not None else [],
-            })
-            
-            if p_view is not None:
-                mu_bl = black_litterman_posterior_mu(
-                    sigma, market_weights, p_view, q_view, conf_view
+                # Apply volatility dampener to ranking views
+                if conf_view is not None:
+                    if regime["vol_ratio"] > RANKING_VOL_DAMPENER_THRESHOLD:
+                        dampener = RANKING_VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
+                        conf_view = conf_view * dampener
+
+                # Inject defensive views during stress/crisis
+                if regime["regime"] in ("stress", "crisis"):
+                    def_p, def_q, def_conf, def_names = generate_defensive_views(
+                        regime, assets
+                    )
+                    if def_p is not None:
+                        if p_view is not None:
+                            p_view = np.vstack([p_view, def_p])
+                            q_view = np.concatenate([q_view, def_q])
+                            conf_view = np.concatenate([conf_view, def_conf])
+                            view_names = list(view_names) + list(def_names)
+                        else:
+                            p_view, q_view, conf_view = def_p, def_q, def_conf
+                            view_names = list(def_names)
+
+                # Record views history
+                views_history.append({
+                    "date": returns.index[t],
+                    "view_names": view_names if p_view is not None else [],
+                    "q_values": q_view.tolist() if q_view is not None else [],
+                    "confidences": conf_view.tolist() if conf_view is not None else [],
+                })
+
+                # Black-Litterman posterior
+                if p_view is not None:
+                    mu_bl = black_litterman_posterior_mu(
+                        sigma, market_weights, p_view, q_view, conf_view
+                    )
+                else:
+                    mu_bl = mu
+
+                # Use constrained optimizer with regime-adaptive risk aversion
+                current_risk_aversion = (
+                    RANKING_RISK_AVERSION_STRESS
+                    if regime["regime"] == "crisis"
+                    else RANKING_RISK_AVERSION_BASE
+                )
+                bl_weight = optimize_weight_ranking(
+                    mu_bl,
+                    sigma,
+                    assets,
+                    risk_aversion=current_risk_aversion,
+                    min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
+                    max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
+                )
+            elif view_mode == "ranking_absolute":
+                # --- RANKING ABSOLUTE MODE ---
+                # Re-select representative stocks if due (same logic as ranking)
+                if (
+                    t - last_reselect_t >= RANKING_RESELECT_FREQUENCY
+                    or selected_stocks is None
+                ):
+                    universe_up_to_t = ranking_universe_prices.iloc[: t + window]
+                    selected_stocks = select_representatives(
+                        universe_up_to_t, k=RANKING_K
+                    )
+                    last_reselect_t = t
+
+                # Retrain XGBoost Ensemble (regression) on selected stocks if due
+                if (
+                    t - last_ranking_retrain_t >= RANKING_RETRAIN_FREQUENCY
+                    or not ranking_abs_model.is_trained
+                ):
+                    train_end = t - RANKING_PREDICTION_HORIZON  # embargo gap
+                    if train_end > RANKING_FEATURE_WINDOW + 50:
+                        # Build price table for selected stocks only
+                        stock_prices_train = ranking_universe_prices[selected_stocks].iloc[:train_end]
+                        ranking_abs_model.train(stock_prices_train, verbose=False)
+                        last_ranking_retrain_t = t
+
+                # Predict absolute returns for selected stocks
+                if ranking_abs_model.is_trained and selected_stocks is not None:
+                    lookback_start = max(0, t - RANKING_FEATURE_WINDOW - 30)
+                    stock_prices_recent = ranking_universe_prices[selected_stocks].iloc[
+                        lookback_start : t + window
+                    ]
+                    predictions = ranking_abs_model.predict(stock_prices_recent)
+                    # Generate absolute ML views
+                    ml_views = generate_ml_views(
+                        predictions,
+                        prediction_horizon=ranking_abs_model.prediction_horizon,
+                        min_return_threshold=ML_MIN_RETURN_THRESHOLD,
+                    )
+                    p_view, q_view, conf_view, view_names = build_views_matrix(
+                        ml_views, assets
+                    )
+                else:
+                    p_view, q_view, conf_view, view_names = None, None, None, []
+
+                # --- RISK MANAGEMENT (same as ranking mode) ---
+                regime = detect_market_regime(returns, t)
+
+                # Apply volatility dampener
+                if conf_view is not None:
+                    if regime["vol_ratio"] > RANKING_VOL_DAMPENER_THRESHOLD:
+                        dampener = RANKING_VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
+                        conf_view = conf_view * dampener
+
+                # Inject defensive views during stress/crisis
+                if regime["regime"] in ("stress", "crisis"):
+                    def_p, def_q, def_conf, def_names = generate_defensive_views(
+                        regime, assets
+                    )
+                    if def_p is not None:
+                        if p_view is not None:
+                            p_view = np.vstack([p_view, def_p])
+                            q_view = np.concatenate([q_view, def_q])
+                            conf_view = np.concatenate([conf_view, def_conf])
+                            view_names = list(view_names) + list(def_names)
+                        else:
+                            p_view, q_view, conf_view = def_p, def_q, def_conf
+                            view_names = list(def_names)
+
+                # Record views history
+                views_history.append({
+                    "date": returns.index[t],
+                    "view_names": view_names if p_view is not None else [],
+                    "q_values": q_view.tolist() if q_view is not None else [],
+                    "confidences": conf_view.tolist() if conf_view is not None else [],
+                })
+
+                # Black-Litterman posterior
+                if p_view is not None:
+                    mu_bl = black_litterman_posterior_mu(
+                        sigma, market_weights, p_view, q_view, conf_view
+                    )
+                else:
+                    mu_bl = mu
+
+                # Use constrained optimizer with regime-adaptive risk aversion
+                current_risk_aversion = (
+                    RANKING_RISK_AVERSION_STRESS
+                    if regime["regime"] == "crisis"
+                    else RANKING_RISK_AVERSION_BASE
+                )
+                bl_weight = optimize_weight_ranking(
+                    mu_bl,
+                    sigma,
+                    assets,
+                    risk_aversion=current_risk_aversion,
+                    min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
+                    max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
                 )
             else:
-                mu_bl = mu
-            bl_weight = optimize_weight(mu_bl, sigma)
+                # --- EXISTING MODES (rule_based, relative, ml, combined) ---
+                # Walk-forward: retrain model if due
+                if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and last_retrain_t is not None:
+                    if t - last_retrain_t >= retrain_frequency:
+                        train_end = t - prediction_horizon  # embargo gap
+                        feature_window = getattr(ml_model, "feature_window", DEFAULT_FEATURE_WINDOW)
+                        min_samples = getattr(ml_model, "_min_train_check", MIN_TRAIN_SAMPLES)
+                        if train_end >= min_samples + feature_window:
+                            train_prices = prices.iloc[:train_end]
+                            ml_model.train(train_prices, verbose=False)
+                            last_retrain_t = t
 
-            # Cap BL deviation from MVO: BL can tilt towards its view
-            # but not deviate too far from MVO's market-based allocation.
-            # This protects against catastrophic wrong views while preserving alpha.
-            BL_DEVIATION_ALPHA = 0.25  # BL keeps 25% of its deviation from MVO
-            bl_weight = mvo_weight + BL_DEVIATION_ALPHA * (bl_weight - mvo_weight)
-            # Re-normalize to sum to 1 and clip negatives
-            bl_weight = np.maximum(bl_weight, 0)
-            bl_weight = bl_weight / bl_weight.sum()
+                # Use data up to current time only (no look-ahead)
+                price_window = prices.iloc[max(0, t - window - 30) : t]
+
+                # Only generate ML views if model is trained
+                effective_ml_model = ml_model
+                if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and hasattr(ml_model, "is_trained"):
+                    if not ml_model.is_trained:
+                        effective_ml_model = None
+
+                p_view, q_view, conf_view, view_names = generate_dynamic_views(
+                    price_window,
+                    assets,
+                    view_mode,
+                    ml_model=effective_ml_model,
+                    ml_min_return_threshold=ml_min_return_threshold,
+                )
+
+                # Volatility-based confidence dampener: reduce confidence when
+                # recent volatility spikes vs historical (detects crash onset)
+                if conf_view is not None and view_mode in ("ml", "combined"):
+                    recent_vol = returns.iloc[max(0, t - 20) : t].std().mean()
+                    hist_vol = returns.iloc[max(0, t - 120) : t].std().mean()
+                    vol_ratio = recent_vol / hist_vol if hist_vol > 0 else 1.0
+                    if vol_ratio > 1.3:
+                        dampener = 1.3 / vol_ratio
+                        conf_view = conf_view * dampener
+                views_history.append({
+                    "date": returns.index[t],
+                    "view_names": view_names if p_view is not None else [],
+                    "q_values": q_view.tolist() if q_view is not None else [],
+                    "confidences": conf_view.tolist() if conf_view is not None else [],
+                })
+
+                if p_view is not None:
+                    mu_bl = black_litterman_posterior_mu(
+                        sigma, market_weights, p_view, q_view, conf_view
+                    )
+                else:
+                    mu_bl = mu
+                bl_weight = optimize_weight(mu_bl, sigma)
 
             rebalance_dates.append(returns.index[t])
 
@@ -512,6 +876,15 @@ def main():
             f" ml ({COMBINED_VIEW_WEIGHTS[2]:.0%}),"
             f" static ({COMBINED_VIEW_WEIGHTS[3]:.0%})"
         )
+    elif view_mode == "ranking":
+        print(f"  - K-Medoids representative selection (K={RANKING_K}) from VN30 universe")
+        print(f"  - XGBoost Ranker -> Relative Views -> BL")
+        print(f"  - Retrain every {RANKING_RETRAIN_FREQUENCY} days, reselect every {RANKING_RESELECT_FREQUENCY} days")
+    elif view_mode == "ranking_absolute":
+        print(f"  - K={RANKING_K} representative stocks from VN30 (combinatorial selection)")
+        print(f"  - XGBoost Regression -> Absolute Views -> BL")
+        print(f"  - Retrain every {RANKING_RETRAIN_FREQUENCY} days, reselect every {RANKING_RESELECT_FREQUENCY} days")
+        print(f"  - Risk management: defensive floor {RANKING_MIN_DEFENSIVE_WEIGHT:.0%}, equity cap {RANKING_MAX_EQUITY_EXPOSURE:.0%}")
 
     ml_model = None
     ml_training_mode = args.ml_training_mode
@@ -531,12 +904,39 @@ def main():
                 print(f"\nERROR: {e}")
                 return
 
+    # Load ranking universe data if needed
+    ranking_universe_prices = None
+    ranking_market_prices = None
+    if view_mode in ("ranking", "ranking_absolute"):
+        print("\nLoading VN30 universe for ranking mode...")
+        ranking_universe_prices = load_vn30_universe_prices(
+            start_date, end_date, phase, WINDOW
+        )
+        ranking_market_prices = load_market_proxy_prices(
+            start_date, end_date, phase, WINDOW
+        )
+        # Align indices
+        common_idx = (
+            prices.index
+            .intersection(ranking_universe_prices.index)
+            .intersection(ranking_market_prices.index)
+        )
+        prices = prices.loc[common_idx]
+        ranking_universe_prices = ranking_universe_prices.loc[common_idx]
+        ranking_market_prices = ranking_market_prices.loc[common_idx]
+        print(
+            f"  Loaded {len(ranking_universe_prices.columns)} VN30 stocks, "
+            f"{len(ranking_universe_prices)} trading days"
+        )
+
     result = backtest(
         prices,
         view_mode=view_mode,
         ml_model=ml_model,
         ml_training_mode=ml_training_mode,
         retrain_frequency=ML_RETRAIN_FREQUENCY,
+        ranking_universe_prices=ranking_universe_prices,
+        ranking_market_prices=ranking_market_prices,
     )
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]

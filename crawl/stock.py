@@ -30,7 +30,7 @@ DATASETS_DIR = ROOT_DIR / "datasets"
 LIST_FILE = DATASETS_DIR / "vn30_list.txt"
 OUTPUT_DIR = DATASETS_DIR / "stocks"
 
-START_INDEX = 25  # Starting index in the list (for batch runs)
+START_INDEX = 20  # Starting index in the list (for batch runs)
 BATCH_SIZE = 10  # Number of symbols to process per run
 
 
@@ -75,8 +75,7 @@ def split_train_test(df):
 
 def fetch_and_save(symbol):
     try:
-        quote = Quote(symbol="VCI", source="VCI")
-
+        quote = Quote(symbol=symbol, source="VCI")
         df = quote.history(
             symbol=symbol,
             start=start_date,
@@ -98,7 +97,7 @@ def fetch_and_save(symbol):
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         (OUTPUT_DIR / "train").mkdir(parents=True, exist_ok=True)
         (OUTPUT_DIR / "test").mkdir(parents=True, exist_ok=True)
-        full_path = OUTPUT_DIR / f"{symbol}.csv"
+        full_path = OUTPUT_DIR / "full" / f"{symbol}.csv"
         train_path = OUTPUT_DIR / "train" / f"{symbol}_train.csv"
         test_path = OUTPUT_DIR / "test" / f"{symbol}_test.csv"
 
@@ -158,7 +157,7 @@ if __name__ == "__main__":
     # Step 1: Fetch VN30 symbols and save to file once (uncomment if file is missing)
     # retrieve_vn30_list()
 
-    retrieve_ohlcv_for_vn30_symbols()
+    # retrieve_ohlcv_for_vn30_symbols()
 
     # Fetch data for ETF E1VFVN30
-    fetch_and_save("E1VFVN30")
+    fetch_and_save("VPL")

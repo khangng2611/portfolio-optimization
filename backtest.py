@@ -29,6 +29,7 @@ from config import (
     ML_RETRAIN_FREQUENCY,
     ML_TRAINING_MODE,
     PHASE_PERIODS,
+    RANKING_DEFAULT_DEFENSIVE_ASSETS,
     RISK_FREE_RATE_ANNUAL,
     REBALANCE_FREQ,
     TRADING_DAYS_PER_YEAR,
@@ -188,7 +189,8 @@ def load_ml_model(model_type: str) -> XGBoostCoreModel:
     return model
 
 
-def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
+# def optimize_weight(mu, sigma, risk_aversion=0.5, max_weight=MAX_POSITION_SIZE):
+def optimize_weight(mu, sigma, risk_aversion=RANKING_RISK_AVERSION_BASE, max_weight=MAX_POSITION_SIZE):
     mu = np.asarray(mu, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
     n = len(mu)
@@ -231,7 +233,7 @@ def optimize_weight_ranking(
     max_weight=MAX_POSITION_SIZE,
     min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
     max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
-    defensive_assets=None,
+    defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
 ):
     """
     Constrained MVO for ranking mode with downside protection.
@@ -241,8 +243,6 @@ def optimize_weight_ranking(
     2. sum(stock weights) <= max_equity_exposure
     3. Higher risk_aversion penalizes variance more heavily
     """
-    if defensive_assets is None:
-        defensive_assets = ["GOLD", "MBBOND"]
 
     mu = np.asarray(mu, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
@@ -431,6 +431,7 @@ def backtest(
     bl_weights_hist = []
     rebalance_dates = []
     views_history = []  # Track generated views at each rebalance
+    rebalance_weights_history = []  # Per-rebalance EW/MVO/BL weight vectors
 
     # Walk-forward state
     if view_mode in ("ml", "combined") and ml_training_mode == "walk_forward" and ml_model is None:
@@ -732,6 +733,12 @@ def backtest(
                 bl_weight = optimize_weight(mu_bl, sigma)
 
             rebalance_dates.append(returns.index[t])
+            rebalance_weights_history.append({
+                "date": returns.index[t],
+                "EW": ew_weight.copy(),
+                "MVO": mvo_weight.copy(),
+                "BL": bl_weight.copy(),
+            })
 
         mvo_nav.append(mvo_nav[-1] * (1 + np.dot(mvo_weight, r_t)))
         bl_nav.append(bl_nav[-1] * (1 + np.dot(bl_weight, r_t)))
@@ -754,6 +761,7 @@ def backtest(
         "rebalance_dates": rebalance_dates,
         "assets": assets,
         "views_history": views_history,
+        "rebalance_weights_history": rebalance_weights_history,
         "view_mode": view_mode,
         "ml_model": ml_model,
     }
@@ -996,6 +1004,7 @@ def main():
             },
         },
         ml_training_mode=ml_training_mode if view_mode in ("ml", "combined") else None,
+        weights_history=result.get("rebalance_weights_history"),
     )
 
 

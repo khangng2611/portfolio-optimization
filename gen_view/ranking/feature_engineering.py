@@ -22,65 +22,11 @@ from gen_view.ranking.config import (
     RANKING_RSI_PERIOD,
     RANKING_VOLATILITY_WINDOWS,
 )
-
-
-# ====================== VECTORIZED INDICATOR HELPERS ======================
-
-
-def _ema_series(prices: pd.Series, period: int) -> pd.Series:
-    """Vectorized EMA returning the full series."""
-    return prices.ewm(span=period, adjust=False, min_periods=1).mean()
-
-
-def _rsi_series(prices: pd.Series, period: int = 14) -> pd.Series:
-    """
-    Vectorized Wilder-style RSI returning the full series.
-
-    RSI = 100 - 100 / (1 + RS), where RS = avg_gain / avg_loss over `period`.
-    Uses simple rolling means (matches the existing scalar `compute_rsi`
-    implementation in `view_generators.py`) for consistency.
-    """
-    delta = prices.diff()
-    gain = delta.where(delta > 0, 0.0)
-    loss = (-delta).where(delta < 0, 0.0)
-
-    avg_gain = gain.rolling(window=period, min_periods=period).mean()
-    avg_loss = loss.rolling(window=period, min_periods=period).mean()
-
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100.0 - (100.0 / (1.0 + rs))
-    return rsi
-
-
-def _macd_hist_series(
-    prices: pd.Series,
-    fast_period: int = 12,
-    slow_period: int = 26,
-    signal_period: int = 9,
-) -> pd.Series:
-    """Vectorized MACD histogram (MACD line minus signal line) as full series."""
-    ema_fast = _ema_series(prices, fast_period)
-    ema_slow = _ema_series(prices, slow_period)
-    macd_line = ema_fast - ema_slow
-    signal_line = _ema_series(macd_line, signal_period)
-    return macd_line - signal_line
-
-
-def _bollinger_pctb_series(
-    prices: pd.Series, period: int = 20, num_std: float = 2.0
-) -> pd.Series:
-    """
-    Vectorized Bollinger %B = (price - lower) / (upper - lower).
-
-    %B = 0.5 when price sits on the SMA, > 1 above the upper band, < 0 below
-    the lower band. Returns NaN where the band has zero width.
-    """
-    sma = prices.rolling(window=period, min_periods=period).mean()
-    std = prices.rolling(window=period, min_periods=period).std()
-    upper = sma + num_std * std
-    lower = sma - num_std * std
-    width = (upper - lower).replace(0, np.nan)
-    return (prices - lower) / width
+from utils.indicators import (
+    bollinger_pctb_series,
+    macd_hist_series,
+    rsi_series,
+)
 
 
 # ====================== MAIN FEATURE BUILDER ======================
@@ -149,14 +95,14 @@ def compute_ranking_features(
         ).std()
 
     # RSI / MACD / Bollinger %B computed column-wise (each stock independently).
-    rsi_df = prices.apply(lambda s: _rsi_series(s, RANKING_RSI_PERIOD))
+    rsi_df = prices.apply(lambda s: rsi_series(s, RANKING_RSI_PERIOD))
     macd_df = prices.apply(
-        lambda s: _macd_hist_series(
+        lambda s: macd_hist_series(
             s, RANKING_MACD_FAST, RANKING_MACD_SLOW, RANKING_MACD_SIGNAL
         )
     )
     bbpct_df = prices.apply(
-        lambda s: _bollinger_pctb_series(
+        lambda s: bollinger_pctb_series(
             s, RANKING_BOLLINGER_PERIOD, RANKING_BOLLINGER_STD
         )
     )

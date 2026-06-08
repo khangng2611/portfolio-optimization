@@ -18,161 +18,25 @@ import numpy as np
 import pandas as pd
 
 from config import DEFAULT_PREDICTION_HORIZON, STATIC_VIEWS, TRADING_DAYS_PER_YEAR
+from utils.indicators import (
+    DEFAULT_MA_LONG,
+    DEFAULT_MA_SHORT,
+    DEFAULT_MOMENTUM_PERIOD,
+    DEFAULT_RSI_PERIOD,
+    compute_ema,
+    compute_momentum,
+    compute_rsi,
+)
 
 warnings.filterwarnings("ignore")
 
 # ====================== CONSTANTS ======================
-# Rule-based defaults
-DEFAULT_MA_SHORT = 10
-DEFAULT_MA_LONG = 30
-DEFAULT_RSI_PERIOD = 14
-DEFAULT_MOMENTUM_PERIOD = 20
-DEFAULT_ATR_PERIOD = 14
-
-# Thresholds
+# Rule-based view-generation thresholds (indicator periods are imported from
+# `utils.indicators` so they stay in sync across the codebase).
 MA_CROSSOVER_THRESHOLD = 0.02  # 2% difference for MA crossover signal
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 MOMENTUM_THRESHOLD = 0.01  # 1% monthly momentum for signal
-
-
-# ====================== TECHNICAL INDICATORS ======================
-def compute_sma(prices: pd.Series, period: int) -> pd.Series:
-    """
-    Simple Moving Average (SMA)
-    
-    SMA = (P1 + P2 + ... + Pn) / n
-    
-    - Smooths price data by averaging over `period` days
-    - Lagging indicator: reacts slowly to price changes
-    """
-    return prices.rolling(window=period, min_periods=1).mean()
-
-
-def compute_ema(prices: pd.Series, period: int) -> pd.Series:
-    """
-    Exponential Moving Average (EMA)
-    
-    EMA_t = alpha * P_t + (1 - alpha) * EMA_{t-1}
-    where alpha = 2 / (period + 1)
-    
-    - Gives more weight to recent prices
-    - Reacts faster than SMA to price changes
-    """
-    return prices.ewm(span=period, adjust=False, min_periods=1).mean()
-
-
-def compute_rsi(prices: pd.Series, period: int = DEFAULT_RSI_PERIOD) -> float:
-    """
-    Relative Strength Index (RSI)
-    
-    RSI = 100 - (100 / (1 + RS))
-    where RS = Average Gain / Average Loss over `period` days
-    
-    - Momentum oscillator measuring speed/change of price movements
-    - Range: 0-100
-    - RSI > 70: Overbought (potential reversal down)
-    - RSI < 30: Oversold (potential reversal up)
-    """
-    if len(prices) < period + 1:
-        return 50.0  # Neutral if not enough data
-    
-    delta = prices.diff()
-    gain = delta.where(delta > 0, 0.0)
-    loss = (-delta).where(delta < 0, 0.0)
-    
-    avg_gain = gain.rolling(window=period, min_periods=1).mean()
-    avg_loss = loss.rolling(window=period, min_periods=1).mean()
-    
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
-    
-    return rsi.iloc[-1] if not np.isnan(rsi.iloc[-1]) else 50.0
-
-
-def compute_macd(
-    prices: pd.Series,
-    fast_period: int = 12,
-    slow_period: int = 26,
-    signal_period: int = 9,
-) -> tuple[float, float, float]:
-    """
-    Moving Average Convergence Divergence (MACD)
-    
-    MACD Line = EMA(fast) - EMA(slow)
-    Signal Line = EMA(MACD Line, signal_period)
-    Histogram = MACD Line - Signal Line
-    
-    - Trend-following momentum indicator
-    - MACD > Signal: Bullish
-    - MACD < Signal: Bearish
-    - Histogram shows strength of trend
-    """
-    ema_fast = compute_ema(prices, fast_period)
-    ema_slow = compute_ema(prices, slow_period)
-    macd_line = ema_fast - ema_slow
-    signal_line = compute_ema(macd_line, signal_period)
-    histogram = macd_line - signal_line
-    
-    return macd_line.iloc[-1], signal_line.iloc[-1], histogram.iloc[-1]
-
-
-def compute_momentum(prices: pd.Series, period: int = DEFAULT_MOMENTUM_PERIOD) -> float:
-    """
-    Rate of Change (ROC) / Momentum
-    
-    ROC = (P_t - P_{t-n}) / P_{t-n}
-    
-    - Measures percentage change over `period` days
-    - ROC > 0: Upward momentum
-    - ROC < 0: Downward momentum
-    """
-    if len(prices) <= period:
-        return 0.0
-    return (prices.iloc[-1] / prices.iloc[-period - 1]) - 1
-
-
-def compute_atr(
-    high: pd.Series, low: pd.Series, close: pd.Series, period: int = DEFAULT_ATR_PERIOD
-) -> float:
-    """
-    Average True Range (ATR)
-    
-    True Range = max(High - Low, |High - Close_prev|, |Low - Close_prev|)
-    ATR = SMA(True Range, period)
-    
-    - Measures volatility (not direction)
-    - Higher ATR = higher volatility
-    - Used to scale confidence in views
-    """
-    prev_close = close.shift(1)
-    tr1 = high - low
-    tr2 = (high - prev_close).abs()
-    tr3 = (low - prev_close).abs()
-    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = true_range.rolling(window=period, min_periods=1).mean()
-    return atr.iloc[-1] if not np.isnan(atr.iloc[-1]) else 0.0
-
-
-def compute_bollinger_bands(
-    prices: pd.Series, period: int = 20, num_std: float = 2.0
-) -> tuple[float, float, float]:
-    """
-    Bollinger Bands
-    
-    Middle Band = SMA(period)
-    Upper Band = Middle + num_std * STD(period)
-    Lower Band = Middle - num_std * STD(period)
-    
-    - Measures volatility and potential overbought/oversold conditions
-    - Price near upper band: potentially overbought
-    - Price near lower band: potentially oversold
-    """
-    sma = compute_sma(prices, period)
-    std = prices.rolling(window=period, min_periods=1).std()
-    upper = sma + num_std * std
-    lower = sma - num_std * std
-    return lower.iloc[-1], sma.iloc[-1], upper.iloc[-1]
 
 
 # ====================== VIEW GENERATORS ======================

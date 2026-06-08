@@ -42,7 +42,7 @@ from gen_view.xgboost.config import (
     VALIDATION_SPLIT_RATIO,
     VOLATILITY_WINDOW,
 )
-from gen_view.view_generators import (
+from utils.indicators import (
     compute_ema,
     compute_macd,
     compute_momentum,

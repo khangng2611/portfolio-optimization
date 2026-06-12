@@ -28,8 +28,10 @@
     "VNM",
     "VPB",
     "VRE",
+    "BVH",
+    "POW",
     "GOLD",
-    "MBBOND"
+    "VFF"
   ],
   "assets": {
     "ACB": {
@@ -228,6 +230,20 @@
       "date_col": "date",
       "price_col": "close"
     },
+    "BVH": {
+      "full_path": "datasets/stocks/full/BVH.csv",
+      "train_path": "datasets/stocks/train/BVH_train.csv",
+      "test_path": "datasets/stocks/test/BVH_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "POW": {
+      "full_path": "datasets/stocks/full/POW.csv",
+      "train_path": "datasets/stocks/train/POW_train.csv",
+      "test_path": "datasets/stocks/test/POW_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
     "GOLD": {
       "full_path": "datasets/gold/gold_test.csv",
       "train_path": "datasets/gold/gold_train.csv",
@@ -235,19 +251,12 @@
       "date_col": "date",
       "price_col": "sjc_sell"
     },
-    "MBBOND": {
-      "full_path": "datasets/funds/full/MBBOND.csv",
-      "train_path": "datasets/funds/train/MBBOND_train.csv",
-      "test_path": "datasets/funds/test/MBBOND_test.csv",
+    "VFF": {
+      "full_path": "datasets/funds/full/VFF.csv",
+      "train_path": "datasets/funds/train/VFF_train.csv",
+      "test_path": "datasets/funds/test/VFF_test.csv",
       "date_col": "date",
       "price_col": "price"
-    },
-    "E1VFVN30": {
-      "full_path": "datasets/stocks/full/E1VFVN30.csv",
-      "train_path": "datasets/stocks/train/E1VFVN30_train.csv",
-      "test_path": "datasets/stocks/test/E1VFVN30_test.csv",
-      "date_col": "date",
-      "price_col": "close"
     }
   }
 }

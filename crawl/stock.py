@@ -157,7 +157,7 @@ if __name__ == "__main__":
     # Step 1: Fetch VN30 symbols and save to file once (uncomment if file is missing)
     # retrieve_vn30_list()
 
-    # retrieve_ohlcv_for_vn30_symbols()
+    retrieve_ohlcv_for_vn30_symbols()
 
     # Fetch data for ETF E1VFVN30
-    fetch_and_save("VPL")
+    # fetch_and_save("VPL")

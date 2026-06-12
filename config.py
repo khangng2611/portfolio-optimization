@@ -19,7 +19,7 @@ PHASE_PERIODS = {
 BACKTEST_PHASE = "train"
 BACKTEST_DATA_MODE = "split"
 
-ASSETS_CONFIG_FILENAME = "assets_0.json"
+ASSETS_CONFIG_FILENAME = "assets_1.json"
 
 WINDOW = 20
 REBALANCE_FREQ = 5
@@ -32,8 +32,8 @@ BL_DELTA = 2.5
 BL_VIEW_CONFIDENCE = 0.5
 
 # ====================== VIEW GENERATION ======================
-# View generation mode: "rule_based", "relative", "ml", "combined"
-VIEW_MODE = "ml" 
+# View generation mode: "rule_based", "relative", "ml", "combined", "ranking", "ranking_absolute"
+VIEW_MODE = "ranking_absolute" 
 
 # Combined view weights: (rule_based, relative, ml, static)
 COMBINED_VIEW_WEIGHTS = (0.3, 0.3, 0.4, 0.0)
@@ -68,19 +68,21 @@ ML_RETRAIN_FREQUENCY = 20
 # ====================== RANKING MODE ======================
 RANKING_K = 5                          # Number of representative stocks to select
 RANKING_PREDICTION_HORIZON = 5         # Forward-looking days for ranking labels
-RANKING_FEATURE_WINDOW = 60            # Lookback window for feature computation
-RANKING_RETRAIN_FREQUENCY = 20         # Retrain ranking model every N days
-RANKING_RESELECT_FREQUENCY = 60        # Re-run K-Medoids every N days
-RANKING_VIEW_SPREAD = 0.03             # Annual spread for relative views
+RANKING_FEATURE_WINDOW = 40            # Lookback window for feature computation
+RANKING_RETRAIN_FREQUENCY = 10         # Retrain ranking model every N days
+RANKING_RESELECT_FREQUENCY = 20        # Re-run K-Medoids every N days
+RANKING_VIEW_SPREAD = 0.20             # Annual spread for relative views
 VN30_LIST_PATH = "datasets/vn30_list.txt"
 
 # ====================== RANKING RISK MANAGEMENT ======================
-RANKING_MIN_DEFENSIVE_WEIGHT = 0.25    # Min 25% in Gold + MBBOND combined
+RANKING_MIN_DEFENSIVE_WEIGHT = 0.15    # Min in defensive assets
 RANKING_MAX_EQUITY_EXPOSURE = 0.70     # Max 70% total in stocks
 RANKING_VOL_DAMPENER_THRESHOLD = 1.3   # Vol ratio threshold for confidence reduction
 RANKING_VOL_DAMPENER_SEVERE = 1.8      # Severe vol -> more aggressive dampening
 RANKING_DRAWDOWN_LOOKBACK = 60         # Days to compute recent drawdown
-RANKING_DRAWDOWN_THRESHOLD = -0.10     # 10% drawdown triggers defensive mode
+RANKING_DRAWDOWN_STRESS_THRESHOLD = -0.10     # 10% drawdown triggers stress mode
+RANKING_DRAWDOWN_CRISIS_THRESHOLD = -0.20     # 20% drawdown triggers crisis mode
 RANKING_DEFENSIVE_CONFIDENCE = 0.80    # Confidence for defensive views in stress
-RANKING_RISK_AVERSION_BASE = 2.5       # Higher risk aversion for ranking mode (vs 0.5 default)
+RANKING_RISK_AVERSION_BASE = 1.5       # Higher risk aversion for ranking mode (vs 0.5 default)
 RANKING_RISK_AVERSION_STRESS = 5.0     # Even higher during stress regime
+RANKING_DEFAULT_DEFENSIVE_ASSETS = ["VFF"]

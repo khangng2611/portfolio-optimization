@@ -21,8 +21,10 @@ import numpy as np
 import pandas as pd
 
 from config import (
+    RANKING_DEFAULT_DEFENSIVE_ASSETS,
     RANKING_DRAWDOWN_LOOKBACK,
-    RANKING_DRAWDOWN_THRESHOLD,
+    RANKING_DRAWDOWN_STRESS_THRESHOLD,
+    RANKING_DRAWDOWN_CRISIS_THRESHOLD,
     RANKING_DEFENSIVE_CONFIDENCE,
     RANKING_VOL_DAMPENER_THRESHOLD,
     RANKING_VOL_DAMPENER_SEVERE,
@@ -81,9 +83,9 @@ def detect_market_regime(
     equity_momentum = window_returns.mean() if len(window_returns) > 0 else 0.0
 
     # Classify regime
-    if vol_ratio >= RANKING_VOL_DAMPENER_SEVERE or current_dd <= -0.20:
+    if vol_ratio >= RANKING_VOL_DAMPENER_SEVERE or current_dd <= RANKING_DRAWDOWN_CRISIS_THRESHOLD:
         regime = "crisis"
-    elif vol_ratio >= RANKING_VOL_DAMPENER_THRESHOLD or current_dd <= RANKING_DRAWDOWN_THRESHOLD:
+    elif vol_ratio >= RANKING_VOL_DAMPENER_THRESHOLD or current_dd <= RANKING_DRAWDOWN_STRESS_THRESHOLD:
         regime = "stress"
     else:
         regime = "normal"
@@ -99,14 +101,13 @@ def detect_market_regime(
 def generate_defensive_views(
     regime: dict,
     assets: list[str],
-    defensive_assets: list[str] | None = None,
+    defensive_assets: list[str] = RANKING_DEFAULT_DEFENSIVE_ASSETS,
     confidence: float = RANKING_DEFENSIVE_CONFIDENCE,
 ) -> tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None, list[str]]:
     """
     Generate defensive views favoring safe-haven assets during market stress.
 
     Creates views of the form:
-        "GOLD outperforms average stock"
         "MBBOND outperforms average stock"
 
     The view magnitude scales with regime severity:
@@ -120,7 +121,7 @@ def generate_defensive_views(
     assets : list[str]
         Full asset list (defines P matrix columns)
     defensive_assets : list[str]
-        Assets to favor (default: ["GOLD", "MBBOND"])
+        Assets to favor (default: RANKING_DEFAULT_DEFENSIVE_ASSETS)
     confidence : float
         Confidence level for defensive views
 
@@ -129,8 +130,6 @@ def generate_defensive_views(
     tuple (P, Q, confidence_array, view_names)
         Returns (None, None, None, []) if no defensive assets in the universe
     """
-    if defensive_assets is None:
-        defensive_assets = ["GOLD", "MBBOND"]
 
     asset_to_idx = {a: i for i, a in enumerate(assets)}
 

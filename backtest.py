@@ -506,7 +506,19 @@ def backtest(
                         )
                         last_ranking_retrain_t = t
 
-                # Predict rankings and generate relative views
+                # --- DETERMINE ACTIVE ASSET SET ---
+                # Constrain BL/optimizer to: K selected stocks + GOLD + defensive asset.
+                # All other assets in the full universe receive zero weight.
+                if selected_stocks is not None:
+                    active_assets_list = list(selected_stocks) + ["GOLD"] + RANKING_DEFAULT_DEFENSIVE_ASSETS
+                    active_assets_list = list(dict.fromkeys(active_assets_list))
+                    active_indices = [assets.index(a) for a in active_assets_list if a in assets]
+                    active_asset_names = [assets[i] for i in active_indices]
+                else:
+                    active_indices = list(range(m))
+                    active_asset_names = list(assets)
+
+                # Predict rankings and generate relative views (in active-asset space)
                 if ranking_model.is_trained and selected_stocks is not None:
                     lookback_start = max(0, t - RANKING_FEATURE_WINDOW - 30)
                     stock_prices_recent = ranking_universe_prices[selected_stocks].iloc[
@@ -520,10 +532,40 @@ def backtest(
                     )
 
                     p_view, q_view, conf_view, view_names = generate_ranking_relative_views(
-                        rank_scores, ensemble_std, assets, spread=RANKING_VIEW_SPREAD
+                        rank_scores, ensemble_std, active_asset_names, spread=RANKING_VIEW_SPREAD
                     )
                 else:
-                    p_view, q_view, conf_view, view_names = None, None, None, []
+                    # --- COLD-START FALLBACK: momentum-based views ---
+                    # When the ranking model is not yet trained, use simple
+                    # 20-day momentum as a proxy for relative stock ranking.
+                    # This avoids 4+ months of empty views at the backtest start.
+                    if selected_stocks is not None and t >= 20:
+                        momentum_lookback = min(20, t)
+                        recent_prices = ranking_universe_prices[selected_stocks].iloc[
+                            t - momentum_lookback : t + window
+                        ]
+                        if len(recent_prices) >= 20:
+                            mom_scores = {}
+                            for stock in selected_stocks:
+                                if stock in recent_prices.columns:
+                                    p_start = recent_prices[stock].iloc[0]
+                                    p_end = recent_prices[stock].iloc[-1]
+                                    if p_start > 0:
+                                        mom_scores[stock] = (p_end / p_start) - 1.0
+                            mom_std = {s: 0.1 for s in mom_scores}
+                            if len(mom_scores) >= 2:
+                                p_view, q_view, conf_view, view_names = generate_ranking_relative_views(
+                                    mom_scores, mom_std, active_asset_names, spread=RANKING_VIEW_SPREAD
+                                )
+                                # Cap confidence during cold start (less reliable signal)
+                                if conf_view is not None:
+                                    conf_view = np.clip(conf_view, 0.0, 0.45)
+                            else:
+                                p_view, q_view, conf_view, view_names = None, None, None, []
+                        else:
+                            p_view, q_view, conf_view, view_names = None, None, None, []
+                    else:
+                        p_view, q_view, conf_view, view_names = None, None, None, []
 
                 # --- RANKING RISK MANAGEMENT ---
                 # Detect market regime
@@ -535,10 +577,10 @@ def backtest(
                         dampener = RANKING_VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
                         conf_view = conf_view * dampener
 
-                # Inject defensive views during stress/crisis
+                # Inject defensive views during stress/crisis (in active-asset space)
                 if regime["regime"] in ("stress", "crisis"):
                     def_p, def_q, def_conf, def_names = generate_defensive_views(
-                        regime, assets
+                        regime, active_asset_names
                     )
                     if def_p is not None:
                         if p_view is not None:
@@ -558,28 +600,43 @@ def backtest(
                     "confidences": conf_view.tolist() if conf_view is not None else [],
                 })
 
-                # Black-Litterman posterior
+                # --- CONSTRAIN BL + OPTIMIZE TO ACTIVE ASSET SET ---
+                # Sub-matrices restricted to K selected stocks + GOLD + RANKING_DEFAULT_DEFENSIVE_ASSETS
+                sub_mu = mu[active_indices]
+                sub_sigma = sigma[np.ix_(active_indices, active_indices)]
+                sub_market_weights = np.full(
+                    len(active_indices), 1.0 / len(active_indices)
+                )
+
                 if p_view is not None:
-                    mu_bl = black_litterman_posterior_mu(
-                        sigma, market_weights, p_view, q_view, conf_view
+                    mu_bl_sub = black_litterman_posterior_mu(
+                        sub_sigma, sub_market_weights, p_view, q_view, conf_view
                     )
                 else:
-                    mu_bl = mu
+                    mu_bl_sub = sub_mu
 
-                # Use constrained optimizer with regime-adaptive risk aversion
+                # Use constrained optimizer with regime-adaptive risk aversion.
+                # Only RANKING_DEFAULT_DEFENSIVE_ASSETS is treated as defensive (gets the floor); GOLD is
+                # an independent asset allocated by its risk/return profile.
                 current_risk_aversion = (
                     RANKING_RISK_AVERSION_STRESS
                     if regime["regime"] == "crisis"
                     else RANKING_RISK_AVERSION_BASE
                 )
-                bl_weight = optimize_weight_ranking(
-                    mu_bl,
-                    sigma,
-                    assets,
+                sub_bl_weight = optimize_weight_ranking(
+                    mu_bl_sub,
+                    sub_sigma,
+                    active_asset_names,
                     risk_aversion=current_risk_aversion,
                     min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
                     max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
+                    defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
                 )
+
+                # Map sub-weights back to full asset weight vector (zeros elsewhere)
+                bl_weight = np.zeros(m)
+                for i, idx in enumerate(active_indices):
+                    bl_weight[idx] = sub_bl_weight[i]
             elif view_mode == "ranking_absolute":
                 # --- RANKING ABSOLUTE MODE ---
                 # Re-select representative stocks if due (same logic as ranking)
@@ -605,7 +662,19 @@ def backtest(
                         ranking_abs_model.train(stock_prices_train, verbose=False)
                         last_ranking_retrain_t = t
 
-                # Predict absolute returns for selected stocks
+                # --- DETERMINE ACTIVE ASSET SET ---
+                # Constrain BL/optimizer to: K selected stocks + GOLD + RANKING_DEFAULT_DEFENSIVE_ASSETS.
+                # All other assets in the full universe receive zero weight.
+                if selected_stocks is not None:
+                    active_assets_list = list(selected_stocks) + ["GOLD"] + RANKING_DEFAULT_DEFENSIVE_ASSETS
+                    active_assets_list = list(dict.fromkeys(active_assets_list))
+                    active_indices = [assets.index(a) for a in active_assets_list if a in assets]
+                    active_asset_names = [assets[i] for i in active_indices]
+                else:
+                    active_indices = list(range(m))
+                    active_asset_names = list(assets)
+
+                # Predict absolute returns for selected stocks (views in active-asset space)
                 if ranking_abs_model.is_trained and selected_stocks is not None:
                     lookback_start = max(0, t - RANKING_FEATURE_WINDOW - 30)
                     stock_prices_recent = ranking_universe_prices[selected_stocks].iloc[
@@ -619,7 +688,7 @@ def backtest(
                         min_return_threshold=ML_MIN_RETURN_THRESHOLD,
                     )
                     p_view, q_view, conf_view, view_names = build_views_matrix(
-                        ml_views, assets
+                        ml_views, active_asset_names
                     )
                 else:
                     p_view, q_view, conf_view, view_names = None, None, None, []
@@ -633,10 +702,10 @@ def backtest(
                         dampener = RANKING_VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
                         conf_view = conf_view * dampener
 
-                # Inject defensive views during stress/crisis
+                # Inject defensive views during stress/crisis (in active-asset space)
                 if regime["regime"] in ("stress", "crisis"):
                     def_p, def_q, def_conf, def_names = generate_defensive_views(
-                        regime, assets
+                        regime, active_asset_names
                     )
                     if def_p is not None:
                         if p_view is not None:
@@ -656,28 +725,42 @@ def backtest(
                     "confidences": conf_view.tolist() if conf_view is not None else [],
                 })
 
-                # Black-Litterman posterior
+                # --- CONSTRAIN BL + OPTIMIZE TO ACTIVE ASSET SET ---
+                # Sub-matrices restricted to K selected stocks + GOLD + RANKING_DEFAULT_DEFENSIVE_ASSETS
+                sub_mu = mu[active_indices]
+                sub_sigma = sigma[np.ix_(active_indices, active_indices)]
+                sub_market_weights = np.full(
+                    len(active_indices), 1.0 / len(active_indices)
+                )
+
                 if p_view is not None:
-                    mu_bl = black_litterman_posterior_mu(
-                        sigma, market_weights, p_view, q_view, conf_view
+                    mu_bl_sub = black_litterman_posterior_mu(
+                        sub_sigma, sub_market_weights, p_view, q_view, conf_view
                     )
                 else:
-                    mu_bl = mu
+                    mu_bl_sub = sub_mu
 
-                # Use constrained optimizer with regime-adaptive risk aversion
+                # Use constrained optimizer with regime-adaptive risk aversion.
+                # GOLD is an independent asset allocated by its risk/return profile.
                 current_risk_aversion = (
                     RANKING_RISK_AVERSION_STRESS
                     if regime["regime"] == "crisis"
                     else RANKING_RISK_AVERSION_BASE
                 )
-                bl_weight = optimize_weight_ranking(
-                    mu_bl,
-                    sigma,
-                    assets,
+                sub_bl_weight = optimize_weight_ranking(
+                    mu_bl_sub,
+                    sub_sigma,
+                    active_asset_names,
                     risk_aversion=current_risk_aversion,
                     min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
                     max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
+                    defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
                 )
+
+                # Map sub-weights back to full asset weight vector (zeros elsewhere)
+                bl_weight = np.zeros(m)
+                for i, idx in enumerate(active_indices):
+                    bl_weight[idx] = sub_bl_weight[i]
             else:
                 # --- EXISTING MODES (rule_based, relative, ml, combined) ---
                 # Walk-forward: retrain model if due
@@ -980,8 +1063,8 @@ def main():
     #         else:
     #             print("  - Khong co view (BL fallback ve mu lich su)")
 
-    # Log view history to file
-    log_path = log_view_history(
+    # Log view history to file (JSON + optional NAV plot)
+    log_path, plot_path = log_view_history(
         result["views_history"],
         view_mode=view_mode,
         phase=phase,
@@ -1005,7 +1088,13 @@ def main():
         },
         ml_training_mode=ml_training_mode if view_mode in ("ml", "combined") else None,
         weights_history=result.get("rebalance_weights_history"),
+        ew_nav=ew_nav if not args.no_plot else None,
+        mvo_nav=mvo_nav if not args.no_plot else None,
+        bl_nav=bl_nav if not args.no_plot else None,
     )
+
+    if plot_path is not None:
+        print(f"\nPlot saved: {plot_path}")
 
 
     # ## PREDICT NEXT PERIOD WEIGHTS
@@ -1035,15 +1124,56 @@ def main():
     #     print(f"  Views used: {', '.join(next_view_names)}")
 
     if not args.no_plot:
-        plt.figure(figsize=(12, 6))
-        plt.plot(ew_nav.index, ew_nav.values, label="EW")
-        plt.plot(mvo_nav.index, mvo_nav.values, label="MVO")
-        plt.plot(bl_nav.index, bl_nav.values, label=f"BL ({view_mode})")
-        plt.title(f"Backtest with Assets ({phase}): EW vs MVO vs BL ({view_mode})")
-        plt.ylabel("NAV (initial = 100,000)")
-        plt.grid(True)
-        plt.legend()
-        plt.tight_layout()
+        # Also display interactively when a display is available
+        _metrics = {
+            "EW":              {"final_nav": float(ew_nav.iloc[-1]),  "sharpe": float(sharpe_ratio(ew_nav)),  "mdd": float(max_drawdown(ew_nav))},
+            "MVO":             {"final_nav": float(mvo_nav.iloc[-1]), "sharpe": float(sharpe_ratio(mvo_nav)), "mdd": float(max_drawdown(mvo_nav))},
+            f"BL\n({view_mode})": {"final_nav": float(bl_nav.iloc[-1]),  "sharpe": float(sharpe_ratio(bl_nav)),  "mdd": float(max_drawdown(bl_nav))},
+        }
+        _labels = list(_metrics.keys())
+        _colors = ["#4C72B0", "#DD8452", "#55A868"]
+
+        fig = plt.figure(figsize=(14, 9))
+        gs = fig.add_gridspec(2, 3, height_ratios=[2, 1], hspace=0.45, wspace=0.35)
+
+        ax_nav = fig.add_subplot(gs[0, :])
+        ax_nav.plot(ew_nav.index, ew_nav.values, label="EW", linewidth=1.5, color=_colors[0])
+        ax_nav.plot(mvo_nav.index, mvo_nav.values, label="MVO", linewidth=1.5, color=_colors[1])
+        ax_nav.plot(bl_nav.index, bl_nav.values, label=f"BL ({view_mode})", linewidth=1.5, color=_colors[2])
+        ax_nav.set_title(f"Backtest with Assets ({phase}): EW vs MVO vs BL ({view_mode})", fontsize=13)
+        ax_nav.set_ylabel("NAV (initial = 100,000)")
+        ax_nav.grid(True, alpha=0.3)
+        ax_nav.legend(loc="best")
+
+        _metric_keys = [
+            ("final_nav", "Final NAV",    "{:.0f}"),
+            ("sharpe",    "Sharpe Ratio",  "{:.3f}"),
+            ("mdd",       "Max Drawdown",  "{:.2%}"),
+        ]
+        _x = np.arange(len(_labels))
+        for _col, (_key, _title, _fmt) in enumerate(_metric_keys):
+            ax = fig.add_subplot(gs[1, _col])
+            _vals = [_metrics[lbl][_key] for lbl in _labels]
+            _bcolors = [
+                _colors[i] if not (_key == "mdd" and v == min(_vals)) else "#C44E52"
+                for i, v in enumerate(_vals)
+            ]
+            _bars = ax.bar(_x, _vals, width=0.5, color=_bcolors, edgecolor="white")
+            ax.set_title(_title, fontsize=10)
+            ax.set_xticks(_x)
+            ax.set_xticklabels(_labels, fontsize=9)
+            ax.grid(True, axis="y", alpha=0.3)
+            for _bar, _v in zip(_bars, _vals):
+                ax.text(
+                    _bar.get_x() + _bar.get_width() / 2,
+                    _bar.get_height() * (1.01 if _v >= 0 else 0.99),
+                    _fmt.format(_v),
+                    ha="center",
+                    va="bottom" if _v >= 0 else "top",
+                    fontsize=8,
+                    fontweight="bold",
+                )
+
         plt.show()
 
 

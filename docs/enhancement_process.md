@@ -264,7 +264,6 @@ Dampener có tác dụng nhỏ trong trường hợp vol spike đột ngột. V�
 | Parameter | Giá trị | Lý do |
 |-----------|---------|-------|
 | MAX_POSITION_SIZE | 0.40 | Diversification cap, ngăn catastrophic concentration |
-| BL_DEVIATION_ALPHA | 0.25 | BL chỉ deviate 25% so với MVO, balance alpha vs risk |
 | WINDOW | 120 | ~6 tháng lookback cho covariance estimation |
 | REBALANCE_FREQ | 5 | Weekly rebalance |
 

@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib
+
+from config import RISK_FREE_RATE_ANNUAL, TRADING_DAYS_PER_YEAR
 matplotlib.use("Agg")  # non-interactive backend for headless saving
 import matplotlib.pyplot as plt
 
@@ -30,8 +32,8 @@ def _compute_nav_metrics(nav_series) -> dict:
     import numpy as np
 
     ret = nav_series.pct_change().dropna()
-    trading_days = 252
-    rf_daily = (1 + 0.045) ** (1 / trading_days) - 1
+    trading_days = TRADING_DAYS_PER_YEAR
+    rf_daily = (1 + RISK_FREE_RATE_ANNUAL) ** (1 / trading_days) - 1
 
     final_nav = float(nav_series.iloc[-1])
 

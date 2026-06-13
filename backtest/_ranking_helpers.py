@@ -18,18 +18,18 @@ import numpy as np
 from config import (
     DEFAULT_FEATURE_WINDOW,
     DEFAULT_PREDICTION_HORIZON,
-    RANKING_DEFAULT_DEFENSIVE_ASSETS,
+    DEFAULT_DEFENSIVE_ASSETS,
     RANKING_FEATURE_WINDOW,
     RANKING_K,
-    RANKING_MAX_EQUITY_EXPOSURE,
-    RANKING_MIN_DEFENSIVE_WEIGHT,
+    MAX_EQUITY_EXPOSURE,
+    MIN_DEFENSIVE_WEIGHT,
     RANKING_PREDICTION_HORIZON,
     RANKING_RESELECT_FREQUENCY,
     RANKING_RETRAIN_FREQUENCY,
-    RANKING_RISK_AVERSION_BASE,
-    RANKING_RISK_AVERSION_STRESS,
+    RISK_AVERSION_BASE,
+    RISK_AVERSION_STRESS,
     RANKING_VIEW_SPREAD,
-    RANKING_VOL_DAMPENER_THRESHOLD,
+    VOL_DAMPENER_THRESHOLD,
     ML_MIN_RETURN_THRESHOLD,
     RETRAIN_FREQUENCY
 )
@@ -73,7 +73,7 @@ def build_active_assets(selected_stocks, assets):
     if selected_stocks is None:
         return list(range(len(assets))), list(assets)
 
-    active_assets_list = list(selected_stocks) + ["GOLD"] + RANKING_DEFAULT_DEFENSIVE_ASSETS
+    active_assets_list = list(selected_stocks) + ["GOLD"] + DEFAULT_DEFENSIVE_ASSETS
     active_assets_list = list(dict.fromkeys(active_assets_list))  # deduplicate, keep order
     active_indices = [assets.index(a) for a in active_assets_list if a in assets]
     active_asset_names = [assets[i] for i in active_indices]
@@ -93,8 +93,8 @@ def apply_risk_management(p_view, q_view, conf_view, view_names, returns, t, act
 
     # Volatility dampener
     if conf_view is not None:
-        if regime["vol_ratio"] > RANKING_VOL_DAMPENER_THRESHOLD:
-            dampener = RANKING_VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
+        if regime["vol_ratio"] > VOL_DAMPENER_THRESHOLD:
+            dampener = VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
             conf_view = conf_view * dampener
 
     # Defensive views during stress/crisis
@@ -138,18 +138,18 @@ def ranking_sub_optimize(
         mu_bl_sub = sub_mu
 
     current_risk_aversion = (
-        RANKING_RISK_AVERSION_STRESS
+        RISK_AVERSION_STRESS
         if regime["regime"] == "crisis"
-        else RANKING_RISK_AVERSION_BASE
+        else RISK_AVERSION_BASE
     )
     sub_bl_weight = optimize_weight_ranking(
         mu_bl_sub,
         sub_sigma,
         active_asset_names,
         risk_aversion=current_risk_aversion,
-        min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
-        max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
-        defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
+        min_defensive_weight=MIN_DEFENSIVE_WEIGHT,
+        max_equity_exposure=MAX_EQUITY_EXPOSURE,
+        defensive_assets=DEFAULT_DEFENSIVE_ASSETS,
     )
 
     bl_weight = np.zeros(m)

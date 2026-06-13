@@ -12,10 +12,10 @@ import numpy as np
 from config import (
     MAX_POSITION_SIZE,
     MIN_WEIGHT_THRESHOLD,
-    RANKING_DEFAULT_DEFENSIVE_ASSETS,
-    RANKING_MAX_EQUITY_EXPOSURE,
-    RANKING_MIN_DEFENSIVE_WEIGHT,
-    RANKING_RISK_AVERSION_BASE,
+    DEFAULT_DEFENSIVE_ASSETS,
+    MAX_EQUITY_EXPOSURE,
+    MIN_DEFENSIVE_WEIGHT,
+    RISK_AVERSION_BASE,
 )
 
 
@@ -89,7 +89,7 @@ def _solve_mvo(objective, constraints, n: int) -> np.ndarray | None:
 def optimize_weight(
     mu,
     sigma,
-    risk_aversion=RANKING_RISK_AVERSION_BASE,
+    risk_aversion=RISK_AVERSION_BASE,
     max_weight=MAX_POSITION_SIZE,
 ):
     """Standard mean-variance optimisation (long-only, capped)."""
@@ -110,11 +110,11 @@ def optimize_weight_ranking(
     mu,
     sigma,
     assets,
-    risk_aversion=RANKING_RISK_AVERSION_BASE,
+    risk_aversion=RISK_AVERSION_BASE,
     max_weight=MAX_POSITION_SIZE,
-    min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
-    max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
-    defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
+    min_defensive_weight=MIN_DEFENSIVE_WEIGHT,
+    max_equity_exposure=MAX_EQUITY_EXPOSURE,
+    defensive_assets=DEFAULT_DEFENSIVE_ASSETS,
 ):
     """Constrained MVO for ranking mode with downside protection.
 

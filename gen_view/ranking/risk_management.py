@@ -21,21 +21,27 @@ import numpy as np
 import pandas as pd
 
 from config import (
-    RANKING_DEFAULT_DEFENSIVE_ASSETS,
-    RANKING_DRAWDOWN_LOOKBACK,
-    RANKING_DRAWDOWN_STRESS_THRESHOLD,
-    RANKING_DRAWDOWN_CRISIS_THRESHOLD,
-    RANKING_DEFENSIVE_CONFIDENCE,
-    RANKING_VOL_DAMPENER_THRESHOLD,
-    RANKING_VOL_DAMPENER_SEVERE,
+    DEFAULT_DEFENSIVE_ASSETS,
+    DRAWDOWN_LOOKBACK,
+    DRAWDOWN_STRESS_THRESHOLD,
+    DRAWDOWN_CRISIS_THRESHOLD,
+    DEFENSIVE_CONFIDENCE,
+    VOL_DAMPENER_RECENT_WINDOW,
+    VOL_DAMPENER_HIST_WINDOW,
+    VOL_DAMPENER_THRESHOLD,
+    VOL_DAMPENER_SEVERE,
     TRADING_DAYS_PER_YEAR,
+    EXPECTED_ANNUAL_SPREAD_IN_CRISIS_REGIME,
+    EXPECTED_CONF_IN_CRISIS_REGIME,
+    EXPECTED_ANNUAL_SPREAD_IN_STRESS_REGIME,
+    EXPECTED_CONF_IN_STRESS_REGIME
 )
 
 
 def detect_market_regime(
     returns: pd.DataFrame,
     t: int,
-    lookback: int = RANKING_DRAWDOWN_LOOKBACK,
+    lookback: int = DRAWDOWN_LOOKBACK,
 ) -> dict:
     """
     Detect current market regime from recent returns.
@@ -61,9 +67,9 @@ def detect_market_regime(
         - drawdown: float (negative, current drawdown from peak)
         - equity_momentum: float (mean return over lookback)
     """
-    # Volatility ratio: 20-day vs 120-day
-    recent_start = max(0, t - 20)
-    hist_start = max(0, t - 120)
+    # Volatility ratio: recent vs historical
+    recent_start = max(0, t - VOL_DAMPENER_RECENT_WINDOW)
+    hist_start = max(0, t - VOL_DAMPENER_HIST_WINDOW)
 
     recent_vol = returns.iloc[recent_start:t].std().mean()
     hist_vol = returns.iloc[hist_start:t].std().mean()
@@ -83,9 +89,9 @@ def detect_market_regime(
     equity_momentum = window_returns.mean() if len(window_returns) > 0 else 0.0
 
     # Classify regime
-    if vol_ratio >= RANKING_VOL_DAMPENER_SEVERE or current_dd <= RANKING_DRAWDOWN_CRISIS_THRESHOLD:
+    if vol_ratio >= VOL_DAMPENER_SEVERE or current_dd <= DRAWDOWN_CRISIS_THRESHOLD:
         regime = "crisis"
-    elif vol_ratio >= RANKING_VOL_DAMPENER_THRESHOLD or current_dd <= RANKING_DRAWDOWN_STRESS_THRESHOLD:
+    elif vol_ratio >= VOL_DAMPENER_THRESHOLD or current_dd <= DRAWDOWN_STRESS_THRESHOLD:
         regime = "stress"
     else:
         regime = "normal"
@@ -101,8 +107,8 @@ def detect_market_regime(
 def generate_defensive_views(
     regime: dict,
     assets: list[str],
-    defensive_assets: list[str] = RANKING_DEFAULT_DEFENSIVE_ASSETS,
-    confidence: float = RANKING_DEFENSIVE_CONFIDENCE,
+    defensive_assets: list[str] = DEFAULT_DEFENSIVE_ASSETS,
+    confidence: float = DEFENSIVE_CONFIDENCE,
 ) -> tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None, list[str]]:
     """
     Generate defensive views favoring safe-haven assets during market stress.
@@ -121,7 +127,7 @@ def generate_defensive_views(
     assets : list[str]
         Full asset list (defines P matrix columns)
     defensive_assets : list[str]
-        Assets to favor (default: RANKING_DEFAULT_DEFENSIVE_ASSETS)
+        Assets to favor (default: DEFAULT_DEFENSIVE_ASSETS)
     confidence : float
         Confidence level for defensive views
 
@@ -145,11 +151,11 @@ def generate_defensive_views(
 
     # View magnitude based on regime severity
     if regime["regime"] == "crisis":
-        annual_spread = 0.10  # 10% annual outperformance
-        conf_multiplier = 1.0
+        annual_spread = EXPECTED_ANNUAL_SPREAD_IN_CRISIS_REGIME  # 10% annual outperformance
+        conf_multiplier = EXPECTED_CONF_IN_CRISIS_REGIME
     else:  # stress
-        annual_spread = 0.05  # 5% annual outperformance
-        conf_multiplier = 0.85
+        annual_spread = EXPECTED_ANNUAL_SPREAD_IN_STRESS_REGIME  # 5% annual outperformance
+        conf_multiplier = EXPECTED_CONF_IN_STRESS_REGIME
 
     daily_spread = annual_spread / TRADING_DAYS_PER_YEAR
     n_assets = len(assets)

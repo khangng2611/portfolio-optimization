@@ -15,13 +15,12 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
+from config import DEFAULT_FEATURE_WINDOW, DEFAULT_PREDICTION_HORIZON
 from gen_view.xgboost.config import (
     CONFIDENCE_BASE,
     CONFIDENCE_MAX,
     CONFIDENCE_MIN,
     CONFIDENCE_VAR_SCALE,
-    DEFAULT_FEATURE_WINDOW,
-    DEFAULT_PREDICTION_HORIZON,
     DEFAULT_XGB_PARAMS,
     EARLY_STOPPING_ROUNDS,
     ENSEMBLE_BASE_SEED,
@@ -43,7 +42,7 @@ from gen_view.xgboost.config import (
     VALIDATION_SPLIT_RATIO,
     VOLATILITY_WINDOW,
 )
-from gen_view.view_generators import (
+from utils.indicators import (
     compute_ema,
     compute_macd,
     compute_momentum,

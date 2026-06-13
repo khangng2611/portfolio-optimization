@@ -41,41 +41,56 @@ Danh sách tài sản được quản lý bởi `assets.json` (không hardcode t
 
 ```text
 portfolio-optimization/
-|- backtest.py
 |- config.py              # project-wide configuration constants
-|- run_compare_backtests.py
-|- inspect_ew_vs_assets.py
-|- assets.json
+|- assets.json            # asset universe configuration
 |- requirements.txt
 |- README.md
 |- QUICKSTART.md
 |
-|- utils/
-|  |- data_loader.py
-|  |- plotting.py
+|- backtest/              # backtest package (python -m backtest ...)
+|  |- __init__.py         # re-export facade for backward compatibility
+|  |- __main__.py         # CLI entry point (python -m backtest)
+|  |- _loop.py            # core walk-forward backtest loop
+|  |- _optimizer.py       # MVO optimisation (standard + constrained)
+|  |- _black_litterman.py # BL posterior returns
+|  |- _views.py           # dynamic view generation dispatch
+|  |- _ranking_helpers.py # shared ranking/ranking_absolute helpers
+|  |- _data_helpers.py    # VN30 universe, market proxy, ML model loading
+|  |- _metrics.py         # Sharpe, MDD, Sortino, Calmar, etc.
+|  |- _compare.py         # shared comparison utilities
+|  |- _compare_backtests.py  # compare rule_based/ml/ranking modes
+|  |- _compare_ranking.py    # compare ranking vs ranking_absolute
+|  |- _prediction.py      # next-period weight prediction
+|  |- _cli.py             # CLI argument parsing
+|  `- _main.py            # main entry point
 |
 |- gen_view/
-|  |- view_generators.py    # rule-based, relative, ML view generation + utilities
+|  |- view_generators.py  # rule-based, relative, ML view generation
 |  |- xgboost/
-|     |- config.py           # XGBoost module configuration
-|     |- xgboost_core.py
-|     |- model_train.py
+|  |  |- config.py
+|  |  |- xgboost_core.py
+|  |  `- model_train.py
+|  `- ranking/
+|     |- stock_selection.py
+|     |- ranking_model.py
+|     |- relative_views.py
+|     `- risk_management.py
+|
+|- utils/
+|  |- data_loader.py
+|  `- view_logger.py
 |
 |- crawl/
 |  |- stock.py
 |  |- fund.py
-|  |- gold.py
+|  `- gold.py
 |
 |- datasets/
 |  |- stocks/
 |  |- funds/
-|  |- gold/
+|  `- gold/
 |
 |- docs/
-|  |- DYNAMIC_VIEWS_REPORT.md
-|  |- INDICATORS.md
-|  |- GEN_VIEW_LLM_GUIDE.md
-|  |- HOW_TO_USE_LLM_GENERATORS.md
 |
 `- reports/
 ```
@@ -111,12 +126,14 @@ mu_BL = [(tau Sigma)^-1 + P^T Omega^-1 P]^-1 * [(tau Sigma)^-1 pi + P^T Omega^-1
 
 ## View generation modes
 
-`backtest.py` hỗ trợ 4 modes:
+`backtest` package hỗ trợ 6 modes:
 
 1. `rule_based`: EMA crossover + RSI + momentum
 2. `relative`: so sánh momentum giữa các cặp assets
 3. `ml`: views từ model XGBoost đã train trước
 4. `combined`: kết hợp rule_based + relative + ml + static theo trọng số
+5. `ranking`: K-Medoids selection + XGBoost Ranker → relative views
+6. `ranking_absolute`: K-Medoids selection + XGBoost Ensemble → absolute views
 
 Lưu ý:
 - ML mode hiện tại chỉ hỗ trợ `xgboost`
@@ -133,17 +150,20 @@ python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 2) Chạy backtest mặc định (rule_based)
-python backtest.py --phase train
+# 2) Chạy backtest mặc định
+python -m backtest --phase train
 
 # 3) Train model XGBoost
 python gen_view/xgboost/model_train.py --method xgboost --train-phase train --validate
 
 # 4) Chạy BL với views từ ML
-python backtest.py --phase test --view-mode ml --ml-model-type xgboost
+python -m backtest --phase test --view-mode ml --ml-model-type xgboost
 
-# 5) So sánh rule_based vs ml
-python run_compare_backtests.py --phase test
+# 5) So sánh rule_based vs ml vs ranking
+python -m backtest._compare_backtests --phase train --no-plot
+
+# 6) So sánh ranking vs ranking_absolute
+python -m backtest._compare_ranking --phase train --no-plot
 ```
 
 Hướng dẫn chi tiết: xem `QUICKSTART.md`.
@@ -164,11 +184,13 @@ Khuyến nghị:
 
 ## Files quan trọng
 
-- `config.py`: cấu hình toàn dự án (BL params, view mode, ML defaults, static views)
-- `gen_view/xgboost/config.py`: cấu hình riêng module XGBoost (hyperparams, feature periods, confidence heuristic)
-- `backtest.py`: luồng backtest chính + CLI
-- `utils/data_loader.py`: load assets config + đồng bộ dữ liệu
-- `gen_view/view_generators.py`: rule-based/relative/ML views + utilities P,Q,confidence
+- `config.py`: cấu hình toàn dự án (BL params, view mode, ML defaults, ranking params)
+- `backtest/`: package backtest chính (loop, optimizer, BL, views, metrics)
+- `backtest/__main__.py`: CLI entry point (`python -m backtest`)
+- `backtest/_compare_backtests.py`: so sánh rule_based / ml / ranking
+- `backtest/_compare_ranking.py`: so sánh ranking vs ranking_absolute
+- `gen_view/view_generators.py`: rule-based/relative/ML views + utilities
 - `gen_view/xgboost/xgboost_core.py`: `XGBoostCoreModel` (train, predict, save, load)
 - `gen_view/xgboost/model_train.py`: train model XGBoost
-- `assets.json`: cấu hình universe tài sản
+- `utils/data_loader.py`: load assets config + đồng bộ dữ liệu
+- `assets_1.json`: cấu hình universe tài sản

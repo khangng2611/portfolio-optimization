@@ -208,7 +208,7 @@ def _format_weights_history(
             paired = [
                 (asset, float(values[i]))
                 for i, asset in enumerate(assets)
-                if i < len(values) and float(values[i]) != 0
+                if i < len(values) and float(values[i]) >= 0.000001
             ]
             paired.sort(key=lambda kv: kv[1], reverse=True)
             out[strategy] = {asset: round(w, 6) for asset, w in paired}

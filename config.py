@@ -63,7 +63,7 @@ ML_MIN_RETURN_THRESHOLD = 0.005
 
 # ML Training mode: "pretrained" (load from cache) or "walk_forward" (retrain during backtest)
 ML_TRAINING_MODE = "walk_forward"
-ML_RETRAIN_FREQUENCY = 20
+RETRAIN_FREQUENCY = 10
 
 # ====================== RANKING MODE ======================
 RANKING_K = 5                          # Number of representative stocks to select

@@ -67,23 +67,23 @@ Chỉnh trực tiếp `config.py` để thay đổi mặc định, hoặc dùng 
 ## 4. Chạy backtest nhanh
 
 ```bash
-# Mặc định: phase=test, view_mode=combined
-python backtest.py
+# Mặc định: phase=train, view_mode=ranking_absolute
+python -m backtest
 
 # Không vẽ chart
-python backtest.py --no-plot
+python -m backtest --no-plot
 
 # Chạy theo train period
-python backtest.py --phase train
+python -m backtest --phase train
 
 # Chạy với mode rule_based
-python backtest.py --phase test --view-mode rule_based
+python -m backtest --phase test --view-mode rule_based
 
 # Chạy với mode relative
-python backtest.py --phase test --view-mode relative
+python -m backtest --phase test --view-mode relative
 
 # Chạy với bộ assets tùy chọn
-python backtest.py --assets E1VFVN30,GOLD,DCDS
+python -m backtest --assets E1VFVN30,GOLD,DCDS
 ```
 
 ## 5. Cấu hình assets bằng JSON
@@ -115,23 +115,29 @@ Quy tắc chọn assets:
 Dùng file config khác:
 
 ```bash
-python backtest.py --assets-config path/to/custom_assets.json
+python -m backtest --assets-config path/to/custom_assets.json
 ```
 
 ## 6. View modes hiện có
 
 ```bash
 # rule-based: EMA + RSI + momentum
-python backtest.py --view-mode rule_based
+python -m backtest --view-mode rule_based
 
 # relative: momentum giữa cặp assets
-python backtest.py --view-mode relative
+python -m backtest --view-mode relative
 
 # ML views (XGBoost)
-python backtest.py --view-mode ml --ml-model-type xgboost
+python -m backtest --view-mode ml --ml-model-type xgboost
 
-# kết hợp rule_based + relative + ml + static (mặc định)
-python backtest.py --view-mode combined --ml-model-type xgboost
+# kết hợp rule_based + relative + ml + static
+python -m backtest --view-mode combined --ml-model-type xgboost
+
+# ranking: K-Medoids + XGBoost Ranker → relative views
+python -m backtest --view-mode ranking
+
+# ranking_absolute: K-Medoids + XGBoost Ensemble → absolute views
+python -m backtest --view-mode ranking_absolute
 ```
 
 ## 7. Ranking Mode (Enhanced Pipeline)
@@ -142,10 +148,13 @@ The ranking mode implements a representative stock selection + pairwise ranking 
 
 ```bash
 # Run ranking backtest on training period
-python backtest.py --phase train --view-mode ranking --assets-config assets_1.json --no-plot
+python -m backtest --phase train --view-mode ranking --assets-config assets_1.json --no-plot
 
-# Compare all view modes
-python run_compare_backtests.py --phase train --no-plot
+# Compare all view modes (rule_based / ml / ranking)
+python -m backtest._compare_backtests --phase train --no-plot
+
+# Compare ranking vs ranking_absolute
+python -m backtest._compare_ranking --phase train --no-plot
 ```
 
 ### Pipeline
@@ -191,18 +200,22 @@ Model được lưu tại:
 Sau khi train, chạy backtest với ML:
 
 ```bash
-python backtest.py --phase test --view-mode ml --ml-model-type xgboost
+python -m backtest --phase test --view-mode ml --ml-model-type xgboost
 ```
 
-## 9. So sánh nhanh rule-based và ML
+## 9. So sánh nhanh các mode
 
 ```bash
-python run_compare_backtests.py --phase test
+# So sánh rule_based vs ml vs ranking
+python -m backtest._compare_backtests --phase train --no-plot
+
+# So sánh ranking vs ranking_absolute
+python -m backtest._compare_ranking --phase train --no-plot
 ```
 
 Output mặc định:
-- `reports/backtest_compare_views.csv`
-- `reports/backtest_compare_views.png`
+- `reports/backtest_compare_views.csv` + `.png`
+- `reports/ranking_compare.csv` + `.png`
 
 ## 10. Lỗi thường gặp
 

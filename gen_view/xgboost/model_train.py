@@ -223,11 +223,11 @@ def main():
     print(f"Models saved to: {CACHE_DIR}")
     print("\nNext steps:")
     print("  1. Run backtest with pretrained model:")
-    print("     python backtest.py --phase test --view-mode ml --ml-training-mode pretrained")
+    print("     python -m backtest --phase test --view-mode ml --ml-training-mode pretrained")
     print("  2. Run backtest with walk-forward (no pre-train needed):")
-    print("     python backtest.py --phase train --view-mode ml --ml-training-mode walk_forward")
+    print("     python -m backtest --phase train --view-mode ml --ml-training-mode walk_forward")
     print("  3. Compare all modes:")
-    print("     python run_compare_backtests.py --phase test")
+    print("     python -m backtest._compare_backtests --phase test")
 
 
 if __name__ == "__main__":

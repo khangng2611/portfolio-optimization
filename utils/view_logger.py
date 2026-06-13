@@ -107,13 +107,13 @@ def _generate_and_save_nav_plot(
         ax_nav.plot(mvo_nav.index, mvo_nav.values, label="MVO", linewidth=1.5, color=colors[1])
         ax_nav.plot(bl_nav.index, bl_nav.values, label=f"BL ({view_mode})", linewidth=1.5, color=colors[2])
         ax_nav.set_title(f"Backtest ({phase}): EW vs MVO vs BL ({view_mode})", fontsize=13)
-        ax_nav.set_ylabel("NAV (initial = 100,000)")
+        ax_nav.set_ylabel("NAV (initial = 1.0)")
         ax_nav.grid(True, alpha=0.3)
         ax_nav.legend(loc="best")
 
         # ── Bottom row: bar charts for Final NAV, Sharpe, MDD ───────────────
         metric_keys = [
-            ("final_nav", "Final NAV", "{:.0f}"),
+            ("final_nav", "Final NAV", "{:.2f}"),
             ("sharpe",    "Sharpe Ratio", "{:.3f}"),
             ("mdd",       "Max Drawdown", "{:.2%}"),
         ]

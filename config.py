@@ -24,7 +24,8 @@ ASSETS_CONFIG_FILENAME = "assets_1.json"
 WINDOW = 20
 REBALANCE_FREQ = 5
 INITIAL_NAV = 1.0
-MAX_POSITION_SIZE = 0.40            # Max weight per asset (diversification constraint)
+MAX_POSITION_SIZE = 0.5            # Max weight per asset (diversification constraint)
+MIN_WEIGHT_THRESHOLD = 0.01         # Post-solve: zero out weights below 1% and redistribute
 
 # ====================== BLACK-LITTERMAN ======================
 BL_TAU = 0.05

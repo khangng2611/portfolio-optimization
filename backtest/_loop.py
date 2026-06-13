@@ -160,7 +160,7 @@ def backtest(
                 bl_weight, views_record = run_ranking_step(
                     t, ranking_state, view_mode,
                     mu, sigma, returns, assets,
-                    ranking_universe_prices, ranking_market_prices, window,
+                    ranking_universe_prices, ranking_market_prices
                 )
                 views_history.append(views_record)
 

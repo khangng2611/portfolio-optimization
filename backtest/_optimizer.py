@@ -2,6 +2,7 @@
 
 Shared private helpers:
 * ``_regularize_covariance`` — clean and stabilise a covariance matrix.
+* ``_apply_min_weight_threshold`` — zero out sub-1% weights and redistribute.
 * ``_solve_mvo`` — run the cvxpy solver chain with graceful fallback.
 """
 
@@ -10,10 +11,11 @@ import numpy as np
 
 from config import (
     MAX_POSITION_SIZE,
-    RANKING_DEFAULT_DEFENSIVE_ASSETS,
-    RANKING_MAX_EQUITY_EXPOSURE,
-    RANKING_MIN_DEFENSIVE_WEIGHT,
-    RANKING_RISK_AVERSION_BASE,
+    MIN_WEIGHT_THRESHOLD,
+    DEFAULT_DEFENSIVE_ASSETS,
+    MAX_EQUITY_EXPOSURE,
+    MIN_DEFENSIVE_WEIGHT,
+    RISK_AVERSION_BASE,
 )
 
 
@@ -25,6 +27,37 @@ def _regularize_covariance(sigma: np.ndarray) -> np.ndarray:
     eigvals, eigvecs = np.linalg.eigh(sigma)
     eigvals = np.clip(eigvals, 1e-8, None)
     return eigvecs @ np.diag(eigvals) @ eigvecs.T
+
+
+def _apply_min_weight_threshold(
+    weights: np.ndarray,
+    min_weight: float = MIN_WEIGHT_THRESHOLD,
+) -> np.ndarray:
+    """Zero out weights below *min_weight* and redistribute proportionally.
+
+    This is a post-processing step applied after the solver returns.  It
+    removes economically meaningless micro-positions (< 1%) while preserving
+    the budget constraint (sum = 1).
+    """
+    w = np.asarray(weights, dtype=float).copy()
+    tiny_mask = w < min_weight
+    if not tiny_mask.any():
+        return w
+
+    # Mass to redistribute from zeroed-out positions
+    redistributed = w[tiny_mask].sum()
+    w[tiny_mask] = 0.0
+
+    # Proportionally boost surviving positions
+    surviving = w[~tiny_mask]
+    total_surviving = surviving.sum()
+    if total_surviving > 0:
+        w[~tiny_mask] = surviving + redistributed * (surviving / total_surviving)
+    else:
+        # Edge case: all weights were tiny — fall back to equal-weight
+        w[:] = 1.0 / len(w)
+
+    return w / w.sum()
 
 
 def _solve_mvo(objective, constraints, n: int) -> np.ndarray | None:
@@ -56,7 +89,7 @@ def _solve_mvo(objective, constraints, n: int) -> np.ndarray | None:
 def optimize_weight(
     mu,
     sigma,
-    risk_aversion=RANKING_RISK_AVERSION_BASE,
+    risk_aversion=RISK_AVERSION_BASE,
     max_weight=MAX_POSITION_SIZE,
 ):
     """Standard mean-variance optimisation (long-only, capped)."""
@@ -69,18 +102,19 @@ def optimize_weight(
     constraints = [cp.sum(w) == 1, w >= 0, w <= max_weight]
 
     result = _solve_mvo(objective, constraints, n)
-    return result if result is not None else np.full(n, 1.0 / n)
+    weights = result if result is not None else np.full(n, 1.0 / n)
+    return _apply_min_weight_threshold(weights)
 
 
 def optimize_weight_ranking(
     mu,
     sigma,
     assets,
-    risk_aversion=RANKING_RISK_AVERSION_BASE,
+    risk_aversion=RISK_AVERSION_BASE,
     max_weight=MAX_POSITION_SIZE,
-    min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
-    max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
-    defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
+    min_defensive_weight=MIN_DEFENSIVE_WEIGHT,
+    max_equity_exposure=MAX_EQUITY_EXPOSURE,
+    defensive_assets=DEFAULT_DEFENSIVE_ASSETS,
 ):
     """Constrained MVO for ranking mode with downside protection.
 
@@ -108,7 +142,7 @@ def optimize_weight_ranking(
 
     result = _solve_mvo(objective, constraints, n)
     if result is not None:
-        return result
+        return _apply_min_weight_threshold(result)
 
     # Fallback: give min_defensive_weight to defensive, rest equal across stocks
     fallback = np.zeros(n)

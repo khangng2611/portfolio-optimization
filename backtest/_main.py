@@ -17,8 +17,8 @@ from config import (
     RETRAIN_FREQUENCY,
     PHASE_PERIODS,
     RANKING_K,
-    RANKING_MAX_EQUITY_EXPOSURE,
-    RANKING_MIN_DEFENSIVE_WEIGHT,
+    MAX_EQUITY_EXPOSURE,
+    MIN_DEFENSIVE_WEIGHT,
     RANKING_RESELECT_FREQUENCY,
     RANKING_RETRAIN_FREQUENCY,
     SPLIT_DATE,
@@ -124,7 +124,7 @@ def main():
         print(f"  - K={RANKING_K} representative stocks from VN30 (combinatorial selection)")
         print("  - XGBoost Regression -> Absolute Views -> BL")
         print(f"  - Retrain every {RETRAIN_FREQUENCY} days, reselect every {RANKING_RESELECT_FREQUENCY} days")
-        print(f"  - Risk management: defensive floor {RANKING_MIN_DEFENSIVE_WEIGHT:.0%}, equity cap {RANKING_MAX_EQUITY_EXPOSURE:.0%}")
+        print(f"  - Risk management: defensive floor {MIN_DEFENSIVE_WEIGHT:.0%}, equity cap {MAX_EQUITY_EXPOSURE:.0%}")
 
     ml_model = None
     ml_training_mode = args.ml_training_mode

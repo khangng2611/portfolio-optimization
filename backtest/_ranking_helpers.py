@@ -16,28 +16,30 @@ rebalance from the main backtest loop.
 import numpy as np
 
 from config import (
-    RANKING_DEFAULT_DEFENSIVE_ASSETS,
+    DEFAULT_FEATURE_WINDOW,
+    DEFAULT_PREDICTION_HORIZON,
+    DEFAULT_DEFENSIVE_ASSETS,
     RANKING_FEATURE_WINDOW,
     RANKING_K,
-    RANKING_MAX_EQUITY_EXPOSURE,
-    RANKING_MIN_DEFENSIVE_WEIGHT,
+    MAX_EQUITY_EXPOSURE,
+    MIN_DEFENSIVE_WEIGHT,
     RANKING_PREDICTION_HORIZON,
     RANKING_RESELECT_FREQUENCY,
     RANKING_RETRAIN_FREQUENCY,
-    RANKING_RISK_AVERSION_BASE,
-    RANKING_RISK_AVERSION_STRESS,
+    RISK_AVERSION_BASE,
+    RISK_AVERSION_STRESS,
     RANKING_VIEW_SPREAD,
-    RANKING_VOL_DAMPENER_THRESHOLD,
+    VOL_DAMPENER_THRESHOLD,
     ML_MIN_RETURN_THRESHOLD,
     RETRAIN_FREQUENCY
 )
 
-from gen_view.ranking.ranking_model import XGBoostRankingModel
+from gen_view.ranking.config import RANKING_MIN_TRAIN_SAMPLES
+from gen_view.xgboost.config import MIN_TRAIN_SAMPLES
 from gen_view.ranking.relative_views import generate_ranking_relative_views
 from gen_view.ranking.risk_management import detect_market_regime, generate_defensive_views
 from gen_view.ranking.stock_selection import select_representatives
 from gen_view.view_generators import build_views_matrix, generate_ml_views
-from gen_view.xgboost.xgboost_core import XGBoostEnsembleModel
 
 from backtest._black_litterman import black_litterman_posterior_mu
 from backtest._optimizer import optimize_weight_ranking
@@ -47,13 +49,14 @@ from backtest._optimizer import optimize_weight_ranking
 # Stock selection
 # ---------------------------------------------------------------------------
 
-def select_stocks_if_due(t, last_reselect_t, ranking_universe_prices, window, k=RANKING_K):
+def select_stocks_if_due(t, last_reselect_t, ranking_universe_prices, k=RANKING_K):
     """Re-run K-Medoids stock selection if the reselect interval has elapsed.
 
     Returns ``(selected_stocks, last_reselect_t)`` — either updated or unchanged.
     """
     if t - last_reselect_t >= RANKING_RESELECT_FREQUENCY:
-        universe_up_to_t = ranking_universe_prices.iloc[:t + window]
+        # prices.iloc[t] = yesterday; returns is offset by 1 due to dropna()
+        universe_up_to_t = ranking_universe_prices.iloc[:t]
         return select_representatives(universe_up_to_t, k=k), t
     return None, last_reselect_t  # caller should keep existing selected_stocks
 
@@ -70,7 +73,7 @@ def build_active_assets(selected_stocks, assets):
     if selected_stocks is None:
         return list(range(len(assets))), list(assets)
 
-    active_assets_list = list(selected_stocks) + ["GOLD"] + RANKING_DEFAULT_DEFENSIVE_ASSETS
+    active_assets_list = list(selected_stocks) + ["GOLD"] + DEFAULT_DEFENSIVE_ASSETS
     active_assets_list = list(dict.fromkeys(active_assets_list))  # deduplicate, keep order
     active_indices = [assets.index(a) for a in active_assets_list if a in assets]
     active_asset_names = [assets[i] for i in active_indices]
@@ -90,8 +93,8 @@ def apply_risk_management(p_view, q_view, conf_view, view_names, returns, t, act
 
     # Volatility dampener
     if conf_view is not None:
-        if regime["vol_ratio"] > RANKING_VOL_DAMPENER_THRESHOLD:
-            dampener = RANKING_VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
+        if regime["vol_ratio"] > VOL_DAMPENER_THRESHOLD:
+            dampener = VOL_DAMPENER_THRESHOLD / regime["vol_ratio"]
             conf_view = conf_view * dampener
 
     # Defensive views during stress/crisis
@@ -135,18 +138,18 @@ def ranking_sub_optimize(
         mu_bl_sub = sub_mu
 
     current_risk_aversion = (
-        RANKING_RISK_AVERSION_STRESS
+        RISK_AVERSION_STRESS
         if regime["regime"] == "crisis"
-        else RANKING_RISK_AVERSION_BASE
+        else RISK_AVERSION_BASE
     )
     sub_bl_weight = optimize_weight_ranking(
         mu_bl_sub,
         sub_sigma,
         active_asset_names,
         risk_aversion=current_risk_aversion,
-        min_defensive_weight=RANKING_MIN_DEFENSIVE_WEIGHT,
-        max_equity_exposure=RANKING_MAX_EQUITY_EXPOSURE,
-        defensive_assets=RANKING_DEFAULT_DEFENSIVE_ASSETS,
+        min_defensive_weight=MIN_DEFENSIVE_WEIGHT,
+        max_equity_exposure=MAX_EQUITY_EXPOSURE,
+        defensive_assets=DEFAULT_DEFENSIVE_ASSETS,
     )
 
     bl_weight = np.zeros(m)
@@ -161,15 +164,15 @@ def ranking_sub_optimize(
 
 def generate_ranking_mode_views(
     t, ranking_model, selected_stocks, ranking_universe_prices,
-    ranking_market_prices, active_asset_names, window,
+    ranking_market_prices, active_asset_names,
 ):
     """Generate relative views from XGBoostRankingModel, with momentum cold-start fallback."""
     if ranking_model.is_trained and selected_stocks is not None:
-        lookback_start = max(0, t - RANKING_FEATURE_WINDOW - 30)
+        lookback_start = max(0, t - RANKING_FEATURE_WINDOW)
         stock_prices_recent = ranking_universe_prices[selected_stocks].iloc[
-            lookback_start:t + window
+            lookback_start:t
         ]
-        market_recent = ranking_market_prices.iloc[lookback_start:t + window]
+        market_recent = ranking_market_prices.iloc[lookback_start:t]
         rank_scores, ensemble_std = ranking_model.predict(stock_prices_recent, market_recent)
         return generate_ranking_relative_views(
             rank_scores, ensemble_std, active_asset_names, spread=RANKING_VIEW_SPREAD
@@ -179,7 +182,7 @@ def generate_ranking_mode_views(
     if selected_stocks is not None and t >= 20:
         momentum_lookback = min(20, t)
         recent_prices = ranking_universe_prices[selected_stocks].iloc[
-            t - momentum_lookback:t + window
+            t - momentum_lookback:t
         ]
         if len(recent_prices) >= 20:
             mom_scores = {}
@@ -203,13 +206,13 @@ def generate_ranking_mode_views(
 
 def generate_ranking_abs_mode_views(
     t, ranking_abs_model, selected_stocks, ranking_universe_prices,
-    active_asset_names, window,
+    active_asset_names,
 ):
     """Generate absolute ML views from XGBoostEnsembleModel."""
     if ranking_abs_model.is_trained and selected_stocks is not None:
-        lookback_start = max(0, t - RANKING_FEATURE_WINDOW - 30)
+        lookback_start = max(0, t - DEFAULT_FEATURE_WINDOW)
         stock_prices_recent = ranking_universe_prices[selected_stocks].iloc[
-            lookback_start:t + window
+            lookback_start:t
         ]
         predictions = ranking_abs_model.predict(stock_prices_recent)
         ml_views = generate_ml_views(
@@ -233,7 +236,7 @@ def retrain_ranking_model_if_due(
     """Retrain the XGBoostRankingModel if the retrain interval has elapsed."""
     if t - last_retrain_t >= RANKING_RETRAIN_FREQUENCY or not ranking_model.is_trained:
         train_end = t - RANKING_PREDICTION_HORIZON
-        if train_end > RANKING_FEATURE_WINDOW + 50:
+        if train_end > (RANKING_FEATURE_WINDOW + RANKING_PREDICTION_HORIZON + RANKING_MIN_TRAIN_SAMPLES):
             stock_prices_train = ranking_universe_prices[selected_stocks].iloc[:train_end]
             market_train = ranking_market_prices.iloc[:train_end]
             ranking_model.train(stock_prices_train, market_train, verbose=False)
@@ -247,8 +250,8 @@ def retrain_ranking_abs_model_if_due(
 ):
     """Retrain the XGBoostEnsembleModel if the retrain interval has elapsed."""
     if t - last_retrain_t >= RETRAIN_FREQUENCY or not ranking_abs_model.is_trained:
-        train_end = t - RANKING_PREDICTION_HORIZON
-        if train_end > RANKING_FEATURE_WINDOW + 50:
+        train_end = t - DEFAULT_PREDICTION_HORIZON
+        if train_end > (DEFAULT_FEATURE_WINDOW + DEFAULT_PREDICTION_HORIZON + MIN_TRAIN_SAMPLES):
             stock_prices_train = ranking_universe_prices[selected_stocks].iloc[:train_end]
             ranking_abs_model.train(stock_prices_train, verbose=False)
             return t
@@ -269,7 +272,6 @@ def run_ranking_step(
     assets,
     ranking_universe_prices,
     ranking_market_prices,
-    window,
 ):
     """Orchestrate one ranking-mode rebalance step.
 
@@ -305,7 +307,7 @@ def run_ranking_step(
 
     # --- Stock selection ---
     new_stocks, new_reselect_t = select_stocks_if_due(
-        t, state["last_reselect_t"], ranking_universe_prices, window
+        t, state["last_reselect_t"], ranking_universe_prices
     )
     if new_stocks is not None:
         state["selected_stocks"] = new_stocks
@@ -335,12 +337,12 @@ def run_ranking_step(
         p_view, q_view, conf_view, view_names = generate_ranking_mode_views(
             t, state["ranking_model"], selected_stocks,
             ranking_universe_prices, ranking_market_prices,
-            active_asset_names, window,
+            active_asset_names,
         )
     else:
         p_view, q_view, conf_view, view_names = generate_ranking_abs_mode_views(
             t, state["ranking_abs_model"], selected_stocks,
-            ranking_universe_prices, active_asset_names, window,
+            ranking_universe_prices, active_asset_names,
         )
 
     # --- Risk management ---

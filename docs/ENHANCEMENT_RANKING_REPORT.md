@@ -500,8 +500,8 @@ Hàm: `optimize_weight_ranking(...)` trong `backtest.py`.
 Ngoài defensive views, hệ thống còn giảm trực tiếp confidence của các relative ranking views khi thị trường biến động:
 
 ```
-if vol_ratio > RANKING_VOL_DAMPENER_THRESHOLD (= 1.3):
-    factor = RANKING_VOL_DAMPENER_THRESHOLD / vol_ratio   # < 1
+if vol_ratio > VOL_DAMPENER_THRESHOLD (= 1.3):
+    factor = VOL_DAMPENER_THRESHOLD / vol_ratio   # < 1
     confidence_ranking *= factor
 ```
 
@@ -529,8 +529,8 @@ if vol_ratio > RANKING_VOL_DAMPENER_THRESHOLD (= 1.3):
   μ_BL = black_litterman_posterior(Σ, w_mkt, P, Q, conf)
         │
         ▼
-  δ = RANKING_RISK_AVERSION_STRESS  if regime != normal
-      else RANKING_RISK_AVERSION_BASE
+  δ = RISK_AVERSION_STRESS  if regime != normal
+      else RISK_AVERSION_BASE
         │
         ▼
   w = optimize_weight_ranking(
@@ -597,16 +597,16 @@ RANKING_VIEW_SPREAD = 0.03             # Spread annual cho relative views
 VN30_LIST_PATH = "datasets/vn30_list.txt"
 
 # ====================== RANKING RISK MANAGEMENT ======================
-RANKING_MIN_DEFENSIVE_WEIGHT  = 0.25   # Sàn GOLD + MBBOND (defensive floor)
-RANKING_MAX_EQUITY_EXPOSURE   = 0.70   # Trần cổ phiếu (equity exposure cap)
-RANKING_VOL_DAMPENER_THRESHOLD = 1.3   # Vol ratio kích hoạt dampener / regime stress
-RANKING_VOL_DAMPENER_SEVERE   = 1.8    # Vol ratio kích hoạt regime crisis
-RANKING_DRAWDOWN_LOOKBACK     = 60     # Số ngày tính drawdown
-RANKING_DRAWDOWN_STRESS_THRESHOLD    = -0.10  # Drawdown -10% → stress
-RANKING_DRAWDOWN_CRISIS_THRESHOLD    = -0.20  # Drawdown -10% → crisis
-RANKING_DEFENSIVE_CONFIDENCE  = 0.80   # Confidence cho defensive views
-RANKING_RISK_AVERSION_BASE    = 2.5    # δ cho regime normal (vs 0.5 ở các mode khác)
-RANKING_RISK_AVERSION_STRESS  = 5.0    # δ cho regime stress / crisis
+MIN_DEFENSIVE_WEIGHT  = 0.25   # Sàn GOLD + MBBOND (defensive floor)
+MAX_EQUITY_EXPOSURE   = 0.70   # Trần cổ phiếu (equity exposure cap)
+VOL_DAMPENER_THRESHOLD = 1.3   # Vol ratio kích hoạt dampener / regime stress
+VOL_DAMPENER_SEVERE   = 1.8    # Vol ratio kích hoạt regime crisis
+DRAWDOWN_LOOKBACK     = 60     # Số ngày tính drawdown
+DRAWDOWN_STRESS_THRESHOLD    = -0.10  # Drawdown -10% → stress
+DRAWDOWN_CRISIS_THRESHOLD    = -0.20  # Drawdown -10% → crisis
+DEFENSIVE_CONFIDENCE  = 0.80   # Confidence cho defensive views
+RISK_AVERSION_BASE    = 2.5    # δ cho regime normal (vs 0.5 ở các mode khác)
+RISK_AVERSION_STRESS  = 5.0    # δ cho regime stress / crisis
 ```
 
 ### 12.2 gen_view/ranking/config.py (module ranking)
@@ -669,8 +669,8 @@ Chỉnh sửa trực tiếp trong `config.py` hoặc `gen_view/ranking/config.py
 - Tăng `RANKING_K` để chọn nhiều đại diện hơn.
 - Điều chỉnh `RANKING_VIEW_SPREAD` để thay đổi độ lớn relative views.
 - Thay đổi `RANKING_CONF_BASE` để điều chỉnh mức confidence trung bình.
-- Tăng `RANKING_MIN_DEFENSIVE_WEIGHT` nếu muốn danh mục bảo thủ hơn.
-- Giảm `RANKING_MAX_EQUITY_EXPOSURE` nếu muốn hạn chế rủi ro cổ phiếu.
+- Tăng `MIN_DEFENSIVE_WEIGHT` nếu muốn danh mục bảo thủ hơn.
+- Giảm `MAX_EQUITY_EXPOSURE` nếu muốn hạn chế rủi ro cổ phiếu.
 - Nạp `RANKING_RISK_AVERSION_*` cao hơn nếu muốn optimizer uống về phía variance thấp.
 
 ---

@@ -24,7 +24,8 @@ ASSETS_CONFIG_FILENAME = "assets_1.json"
 WINDOW = 20
 REBALANCE_FREQ = 5
 INITIAL_NAV = 1.0
-MAX_POSITION_SIZE = 0.40            # Max weight per asset (diversification constraint)
+MAX_POSITION_SIZE = 0.5            # Max weight per asset (diversification constraint)
+MIN_WEIGHT_THRESHOLD = 0.01         # Post-solve: zero out weights below 1% and redistribute
 
 # ====================== BLACK-LITTERMAN ======================
 BL_TAU = 0.05
@@ -74,15 +75,25 @@ RANKING_RESELECT_FREQUENCY = 20        # Re-run K-Medoids every N days
 RANKING_VIEW_SPREAD = 0.20             # Annual spread for relative views
 VN30_LIST_PATH = "datasets/vn30_list.txt"
 
-# ====================== RANKING RISK MANAGEMENT ======================
-RANKING_MIN_DEFENSIVE_WEIGHT = 0.15    # Min in defensive assets
-RANKING_MAX_EQUITY_EXPOSURE = 0.70     # Max 70% total in stocks
-RANKING_VOL_DAMPENER_THRESHOLD = 1.3   # Vol ratio threshold for confidence reduction
-RANKING_VOL_DAMPENER_SEVERE = 1.8      # Severe vol -> more aggressive dampening
-RANKING_DRAWDOWN_LOOKBACK = 60         # Days to compute recent drawdown
-RANKING_DRAWDOWN_STRESS_THRESHOLD = -0.10     # 10% drawdown triggers stress mode
-RANKING_DRAWDOWN_CRISIS_THRESHOLD = -0.20     # 20% drawdown triggers crisis mode
-RANKING_DEFENSIVE_CONFIDENCE = 0.80    # Confidence for defensive views in stress
-RANKING_RISK_AVERSION_BASE = 1.5       # Higher risk aversion for ranking mode (vs 0.5 default)
-RANKING_RISK_AVERSION_STRESS = 5.0     # Even higher during stress regime
-RANKING_DEFAULT_DEFENSIVE_ASSETS = ["VFF"]
+# ====================== VOLATILITY DAMPENER ======================
+VOL_DAMPENER_RECENT_WINDOW = 20        # Recent vol lookback (trading days)
+VOL_DAMPENER_HIST_WINDOW = 120         # Historical vol lookback (trading days)
+VOL_DAMPENER_THRESHOLD = 1.3           # Vol ratio threshold for confidence reduction
+VOL_DAMPENER_SEVERE = 1.8              # Severe vol -> more aggressive dampening
+
+# ====================== RISK MANAGEMENT ======================
+MIN_DEFENSIVE_WEIGHT = 0.15    # Min in defensive assets
+MAX_EQUITY_EXPOSURE = 0.70     # Max 70% total in stocks
+DRAWDOWN_LOOKBACK = 60         # Days to compute recent drawdown
+DRAWDOWN_STRESS_THRESHOLD = -0.10     # 10% drawdown triggers stress mode
+DRAWDOWN_CRISIS_THRESHOLD = -0.20     # 20% drawdown triggers crisis mode
+RISK_AVERSION_BASE = 1.5       # Higher risk aversion for ranking mode (vs 0.5 default)
+RISK_AVERSION_STRESS = 5.0     # Even higher during stress regime
+DEFAULT_DEFENSIVE_ASSETS = ["VFF"]
+
+# Defensive Assets Return Spreads
+DEFENSIVE_CONFIDENCE = 0.80    # Confidence for defensive views in stress
+EXPECTED_ANNUAL_SPREAD_IN_CRISIS_REGIME = 0.10 
+EXPECTED_CONF_IN_CRISIS_REGIME = 1.0
+EXPECTED_ANNUAL_SPREAD_IN_STRESS_REGIME = 0.05
+EXPECTED_CONF_IN_STRESS_REGIME = 0.85

@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib
+
+from config import RISK_FREE_RATE_ANNUAL, TRADING_DAYS_PER_YEAR
 matplotlib.use("Agg")  # non-interactive backend for headless saving
 import matplotlib.pyplot as plt
 
@@ -30,8 +32,8 @@ def _compute_nav_metrics(nav_series) -> dict:
     import numpy as np
 
     ret = nav_series.pct_change().dropna()
-    trading_days = 252
-    rf_daily = (1 + 0.045) ** (1 / trading_days) - 1
+    trading_days = TRADING_DAYS_PER_YEAR
+    rf_daily = (1 + RISK_FREE_RATE_ANNUAL) ** (1 / trading_days) - 1
 
     final_nav = float(nav_series.iloc[-1])
 
@@ -107,13 +109,13 @@ def _generate_and_save_nav_plot(
         ax_nav.plot(mvo_nav.index, mvo_nav.values, label="MVO", linewidth=1.5, color=colors[1])
         ax_nav.plot(bl_nav.index, bl_nav.values, label=f"BL ({view_mode})", linewidth=1.5, color=colors[2])
         ax_nav.set_title(f"Backtest ({phase}): EW vs MVO vs BL ({view_mode})", fontsize=13)
-        ax_nav.set_ylabel("NAV (initial = 100,000)")
+        ax_nav.set_ylabel("NAV (initial = 1.0)")
         ax_nav.grid(True, alpha=0.3)
         ax_nav.legend(loc="best")
 
         # ── Bottom row: bar charts for Final NAV, Sharpe, MDD ───────────────
         metric_keys = [
-            ("final_nav", "Final NAV", "{:.0f}"),
+            ("final_nav", "Final NAV", "{:.2f}"),
             ("sharpe",    "Sharpe Ratio", "{:.3f}"),
             ("mdd",       "Max Drawdown", "{:.2%}"),
         ]

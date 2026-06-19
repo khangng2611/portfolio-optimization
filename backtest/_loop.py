@@ -17,6 +17,9 @@ from config import (
     ML_TRAINING_MODE,
     REBALANCE_FREQ,
     VIEW_MODE,
+    VOL_DAMPENER_HIST_WINDOW,
+    VOL_DAMPENER_RECENT_WINDOW,
+    VOL_DAMPENER_THRESHOLD,
     WINDOW,
     RANKING_RESELECT_FREQUENCY,
     RANKING_RETRAIN_FREQUENCY,
@@ -160,7 +163,7 @@ def backtest(
                 bl_weight, views_record = run_ranking_step(
                     t, ranking_state, view_mode,
                     mu, sigma, returns, assets,
-                    ranking_universe_prices, ranking_market_prices, window,
+                    ranking_universe_prices, ranking_market_prices
                 )
                 views_history.append(views_record)
 
@@ -192,11 +195,11 @@ def backtest(
 
                 # Volatility-based confidence dampener
                 if conf_view is not None and view_mode in ("ml", "combined"):
-                    recent_vol = returns.iloc[max(0, t - 20):t].std().mean()
-                    hist_vol = returns.iloc[max(0, t - 120):t].std().mean()
+                    recent_vol = returns.iloc[max(0, t - VOL_DAMPENER_RECENT_WINDOW):t].std().mean()
+                    hist_vol = returns.iloc[max(0, t - VOL_DAMPENER_HIST_WINDOW):t].std().mean()
                     vol_ratio = recent_vol / hist_vol if hist_vol > 0 else 1.0
-                    if vol_ratio > 1.3:
-                        dampener = 1.3 / vol_ratio
+                    if vol_ratio > VOL_DAMPENER_THRESHOLD:
+                        dampener = VOL_DAMPENER_THRESHOLD / vol_ratio
                         conf_view = conf_view * dampener
 
                 views_history.append({

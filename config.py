@@ -30,7 +30,7 @@ MIN_WEIGHT_THRESHOLD = 0.01         # Post-solve: zero out weights below 1% and 
 # ====================== BLACK-LITTERMAN ======================
 BL_TAU = 0.05
 BL_DELTA = 2.5
-BL_VIEW_CONFIDENCE = 0.5
+BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL = 0.5
 
 # ====================== VIEW GENERATION ======================
 # View generation mode: "rule_based", "relative", "ml", "combined", "ranking", "ranking_absolute"
@@ -60,7 +60,8 @@ ML_MODEL_TYPE = "xgboost"
 
 DEFAULT_FEATURE_WINDOW = 30
 DEFAULT_PREDICTION_HORIZON = 5
-ML_MIN_RETURN_THRESHOLD = 0.005
+ML_MIN_ALLOWED_PREDICTION_RETURN = 0.001
+ML_MAX_ANNUAL_VIEW_THRESHOLD = 0.5     # max annual view magnitude (hard cap)
 
 # ML Training mode: "pretrained" (load from cache) or "walk_forward" (retrain during backtest)
 ML_TRAINING_MODE = "walk_forward"
@@ -97,3 +98,20 @@ EXPECTED_ANNUAL_SPREAD_IN_CRISIS_REGIME = 0.10
 EXPECTED_CONF_IN_CRISIS_REGIME = 1.0
 EXPECTED_ANNUAL_SPREAD_IN_STRESS_REGIME = 0.05
 EXPECTED_CONF_IN_STRESS_REGIME = 0.85
+
+# ====================== HYBRID MVO+BL STRATEGY ======================
+# HYBRID weights are a regime-aware convex combination of MVO and BL weights:
+#     w_hybrid = alpha(regime) * w_mvo + (1 - alpha(regime)) * w_bl
+# alpha (the MVO share) is reduced as the market regime worsens, so the
+# portfolio leans toward MVO upside during calm markets and toward BL's
+# defensive posterior during stress / crisis.
+ENABLE_HYBRID_STRATEGY = True
+HYBRID_MVO_RATIO_NORMAL = 0.60   # Normal: balanced, slight MVO tilt
+HYBRID_MVO_RATIO_STRESS = 0.30   # Stress: BL-leaning
+HYBRID_MVO_RATIO_CRISIS = 0.10   # Crisis: BL-dominant (small MVO satellite)
+
+HYBRID_REGIME_RATIOS = {
+    "normal": HYBRID_MVO_RATIO_NORMAL,
+    "stress": HYBRID_MVO_RATIO_STRESS,
+    "crisis": HYBRID_MVO_RATIO_CRISIS,
+}

@@ -87,7 +87,12 @@ class XGBoostCoreModel:
         """
         features = []
 
-        for i in range(self.feature_window, len(prices)):
+        # Start from feature_window - 1 so that when len(prices) ==
+        # feature_window we still produce one feature row (the latest
+        # observation).  The slice prices.iloc[:i+1] at i = feature_window-1
+        # covers exactly feature_window points, which is sufficient for all
+        # technical indicators (they gracefully degrade for short history).
+        for i in range(self.feature_window - 1, len(prices)):
             price_slice = prices.iloc[: i + 1]
 
             feature_dict = {
@@ -108,7 +113,7 @@ class XGBoostCoreModel:
 
             features.append(feature_dict)
 
-        df = pd.DataFrame(features, index=prices.index[self.feature_window :])
+        df = pd.DataFrame(features, index=prices.index[self.feature_window - 1:])
         return df
 
     def _compute_labels(self, prices: pd.Series) -> pd.Series:
@@ -310,7 +315,7 @@ class XGBoostEnsembleModel:
         """Compute technical indicator features for prediction."""
         features = []
 
-        for i in range(self.feature_window, len(prices)):
+        for i in range(self.feature_window - 1, len(prices)):
             price_slice = prices.iloc[: i + 1]
 
             feature_dict = {
@@ -331,7 +336,7 @@ class XGBoostEnsembleModel:
 
             features.append(feature_dict)
 
-        df = pd.DataFrame(features, index=prices.index[self.feature_window:])
+        df = pd.DataFrame(features, index=prices.index[self.feature_window - 1:])
         return df
 
     def _compute_labels(self, prices: pd.Series) -> pd.Series:

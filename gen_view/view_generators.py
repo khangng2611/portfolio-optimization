@@ -17,7 +17,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from config import DEFAULT_PREDICTION_HORIZON, STATIC_VIEWS, TRADING_DAYS_PER_YEAR
+from config import DEFAULT_PREDICTION_HORIZON, STATIC_VIEWS, TRADING_DAYS_PER_YEAR, ML_MIN_ALLOWED_PREDICTION_RETURN, BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL, ML_MAX_ANNUAL_VIEW_THRESHOLD
 from utils.indicators import (
     DEFAULT_MA_LONG,
     DEFAULT_MA_SHORT,
@@ -247,8 +247,10 @@ def generate_relative_views(
 def generate_ml_views(
     predictions: dict[str, tuple[float, float]],
     prediction_horizon: int = DEFAULT_PREDICTION_HORIZON,
-    min_return_threshold: float = 0.005,
+    min_return_threshold: float = ML_MIN_ALLOWED_PREDICTION_RETURN,
     model_type: str = "xgboost",
+    returns: Optional[pd.DataFrame] = None,
+    vol_lookback: int = 20,
 ) -> list[dict]:
     """
     Convert ML predictions into Black-Litterman view dicts.
@@ -268,6 +270,14 @@ def generate_ml_views(
         Minimum absolute predicted return to emit a view
     model_type : str
         Label stored in the view dict for provenance
+    returns : pd.DataFrame, optional
+        Recent daily returns per asset (columns = asset names).  When
+        provided, view magnitudes are scaled by a volatility-adjusted
+        tanh transform (Option B).  When ``None``, falls back to linear
+        annualization with a hard cap.
+    vol_lookback : int
+        Lookback window (trading days) for recent volatility estimation
+        used by the tanh transform.  Default 20.
 
     Returns
     -------
@@ -276,16 +286,36 @@ def generate_ml_views(
     """
     views = []
 
-    # Scaling parameters
-    MAX_ANNUAL_VIEW = 0.30    # max annual view magnitude (hard cap)
+    # --- Pre-compute horizon-scaled volatility per asset (Option B) ---
+    vol_h: dict[str, float] = {}
+    if returns is not None:
+        for asset in predictions:
+            if asset in returns.columns:
+                recent_ret = returns[asset].dropna().tail(vol_lookback)
+                if len(recent_ret) >= 5:
+                    vol_h[asset] = float(recent_ret.std() * np.sqrt(prediction_horizon))
 
     for asset, (pred_return, confidence) in predictions.items():
         if abs(pred_return) < min_return_threshold:
             continue
 
-        # Annualize and clip
-        view_return_annual = pred_return * (TRADING_DAYS_PER_YEAR / prediction_horizon)
-        view_return_annual = max(-MAX_ANNUAL_VIEW, min(MAX_ANNUAL_VIEW, view_return_annual))
+        # --- Original linear annualization with hard cap (kept for rollback) ---
+        # view_return_annual = pred_return * (TRADING_DAYS_PER_YEAR / prediction_horizon)
+        # view_return_annual = max(-ML_MAX_ANNUAL_VIEW_THRESHOLD, min(ML_MAX_ANNUAL_VIEW_THRESHOLD, view_return_annual))
+
+        # --- Option B: volatility-adjusted tanh scaling ---
+        # Express the prediction as a z-score relative to the asset's
+        # horizon-scaled volatility, then map smoothly to
+        # [-ML_MAX_ANNUAL_VIEW_THRESHOLD, +ML_MAX_ANNUAL_VIEW_THRESHOLD]
+        # via tanh.  This preserves sign and relative strength while
+        # compressing extreme predictions instead of clipping them.
+        if asset in vol_h and vol_h[asset] > 1e-8:
+            z_score = pred_return / vol_h[asset]
+            view_return_annual = ML_MAX_ANNUAL_VIEW_THRESHOLD * np.tanh(z_score)
+        else:
+            # Fallback: linear annualization when no volatility data available
+            view_return_annual = pred_return * (TRADING_DAYS_PER_YEAR / prediction_horizon)
+            view_return_annual = max(-ML_MAX_ANNUAL_VIEW_THRESHOLD, min(ML_MAX_ANNUAL_VIEW_THRESHOLD, view_return_annual))
 
         views.append({
             "name": f"{asset}_ml_{model_type}",
@@ -349,7 +379,7 @@ def build_views_matrix(
         
         p_rows.append(row)
         q_vals.append(view["view_return_annual"] / trading_days_per_year)
-        conf_vals.append(view.get("confidence", 0.5))
+        conf_vals.append(view.get("confidence", BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL))
         active_names.append(view["name"])
     
     if len(p_rows) == 0:

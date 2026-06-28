@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from config import ML_MIN_RETURN_THRESHOLD, VIEW_MODE, WINDOW
+from config import ML_MIN_ALLOWED_PREDICTION_RETURN, VIEW_MODE, WINDOW
 from backtest._black_litterman import black_litterman_posterior_mu
 from backtest._optimizer import optimize_weight
 from backtest._views import generate_dynamic_views
@@ -15,7 +15,7 @@ def get_next_period_weights(
     window=WINDOW,
     view_mode=VIEW_MODE,
     ml_model=None,
-    ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
+    ml_min_return_threshold=ML_MIN_ALLOWED_PREDICTION_RETURN,
 ):
     """Estimate MVO and BL weights for the period after *as_of_date*.
 

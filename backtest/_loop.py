@@ -1,8 +1,17 @@
 """Core walk-forward backtest loop.
 
-Orchestrates EW / MVO / BL strategy NAV computation across rebalance
-periods.  Ranking-mode logic is delegated to ``_ranking_helpers`` to
-keep this module focused on the loop mechanics.
+Orchestrates EW / MVO / BL / HYBRID strategy NAV computation across
+rebalance periods.  Ranking-mode logic is delegated to ``_ranking_helpers``
+to keep this module focused on the loop mechanics.
+
+The HYBRID strategy is a regime-aware convex blend of the MVO and BL
+weight vectors:
+
+    w_hybrid = alpha(regime) * w_mvo + (1 - alpha(regime)) * w_bl
+
+where ``alpha`` (the MVO share) is configured per regime in ``config.py``
+(``HYBRID_REGIME_RATIOS``).  The strategy can be globally toggled via
+``ENABLE_HYBRID_STRATEGY``.
 """
 
 import numpy as np
@@ -11,8 +20,11 @@ import pandas as pd
 from config import (
     DEFAULT_FEATURE_WINDOW,
     DEFAULT_PREDICTION_HORIZON,
+    ENABLE_HYBRID_STRATEGY,
+    HYBRID_MVO_RATIO_NORMAL,
+    HYBRID_REGIME_RATIOS,
     INITIAL_NAV,
-    ML_MIN_RETURN_THRESHOLD,
+    ML_MIN_ALLOWED_PREDICTION_RETURN,
     RETRAIN_FREQUENCY,
     ML_TRAINING_MODE,
     REBALANCE_FREQ,
@@ -27,9 +39,10 @@ from config import (
 from gen_view.xgboost.config import MIN_TRAIN_SAMPLES
 from gen_view.xgboost.xgboost_core import XGBoostEnsembleModel
 from gen_view.ranking.ranking_model import XGBoostRankingModel
+from gen_view.ranking.risk_management import detect_market_regime
 
 from backtest._black_litterman import black_litterman_posterior_mu
-from backtest._optimizer import optimize_weight
+from backtest._optimizer import blend_weights, optimize_weight
 from backtest._views import generate_dynamic_views
 from backtest._ranking_helpers import run_ranking_step
 
@@ -41,7 +54,7 @@ def backtest(
     initial_nav=INITIAL_NAV,
     view_mode=VIEW_MODE,
     ml_model=None,
-    ml_min_return_threshold=ML_MIN_RETURN_THRESHOLD,
+    ml_min_return_threshold=ML_MIN_ALLOWED_PREDICTION_RETURN,
     ml_training_mode=ML_TRAINING_MODE,
     retrain_frequency=RETRAIN_FREQUENCY,
     ranking_universe_prices=None,
@@ -87,6 +100,9 @@ def backtest(
         Result dict with keys: returns, ew_nav, mvo_nav, bl_nav, weights
         histories, rebalance_dates, assets, views_history,
         rebalance_weights_history, view_mode, ml_model.
+        When
+        ``ENABLE_HYBRID_STRATEGY`` is true the dict also contains
+        ``hybrid_nav`` and ``hybrid_weights_hist``.
     """
     returns = prices.pct_change().dropna()
     assets = list(prices.columns)
@@ -95,13 +111,16 @@ def backtest(
     ew_weight = np.full(m, 1.0 / m)
     mvo_weight = np.full(m, 1.0 / m)
     bl_weight = np.full(m, 1.0 / m)
+    hybrid_weight = np.full(m, 1.0 / m)
 
     ew_nav = [initial_nav]
     mvo_nav = [initial_nav]
     bl_nav = [initial_nav]
+    hybrid_nav = [initial_nav]
     ew_weights_hist = []
     mvo_weights_hist = []
     bl_weights_hist = []
+    hybrid_weights_hist = []
     rebalance_dates = []
     views_history = []
     rebalance_weights_history = []
@@ -160,11 +179,15 @@ def backtest(
 
             if view_mode in ("ranking", "ranking_absolute"):
                 # --- RANKING MODES (delegated to run_ranking_step) ---
-                bl_weight, views_record = run_ranking_step(
+                bl_weight, ranking_mvo_weight, regime, views_record = run_ranking_step(
                     t, ranking_state, view_mode,
                     mu, sigma, returns, assets,
                     ranking_universe_prices, ranking_market_prices
                 )
+                # MVO leg of HYBRID = full-universe MVO (line 177).
+                # BL leg is on the active sub-universe (zero elsewhere).
+                # blend_weights handles the union alignment via zero-padding.
+                hybrid_mvo_leg = mvo_weight
                 views_history.append(views_record)
 
             else:
@@ -202,6 +225,9 @@ def backtest(
                         dampener = VOL_DAMPENER_THRESHOLD / vol_ratio
                         conf_view = conf_view * dampener
 
+                # Detect regime once per rebalance for HYBRID alpha selection.
+                regime = detect_market_regime(returns, t) if ENABLE_HYBRID_STRATEGY else None
+
                 views_history.append({
                     "date": returns.index[t],
                     "view_names": view_names if p_view is not None else [],
@@ -214,6 +240,19 @@ def backtest(
                 else:
                     mu_bl = mu
                 bl_weight = optimize_weight(mu_bl, sigma)
+                # MVO leg of HYBRID = the full-universe MVO already computed above.
+                hybrid_mvo_leg = mvo_weight
+
+            # --- HYBRID strategy: regime-aware convex blend ---
+            if ENABLE_HYBRID_STRATEGY and regime is not None:
+                alpha = HYBRID_REGIME_RATIOS.get(regime["regime"], HYBRID_MVO_RATIO_NORMAL)
+                hybrid_weight = blend_weights(hybrid_mvo_leg, bl_weight, alpha)
+                # Annotate the views record (last appended) with regime + alpha
+                # so post-hoc analysis can correlate regime distribution to
+                # blend behaviour.
+                if views_history:
+                    views_history[-1]["regime"] = regime["regime"]
+                    views_history[-1]["hybrid_alpha"] = float(alpha)
 
             rebalance_dates.append(returns.index[t])
             rebalance_weights_history.append({
@@ -221,6 +260,7 @@ def backtest(
                 "EW": ew_weight.copy(),
                 "MVO": mvo_weight.copy(),
                 "BL": bl_weight.copy(),
+                "HYBRID": hybrid_weight.copy(),
             })
 
         # NAV updates for MVO and BL
@@ -228,6 +268,11 @@ def backtest(
         bl_nav.append(bl_nav[-1] * (1 + np.dot(bl_weight, r_t)))
         mvo_weights_hist.append(mvo_weight.copy())
         bl_weights_hist.append(bl_weight.copy())
+
+        # NAV update for HYBRID (uses the latest blended weight)
+        if ENABLE_HYBRID_STRATEGY:
+            hybrid_nav.append(hybrid_nav[-1] * (1 + np.dot(hybrid_weight, r_t)))
+            hybrid_weights_hist.append(hybrid_weight.copy())
 
         # --- Warm-up reset: discard warm-up period records, restart NAV ---
         # All strategies restart from initial_nav for a fair comparison;
@@ -239,6 +284,9 @@ def backtest(
             ew_weights_hist = [ew_weight.copy()]
             mvo_weights_hist = [mvo_weight.copy()]
             bl_weights_hist = [bl_weight.copy()]
+            if ENABLE_HYBRID_STRATEGY:
+                hybrid_nav = [initial_nav]
+                hybrid_weights_hist = [hybrid_weight.copy()]
             rebalance_dates.clear()
             views_history.clear()
             rebalance_weights_history.clear()
@@ -248,8 +296,12 @@ def backtest(
     ew_series = pd.Series(ew_nav, index=nav_index)
     mvo_series = pd.Series(mvo_nav, index=nav_index)
     bl_series = pd.Series(bl_nav, index=nav_index)
+    hybrid_series = (
+        pd.Series(hybrid_nav, index=nav_index)
+        if ENABLE_HYBRID_STRATEGY else None
+    )
 
-    return {
+    result = {
         "returns": returns,
         "ew_nav": ew_series,
         "mvo_nav": mvo_series,
@@ -264,3 +316,7 @@ def backtest(
         "view_mode": view_mode,
         "ml_model": ml_model,
     }
+    if ENABLE_HYBRID_STRATEGY:
+        result["hybrid_nav"] = hybrid_series
+        result["hybrid_weights_hist"] = np.array(hybrid_weights_hist)
+    return result

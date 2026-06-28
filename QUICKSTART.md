@@ -47,7 +47,7 @@ INITIAL_NAV = 1.0
 # Black-Litterman
 BL_TAU = 0.05
 BL_DELTA = 2.5
-BL_VIEW_CONFIDENCE = 0.5
+BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL = 0.5
 
 # View generation
 VIEW_MODE = "combined"        # mặc định hiện tại
@@ -57,7 +57,7 @@ COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)  # (rule, relative, ml, static)
 ML_MODEL_TYPE = "xgboost"
 DEFAULT_FEATURE_WINDOW = 20
 DEFAULT_PREDICTION_HORIZON = 5
-ML_MIN_RETURN_THRESHOLD = 0.005
+ML_MIN_ALLOWED_PREDICTION_RETURN = 0.005
 ```
 
 Module XGBoost có thêm file cấu hình riêng tại `gen_view/xgboost/config.py` (hyperparams, feature periods, confidence heuristic).

@@ -113,7 +113,7 @@ Nhãn:
 - Forward return theo `prediction_horizon` ngày (mặc định từ `gen_view/xgboost/config.py`)
 
 Sinh views:
-- Ngưỡng `min_return_threshold` mặc định lấy từ `config.py` (`ML_MIN_RETURN_THRESHOLD = 0.005`)
+- Ngưỡng `min_return_threshold` mặc định lấy từ `config.py` (`ML_MIN_ALLOWED_PREDICTION_RETURN = 0.005`)
 - Nếu `abs(pred_return) < min_return_threshold` thì bỏ qua
 - Ngược lại annualize return và tạo absolute view cho tài sản
 

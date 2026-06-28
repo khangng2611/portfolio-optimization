@@ -6,7 +6,7 @@ Routes to the correct view generator based on the selected mode
 
 import pandas as pd
 
-from config import COMBINED_VIEW_WEIGHTS, ML_MIN_RETURN_THRESHOLD, VIEW_MODE
+from config import COMBINED_VIEW_WEIGHTS, ML_MIN_ALLOWED_PREDICTION_RETURN, VIEW_MODE
 from gen_view.view_generators import (
     build_views_matrix,
     combine_views,
@@ -22,7 +22,7 @@ def generate_dynamic_views(
     assets: list,
     mode: str = VIEW_MODE,
     ml_model=None,
-    ml_min_return_threshold: float = ML_MIN_RETURN_THRESHOLD,
+    ml_min_return_threshold: float = ML_MIN_ALLOWED_PREDICTION_RETURN,
 ):
     """Generate views dynamically based on the selected mode.
 

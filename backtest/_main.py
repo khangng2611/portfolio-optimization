@@ -190,29 +190,41 @@ def main():
     ew_nav = result["ew_nav"]
     mvo_nav = result["mvo_nav"]
     bl_nav = result["bl_nav"]
+    hybrid_nav = result.get("hybrid_nav")
 
     print("\n" + "=" * 70)
     print(f"KET QUA BACKTEST ({eval_label}, theo du lieu kha dung)")
     print(f"EW   | NAV cuoi: {ew_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(ew_nav):6.2f} | MDD: {max_drawdown(ew_nav):7.2%}")
     print(f"MVO  | NAV cuoi: {mvo_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(mvo_nav):6.2f} | MDD: {max_drawdown(mvo_nav):7.2%}")
     print(f"BL   | NAV cuoi: {bl_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(bl_nav):6.2f} | MDD: {max_drawdown(bl_nav):7.2%}")
+    if hybrid_nav is not None:
+        print(f"HYB  | NAV cuoi: {hybrid_nav.iloc[-1]:8.2f} | Sharpe: {sharpe_ratio(hybrid_nav):6.2f} | MDD: {max_drawdown(hybrid_nav):7.2%}")
 
     # Log view history + save NAV plot (plot saved by view_logger, no interactive duplicate)
+    backtest_metrics = {
+        "EW":  {"final_nav": float(ew_nav.iloc[-1]), "sharpe": float(sharpe_ratio(ew_nav)), "mdd": float(max_drawdown(ew_nav))},
+        "MVO": {"final_nav": float(mvo_nav.iloc[-1]), "sharpe": float(sharpe_ratio(mvo_nav)), "mdd": float(max_drawdown(mvo_nav))},
+        "BL":  {"final_nav": float(bl_nav.iloc[-1]), "sharpe": float(sharpe_ratio(bl_nav)), "mdd": float(max_drawdown(bl_nav))},
+    }
+    if hybrid_nav is not None:
+        backtest_metrics["HYBRID"] = {
+            "final_nav": float(hybrid_nav.iloc[-1]),
+            "sharpe": float(sharpe_ratio(hybrid_nav)),
+            "mdd": float(max_drawdown(hybrid_nav)),
+        }
+
     log_path, plot_path = log_view_history(
         result["views_history"],
         view_mode=view_mode,
         phase=phase,
         assets=result["assets"],
-        backtest_metrics={
-            "EW":  {"final_nav": float(ew_nav.iloc[-1]), "sharpe": float(sharpe_ratio(ew_nav)), "mdd": float(max_drawdown(ew_nav))},
-            "MVO": {"final_nav": float(mvo_nav.iloc[-1]), "sharpe": float(sharpe_ratio(mvo_nav)), "mdd": float(max_drawdown(mvo_nav))},
-            "BL":  {"final_nav": float(bl_nav.iloc[-1]), "sharpe": float(sharpe_ratio(bl_nav)), "mdd": float(max_drawdown(bl_nav))},
-        },
+        backtest_metrics=backtest_metrics,
         ml_training_mode=ml_training_mode if view_mode in ("ml", "combined") else None,
         weights_history=result.get("rebalance_weights_history"),
         ew_nav=ew_nav if not args.no_plot else None,
         mvo_nav=mvo_nav if not args.no_plot else None,
         bl_nav=bl_nav if not args.no_plot else None,
+        hybrid_nav=hybrid_nav if not args.no_plot else None,
     )
 
     if plot_path is not None:

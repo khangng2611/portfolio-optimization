@@ -40,6 +40,14 @@ def run_one_mode(
     total_views = sum(len(v.get("view_names", [])) for v in views_history)
     rebalance_count = len(views_history)
 
+    strategy_pairs = [
+        ("EW", result["ew_nav"]),
+        ("MVO", result["mvo_nav"]),
+        ("BL", result["bl_nav"]),
+    ]
+    if result.get("hybrid_nav") is not None:
+        strategy_pairs.append(("HYBRID", result["hybrid_nav"]))
+
     rows = [
         {
             "scenario": scenario_name,
@@ -48,11 +56,7 @@ def run_one_mode(
             "rebalance_count": rebalance_count,
             "total_generated_views": total_views,
         }
-        for strategy_name, nav_series in [
-            ("EW", result["ew_nav"]),
-            ("MVO", result["mvo_nav"]),
-            ("BL", result["bl_nav"]),
-        ]
+        for strategy_name, nav_series in strategy_pairs
     ]
     return result, rows
 
@@ -246,7 +250,7 @@ def plot_scenarios(
     if n == 1:
         axes = [axes]
 
-    colors = {"EW": "#7f8c8d", "MVO": "#3498db", "BL": "#e74c3c"}
+    colors = {"EW": "#7f8c8d", "MVO": "#3498db", "BL": "#e74c3c", "HYBRID": "#8172B2"}
 
     for ax, (scenario_key, bl_label) in zip(axes, scenario_labels):
         result = results_by_scenario[scenario_key]
@@ -256,6 +260,12 @@ def plot_scenarios(
                 label="MVO", color=colors["MVO"], alpha=0.7)
         ax.plot(result["bl_nav"].index, result["bl_nav"].values,
                 label=bl_label, color=colors["BL"], linewidth=2)
+        if result.get("hybrid_nav") is not None:
+            ax.plot(
+                result["hybrid_nav"].index, result["hybrid_nav"].values,
+                label=f"HYBRID ({scenario_key})",
+                color=colors["HYBRID"], linewidth=2, linestyle="--",
+            )
         ax.set_title(scenario_key, fontsize=12, fontweight="bold")
         ax.grid(True, alpha=0.3)
         ax.set_xlabel("Date")

@@ -70,6 +70,8 @@ def get_gold_data_for_date(date_obj):
     sjc_buy = sjc_sell = None
 
     for location in locations:
+        if location.get("name") != "TPHCM":
+            continue
         for gold_type in location.get("gold_type", []):
             name = (gold_type.get("name") or "").strip().upper()
             gia_mua, gia_ban = _extract_buy_sell(gold_type)

@@ -33,6 +33,45 @@
     "GOLD",
     "VFF"
   ],
+  "vn30_universe": [
+    "ACB",
+    "BID",
+    "CTG",
+    "DGC",
+    "FPT",
+    "GAS",
+    "GVR",
+    "HDB",
+    "HPG",
+    "LPB",
+    "MBB",
+    "MSN",
+    "MWG",
+    "PLX",
+    "SAB",
+    "SHB",
+    "SSI",
+    "STB",
+    "TCB",
+    "TPB",
+    "VCB",
+    "VHM",
+    "VIB",
+    "VIC",
+    "VJC",
+    "VNM",
+    "VPB",
+    "VRE",
+    "BVH",
+    "POW"
+  ],
+  "market_proxy": "VNINDEX",
+  "ml_model_cache_paths": {
+    "xgboost": [
+      "gen_view/xgboost/.cache/xgboost_models.pkl",
+      ".cache/xgboost_models.pkl"
+    ]
+  },
   "assets": {
     "ACB": {
       "full_path": "datasets/stocks/full/ACB.csv",
@@ -257,6 +296,13 @@
       "test_path": "datasets/funds/test/VFF_test.csv",
       "date_col": "date",
       "price_col": "price"
+    },
+    "VNINDEX": {
+      "full_path": "datasets/indices/full/VNINDEX.csv",
+      "train_path": "datasets/indices/train/VNINDEX_train.csv",
+      "test_path": "datasets/indices/test/VNINDEX_test.csv",
+      "date_col": "date",
+      "price_col": "close"
     }
   }
 }

@@ -137,7 +137,7 @@ def main():
         else:
             print(f"LOAD ML VIEW GENERATOR ({args.ml_model_type})")
             try:
-                ml_model = load_ml_model(args.ml_model_type)
+                ml_model = load_ml_model(args.ml_model_type, args.assets_config)
             except FileNotFoundError as e:
                 print(f"\nERROR: {e}")
                 return
@@ -147,8 +147,8 @@ def main():
     ranking_market_prices = None
     if view_mode in ("ranking", "ranking_absolute"):
         print("\nLoading VN30 universe for ranking mode...")
-        ranking_universe_prices = load_vn30_universe_prices(load_start_date, end_date, load_phase, WINDOW)
-        ranking_market_prices = load_market_proxy_prices(load_start_date, end_date, load_phase, WINDOW)
+        ranking_universe_prices = load_vn30_universe_prices(load_start_date, end_date, load_phase, WINDOW, args.assets_config)
+        ranking_market_prices = load_market_proxy_prices(load_start_date, end_date, load_phase, WINDOW, args.assets_config)
         common_idx = (
             prices.index
             .intersection(ranking_universe_prices.index)

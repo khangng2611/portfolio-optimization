@@ -4,11 +4,14 @@
 # - Save the symbol list to a txt file (vn30_stocks.txt)
 # - For each symbol (stock + ETF), fetch full OHLCV data
 # - Save each symbol to its own CSV file
+#
+# Uses vnstock v4.0+ Unified UI (vnstock.ui.Market, vnstock.ui.Reference)
+# Data source: KBS (recommended stable source; VCI is unstable on Colab).
 # ===================================================================
 
 import sys
 import pandas as pd
-from vnstock import Quote, Listing
+from vnstock.ui import Market, Reference
 from datetime import datetime
 from pathlib import Path
 import time
@@ -29,17 +32,33 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DATASETS_DIR = ROOT_DIR / "datasets"
 LIST_FILE = DATASETS_DIR / "vn30_list.txt"
 OUTPUT_DIR = DATASETS_DIR / "stocks"
+INDEX_OUTPUT_DIR = DATASETS_DIR / "indices"
+
+# Data provider for OHLCV. KBS is the recommended stable source in v4.0+.
+DATA_SOURCE = "kbs"
+
+# Large cap on bar count so the API honors the full [start, end] range.
+# Without this, KBS defaults to count=100 and returns only the most recent
+# ~100 trading days regardless of `start`. 5000 daily bars covers ~20 years.
+MAX_BARS = 5000
 
 START_INDEX = 20  # Starting index in the list (for batch runs)
 BATCH_SIZE = 10  # Number of symbols to process per run
 
+# Unified UI singletons (Adapter Pattern: auto-selects best provider on fallback)
+_ref = Reference()
+_mkt = Market()
+
 
 # ====================== STEP 1: FETCH 30 VN30 SYMBOLS ======================
 def retrieve_vn30_list():
-    print("Fetching 30 VN30 symbols from vnstock...")
-    listing = Listing()
-    vn30_list = listing.symbols_by_group(group_name="VN30")
-    # vn30_symbols = vn30_list['symbol'].tolist()
+    print("Fetching 30 VN30 symbols via vnstock.ui.Reference...")
+    # Reference().index.members("VN30") returns a pandas.Series of symbols
+    members = _ref.index.members("VN30")
+    if isinstance(members, pd.DataFrame):
+        vn30_list = members["symbol"].tolist()
+    else:
+        vn30_list = list(members)
     print(f"Fetched {len(vn30_list)} VN30 symbols.")
 
     # Save the symbol list to a txt file
@@ -75,11 +94,15 @@ def split_train_test(df):
 
 def fetch_and_save(symbol):
     try:
-        quote = Quote(symbol=symbol, source="VCI")
-        df = quote.history(
-            symbol=symbol,
+        # v4.0+ Unified UI: Market().equity(sym).ohlcv(...)
+        # Returns DataFrame with columns: [time, open, high, low, close, volume]
+        # `count=MAX_BARS` prevents KBS from truncating to its default 100 bars.
+        df = _mkt.equity(symbol).ohlcv(
             start=start_date,
-            interval="1D",
+            end=end_date,
+            resolution="1D",
+            count=MAX_BARS,
+            source=DATA_SOURCE,
         )
 
         # Keep standard columns
@@ -95,6 +118,7 @@ def fetch_and_save(symbol):
             return False
 
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        (OUTPUT_DIR / "full").mkdir(parents=True, exist_ok=True)
         (OUTPUT_DIR / "train").mkdir(parents=True, exist_ok=True)
         (OUTPUT_DIR / "test").mkdir(parents=True, exist_ok=True)
         full_path = OUTPUT_DIR / "full" / f"{symbol}.csv"
@@ -112,6 +136,57 @@ def fetch_and_save(symbol):
 
     except Exception as e:
         print(f"Error while fetching {symbol}: {e}")
+        return False
+
+
+def fetch_and_save_index(symbol="VNINDEX"):
+    """Fetch OHLCV for a market index (e.g. VNINDEX, VN30, HNXINDEX) and
+    save into datasets/indices/{full,train,test}/<symbol>.csv.
+
+    Uses Unified UI: Market().index(sym).ohlcv(...).
+    Schema matches equity fetch: [date, open, high, low, close, volume, symbol].
+    """
+    try:
+        # v4.0+ Unified UI: Market().index(sym).ohlcv(...)
+        # `count=MAX_BARS` prevents KBS from truncating to its default 100 bars.
+        df = _mkt.index(symbol).ohlcv(
+            start=start_date,
+            end=end_date,
+            resolution="1D",
+            count=MAX_BARS,
+            source=DATA_SOURCE,
+        )
+
+        # Keep standard columns (same schema as equity)
+        df = df[["time", "open", "high", "low", "close", "volume"]].copy()
+        df.rename(columns={"time": "date"}, inplace=True)
+        df["symbol"] = symbol
+        full_df, train_df, test_df = split_train_test(df)
+
+        if full_df.empty:
+            print(
+                f"No data in configured range ({TRAIN_START_DATE} -> {TEST_END_DATE}) for index {symbol}."
+            )
+            return False
+
+        (INDEX_OUTPUT_DIR / "full").mkdir(parents=True, exist_ok=True)
+        (INDEX_OUTPUT_DIR / "train").mkdir(parents=True, exist_ok=True)
+        (INDEX_OUTPUT_DIR / "test").mkdir(parents=True, exist_ok=True)
+        full_path = INDEX_OUTPUT_DIR / "full" / f"{symbol}.csv"
+        train_path = INDEX_OUTPUT_DIR / "train" / f"{symbol}_train.csv"
+        test_path = INDEX_OUTPUT_DIR / "test" / f"{symbol}_test.csv"
+
+        full_df.to_csv(full_path, index=False, encoding="utf-8-sig")
+        train_df.to_csv(train_path, index=False, encoding="utf-8-sig")
+        test_df.to_csv(test_path, index=False, encoding="utf-8-sig")
+
+        print(
+            f"Saved index {symbol} -> full:{len(full_df)} train:{len(train_df)} test:{len(test_df)}"
+        )
+        return True
+
+    except Exception as e:
+        print(f"Error while fetching index {symbol}: {e}")
         return False
 
 
@@ -157,7 +232,10 @@ if __name__ == "__main__":
     # Step 1: Fetch VN30 symbols and save to file once (uncomment if file is missing)
     # retrieve_vn30_list()
 
-    retrieve_ohlcv_for_vn30_symbols()
+    # retrieve_ohlcv_for_vn30_symbols()
 
-    # Fetch data for ETF E1VFVN30
+    # Fetch data for specific symbol (uncomment to enable)
     # fetch_and_save("VPL")
+
+    # Fetch OHLCV for market index (uncomment to enable)
+    fetch_and_save_index("VNINDEX")

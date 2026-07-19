@@ -17,7 +17,12 @@ def _resolve_path(path_value: str) -> Path:
     return ROOT_DIR / path_obj
 
 
-def load_assets_config(config_path=None, selected_assets=None):
+def load_raw_assets_config(config_path=None):
+    """Load the raw assets JSON config as a dict (without path resolution).
+
+    Returns the full JSON content so callers can read top-level metadata such
+    as ``vn30_universe``, ``market_proxy``, or ``ml_model_cache_paths``.
+    """
     cfg_path = Path(config_path) if config_path else DEFAULT_ASSETS_CONFIG_PATH
     if not cfg_path.is_absolute():
         cfg_path = ROOT_DIR / cfg_path
@@ -25,7 +30,11 @@ def load_assets_config(config_path=None, selected_assets=None):
         raise FileNotFoundError(f"Khong tim thay file assets config: {cfg_path}")
 
     with open(cfg_path, "r", encoding="utf-8") as f:
-        raw_config = json.load(f)
+        return json.load(f)
+
+
+def load_assets_config(config_path=None, selected_assets=None):
+    raw_config = load_raw_assets_config(config_path)
 
     if "assets" not in raw_config or not isinstance(raw_config["assets"], dict):
         raise ValueError("assets config phai co key 'assets' dang object")

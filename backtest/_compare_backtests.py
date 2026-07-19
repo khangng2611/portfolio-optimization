@@ -86,7 +86,7 @@ def main():
     # [2/3] ml_xgboost
     print("\nLoading ML model: xgboost")
     try:
-        xgb_model = bt.load_ml_model("xgboost")
+        xgb_model = bt.load_ml_model("xgboost", args.assets_config)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         return
@@ -99,7 +99,7 @@ def main():
     # [3/3] ranking
     print("\n[3/3] Running BL with ranking views...")
     try:
-        prices_aligned, rank_universe, rank_market = load_and_align_ranking_data(prices, args.phase)
+        prices_aligned, rank_universe, rank_market = load_and_align_ranking_data(prices, args.phase, args.assets_config)
         print(f"  Aligned: {len(prices_aligned)} rows | {len(rank_universe.columns)} VN30 stocks")
         result_ranking, rows_ranking = run_one_mode(
             prices_aligned, "ranking", "ranking",

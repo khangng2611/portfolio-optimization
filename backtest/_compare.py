@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import backtest as bt
-from config import VN30_LIST_PATH, WINDOW
+from config import WINDOW
 from backtest._metrics import metric_summary
 
 
@@ -65,7 +65,7 @@ def run_one_mode(
 # VN30 universe loading + alignment
 # ---------------------------------------------------------------------------
 
-def load_and_align_ranking_data(prices, phase):
+def load_and_align_ranking_data(prices, phase, assets_config_path=None):
     """Load VN30 universe prices and align indices with the portfolio prices.
 
     Returns ``(prices_aligned, ranking_universe, ranking_market)`` or raises.
@@ -75,12 +75,14 @@ def load_and_align_ranking_data(prices, phase):
         prices.index.max().strftime("%Y-%m-%d"),
         phase,
         WINDOW,
+        assets_config_path,
     )
     ranking_market_prices = bt.load_market_proxy_prices(
         prices.index.min().strftime("%Y-%m-%d"),
         prices.index.max().strftime("%Y-%m-%d"),
         phase,
         WINDOW,
+        assets_config_path,
     )
 
     common_idx = (

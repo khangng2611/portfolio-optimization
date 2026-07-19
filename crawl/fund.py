@@ -1,20 +1,20 @@
-# CODE: Retrieve historical NAV from vnstock (Fmarket integration)
+# CODE: Retrieve historical NAV using vnstock v4.0+ Unified UI (FMarket integration)
 # - Read fund symbols from fund_list.txt
 # - Process only 5 funds per run (configurable via START_INDEX)
-# - For each fund, fetch NAV history using nav_report()
-# - Build a DataFrame with columns: date, price (nav_per_unit), fund_name
-# - SAVE EACH FUND TO A SEPARATE CSV FILE (filename: <fund_name>_nav_history.csv)
+# - For each fund, fetch NAV history using Market().fund(sym).nav()
+# - Build a DataFrame with columns: date, price (nav_per_unit / 1000), symbol
+# - SAVE EACH FUND TO A SEPARATE CSV FILE (filename: <fund_name>.csv)
 
 import sys
 import pandas as pd
-from vnstock import Fund
+from vnstock.ui import Market, Reference
 from datetime import datetime
 from pathlib import Path
 import time  # Delay to avoid rate limits when needed
 
 # ====== CONFIGURATION ======
 START_INDEX = 60  # Starting index in the list
-BATCH_SIZE = 5  # Number of funds to process per run
+BATCH_SIZE = 10  # Number of funds to process per run
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -29,12 +29,14 @@ BOND_LIST_FILE = DATASETS_DIR / "bond_list.txt"
 OUTPUT_DIR = DATASETS_DIR / "funds"
 # ========================
 
-# Initialize Fund object
-fund = Fund()
+# Unified UI singletons (fund data is served by FMarket provider)
+_ref = Reference()
+_mkt = Market()
 
 
 def retrieve_fund_list():
-    short_names = fund.listing()["short_name"].tolist()
+    df_all = _ref.fund.list()  # Provider: FMarket
+    short_names = df_all["short_name"].tolist()
     DATASETS_DIR.mkdir(parents=True, exist_ok=True)
     with open(LIST_FILE, "w") as f:
         for name in short_names:
@@ -43,7 +45,7 @@ def retrieve_fund_list():
 
 
 def retrieve_bond_list():
-    df_all_funds = fund.listing()
+    df_all_funds = _ref.fund.list()
     df_bond = df_all_funds[
         df_all_funds["fund_type"].str.contains(
             "Trái phiếu|Bond|Fixed Income", case=False, na=False
@@ -63,8 +65,9 @@ def get_nav_and_return(symbol):
 
     while attempt < max_retries:
         try:
-            # Fetch NAV report
-            nav_df = fund.details.nav_report(symbol)
+            # v4.0+ Unified UI: Market().fund(sym).nav()
+            # Returns DataFrame with columns: [date, nav_per_unit]
+            nav_df = _mkt.fund(symbol).nav()
 
             # Validate required columns
             if "nav_per_unit" not in nav_df.columns or "date" not in nav_df.columns:
@@ -165,7 +168,7 @@ def crawl_fund_nav_history():
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             (OUTPUT_DIR / "train").mkdir(parents=True, exist_ok=True)
             (OUTPUT_DIR / "test").mkdir(parents=True, exist_ok=True)
-            full_path = OUTPUT_DIR / f"{fund_name}.csv"
+            full_path = OUTPUT_DIR  / "full" / f"{fund_name}.csv"
             train_path = OUTPUT_DIR / "train" / f"{fund_name}_train.csv"
             test_path = OUTPUT_DIR / "test" / f"{fund_name}_test.csv"
 

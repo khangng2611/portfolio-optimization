@@ -42,7 +42,7 @@ DATA_SOURCE = "kbs"
 # ~100 trading days regardless of `start`. 5000 daily bars covers ~20 years.
 MAX_BARS = 5000
 
-START_INDEX = 20  # Starting index in the list (for batch runs)
+START_INDEX = 0  # Starting index in the list (for batch runs)
 BATCH_SIZE = 10  # Number of symbols to process per run
 
 # Unified UI singletons (Adapter Pattern: auto-selects best provider on fallback)
@@ -232,10 +232,10 @@ if __name__ == "__main__":
     # Step 1: Fetch VN30 symbols and save to file once (uncomment if file is missing)
     # retrieve_vn30_list()
 
-    # retrieve_ohlcv_for_vn30_symbols()
+    retrieve_ohlcv_for_vn30_symbols()
 
     # Fetch data for specific symbol (uncomment to enable)
     # fetch_and_save("VPL")
 
     # Fetch OHLCV for market index (uncomment to enable)
-    fetch_and_save_index("VNINDEX")
+    # fetch_and_save_index("VNINDEX")

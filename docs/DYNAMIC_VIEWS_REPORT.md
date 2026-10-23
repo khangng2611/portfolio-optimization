@@ -43,7 +43,7 @@ $$\Omega = \text{diag}(P \times \tau \times \Sigma \times P^T) / \text{confidenc
 Tham số mặc định (cấu hình tại `config.py`):
 - `tau = 0.05` (`BL_TAU`) - Tham số điều chỉnh mô hình
 - `delta = 2.5` (`BL_DELTA`) - Hệ số rủi ro
-- `confidence = 0.5` (`BL_VIEW_CONFIDENCE`) - Độ tin cậy mặc định cho views
+- `confidence = 0.5` (`BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL`) - Độ tin cậy mặc định cho views
 
 ## 4. Luồng xử lý trong backtest
 

@@ -1,0 +1,38 @@
+{
+  "default_selection": [
+    "E1VFVN30",
+    "GOLD",
+    "DCDS",
+    "MBBOND"
+  ],
+  "assets": {
+    "E1VFVN30": {
+      "full_path": "datasets/stocks/full/E1VFVN30.csv",
+      "train_path": "datasets/stocks/train/E1VFVN30_train.csv",
+      "test_path": "datasets/stocks/test/E1VFVN30_test.csv",
+      "date_col": "date",
+      "price_col": "close"
+    },
+    "GOLD": {
+      "full_path": "datasets/gold/gold_test.csv",
+      "train_path": "datasets/gold/gold_train.csv",
+      "test_path": "datasets/gold/gold_test.csv",
+      "date_col": "date",
+      "price_col": "sjc_sell"
+    },
+    "DCDS": {
+      "full_path": "datasets/funds/full/DCDS.csv",
+      "train_path": "datasets/funds/train/DCDS_train.csv",
+      "test_path": "datasets/funds/test/DCDS_test.csv",
+      "date_col": "date",
+      "price_col": "price"
+    },
+    "MBBOND": {
+      "full_path": "datasets/funds/full/MBBOND.csv",
+      "train_path": "datasets/funds/train/MBBOND_train.csv",
+      "test_path": "datasets/funds/test/MBBOND_test.csv",
+      "date_col": "date",
+      "price_col": "price"
+    }
+  }
+}

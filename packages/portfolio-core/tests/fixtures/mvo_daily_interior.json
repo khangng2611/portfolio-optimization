@@ -1,0 +1,37 @@
+{
+  "fixture_schema_version": 1,
+  "id": "mvo_daily_interior",
+  "introduced_in_core": "0.1.0",
+  "provenance": {
+    "source": "synthetic",
+    "created_on": "2026-10-09",
+    "return_units": "daily_simple_returns",
+    "oracle": "Hand-derived with risk_aversion=2: f(x)=0.0002+0.0012x-2*[0.0004x^2+0.0001(1-x)^2]; f'(x)=0.0016-0.002x, so x=0.8.",
+    "legacy_parity": false,
+    "model_or_market_data_used": false
+  },
+  "request": {
+    "strategy": "MVO",
+    "asset_ids": ["SYNTH_EQUITY", "SYNTH_BOND"],
+    "mean_returns": [0.0014, 0.0002],
+    "covariance": [[0.0004, 0.0], [0.0, 0.0001]],
+    "constraints": {
+      "risk_aversion": 2.0,
+      "max_position_weight": 0.9,
+      "defensive_asset_ids": ["SYNTH_BOND"],
+      "min_defensive_weight": 0.1,
+      "max_non_defensive_weight": 0.9
+    }
+  },
+  "expected": {
+    "weights": [0.8, 0.2],
+    "objective": 0.00064,
+    "solver": "CLARABEL",
+    "solver_status": "optimal"
+  },
+  "tolerances": {
+    "weights_absolute": 1e-7,
+    "objective_absolute": 1e-11,
+    "constraint_absolute": 1e-12
+  }
+}

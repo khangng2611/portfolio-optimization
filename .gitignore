@@ -16,6 +16,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!apps/web/src/lib/
+!apps/web/src/lib/**
 parts/
 sdist/
 var/
@@ -138,6 +140,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+.venv-software/
 env/
 venv/
 ENV/
@@ -219,3 +222,13 @@ logs/*
 .qoder/
 reference/
 reports/
+csonet-paper/
+
+# Local research outputs and document rendering scratch files
+/outputs/
+/tmp/
+
+# Local credentials, editor metadata and OS files
+.DS_Store
+.env.*
+!.env.example

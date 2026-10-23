@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2600" height="1960" viewBox="0 0 2600 1960">
+<defs>
+<marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="#64748B"/></marker>
+<marker id="command" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="#D97706"/></marker>
+<marker id="event" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="#7C3AED"/></marker>
+</defs><rect width="2600" height="1960" fill="#F8FAFC"/>
+<style>text{font-family:Arial,Helvetica,sans-serif}</style>
+<text x="60" y="76" font-size="47" font-weight="700" fill="#172B43">MICROSERVICES THEO DOMAIN</text>
+<text x="60" y="124" font-size="38" font-weight="700" fill="#2563EB">+ EVENT-DRIVEN ORCHESTRATION</text>
+<text x="1850" y="76" font-size="25" font-weight="700" fill="#52647B">PORTFOLIO OPTIMIZATION</text>
+<text x="1850" y="116" font-size="25" font-weight="400" fill="#52647B">Kiến trúc đề xuất · Giai đoạn 2</text>
+<text x="60" y="186" font-size="27" font-weight="700" fill="#172B43">A. RANH GIỚI DOMAIN — SERVICE, DỮ LIỆU VÀ DEPLOYMENT RIÊNG</text>
+<rect x="60" y="215" width="2480" height="91" rx="16" fill="#EFF8F1" stroke="#A7D7B7" stroke-width="2"/>
+<text x="85" y="252" font-size="28" font-weight="700" fill="#166534">Frontend · Next.js UI + BFF</text>
+<text x="85" y="285" font-size="23" font-weight="400" fill="#166534">HTTPS tới Chat / Portfolio / Market / Research · SSE trả kết quả về UI</text>
+<text x="1675" y="252" font-size="23" font-weight="400" fill="#166534">BFF quản lý session; browser không đọc Redis.</text>
+<text x="1675" y="285" font-size="23" font-weight="400" fill="#166534">Các domain còn lại phục vụ qua API / worker nội bộ.</text>
+<path d="M 225 307 V 346" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<rect x="60" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#2563EB" stroke-width="2"/>
+<text x="78" y="390" font-size="23" font-weight="700" fill="#2563EB">HỘI THOẠI</text>
+<text x="78" y="429" font-size="19" font-weight="400" fill="#64748B">Domain API + worker runtime</text>
+<rect x="77" y="453" width="304" height="111" rx="10" fill="#CCE5FF" stroke="#2563EB" stroke-width="2"/>
+<text x="90" y="487" font-size="25" font-weight="700" fill="#2563EB">Chat Service</text>
+<text x="90" y="517" font-size="21" font-weight="400" fill="#2563EB">Intent • tools</text>
+<text x="90" y="544" font-size="21" font-weight="400" fill="#2563EB">Giải thích • SSE</text>
+<path d="M 230 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="243" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="77" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="90" y="660" font-size="21" font-weight="700" fill="#854D0E">chat_db</text>
+<text x="78" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="78" y="742" font-size="20" font-weight="400" fill="#2563EB">Continuation events</text>
+<path d="M 230 760 V 841" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<path d="M 582 307 V 346" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<rect x="417" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#1D4ED8" stroke-width="4"/>
+<text x="435" y="390" font-size="23" font-weight="700" fill="#1D4ED8">DANH MỤC</text>
+<rect x="434" y="405" width="304" height="30" rx="7" fill="#1D4ED8" stroke="#1D4ED8" stroke-width="2"/>
+<text x="451" y="427" font-size="18" font-weight="700" fill="#FFFFFF">WORKFLOW ORCHESTRATOR</text>
+<rect x="434" y="453" width="304" height="111" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="447" y="487" font-size="25" font-weight="700" fill="#1D4ED8">Portfolio Service</text>
+<text x="447" y="517" font-size="21" font-weight="400" fill="#1D4ED8">Profile • ledger</text>
+<text x="447" y="544" font-size="21" font-weight="400" fill="#1D4ED8">Allocation saga</text>
+<path d="M 587 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="600" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="434" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="447" y="660" font-size="21" font-weight="700" fill="#854D0E">portfolio_db</text>
+<text x="435" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="435" y="742" font-size="20" font-weight="400" fill="#1D4ED8">Command / result / ready</text>
+<path d="M 587 760 V 841" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<rect x="774" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+<text x="792" y="390" font-size="23" font-weight="700" fill="#7C3AED">TỐI ƯU</text>
+<text x="792" y="429" font-size="19" font-weight="400" fill="#64748B">Domain API + worker runtime</text>
+<rect x="791" y="453" width="304" height="111" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="804" y="487" font-size="25" font-weight="700" fill="#7C3AED">Quant Serving</text>
+<text x="804" y="517" font-size="21" font-weight="400" fill="#7C3AED">Forecasts • views</text>
+<text x="804" y="544" font-size="21" font-weight="400" fill="#7C3AED">Black–Litterman</text>
+<path d="M 944 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="957" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="791" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="804" y="660" font-size="21" font-weight="700" fill="#854D0E">quant_db</text>
+<text x="792" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="792" y="742" font-size="20" font-weight="400" fill="#7C3AED">Optimize / result</text>
+<path d="M 944 760 V 841" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<path d="M 1296 307 V 346" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<rect x="1131" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+<text x="1149" y="390" font-size="23" font-weight="700" fill="#0F766E">THỊ TRƯỜNG</text>
+<text x="1149" y="429" font-size="19" font-weight="400" fill="#64748B">Domain API + worker runtime</text>
+<rect x="1148" y="453" width="304" height="111" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1161" y="487" font-size="25" font-weight="700" fill="#0F766E">Market Data</text>
+<text x="1161" y="517" font-size="21" font-weight="400" fill="#0F766E">Ingestion • quality</text>
+<text x="1161" y="544" font-size="21" font-weight="400" fill="#0F766E">Immutable snapshots</text>
+<path d="M 1301 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="1314" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="1148" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="1161" y="660" font-size="21" font-weight="700" fill="#854D0E">market_db</text>
+<text x="1149" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="1149" y="742" font-size="20" font-weight="400" fill="#0F766E">dataset.published</text>
+<path d="M 1301 760 V 841" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" />
+<rect x="1488" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+<text x="1506" y="390" font-size="23" font-weight="700" fill="#7C3AED">MÔ HÌNH</text>
+<text x="1506" y="429" font-size="19" font-weight="400" fill="#64748B">Domain API + worker runtime</text>
+<rect x="1505" y="453" width="304" height="111" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1518" y="487" font-size="25" font-weight="700" fill="#7C3AED">ML Platform</text>
+<text x="1518" y="517" font-size="21" font-weight="400" fill="#7C3AED">Training • validation</text>
+<text x="1518" y="544" font-size="21" font-weight="400" fill="#7C3AED">Model registry</text>
+<path d="M 1658 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="1671" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="1505" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="1518" y="660" font-size="21" font-weight="700" fill="#854D0E">ml_db</text>
+<text x="1506" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="1506" y="742" font-size="20" font-weight="400" fill="#7C3AED">Training / model events</text>
+<path d="M 1658 760 V 841" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<rect x="1845" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+<text x="1863" y="390" font-size="23" font-weight="700" fill="#0F766E">TRI THỨC</text>
+<text x="1863" y="429" font-size="19" font-weight="400" fill="#64748B">Domain API + worker runtime</text>
+<rect x="1862" y="453" width="304" height="111" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1875" y="487" font-size="25" font-weight="700" fill="#0F766E">Knowledge Service</text>
+<text x="1875" y="517" font-size="21" font-weight="400" fill="#0F766E">Documents • embeddings</text>
+<text x="1875" y="544" font-size="21" font-weight="400" fill="#0F766E">RAG retrieval</text>
+<path d="M 2015 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="2028" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="1862" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="1875" y="660" font-size="21" font-weight="700" fill="#854D0E">knowledge_db + vector</text>
+<text x="1863" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="1863" y="742" font-size="20" font-weight="400" fill="#0F766E">HTTPS retrieval</text>
+<path d="M 2367 307 V 346" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<rect x="2202" y="350" width="338" height="405" rx="16" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+<text x="2220" y="390" font-size="23" font-weight="700" fill="#7C3AED">THỰC NGHIỆM</text>
+<text x="2220" y="429" font-size="19" font-weight="400" fill="#64748B">Domain API + worker runtime</text>
+<rect x="2219" y="453" width="304" height="111" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="2232" y="487" font-size="25" font-weight="700" fill="#7C3AED">Research Service</text>
+<text x="2232" y="517" font-size="21" font-weight="400" fill="#7C3AED">Backtest • experiments</text>
+<text x="2232" y="544" font-size="21" font-weight="400" fill="#7C3AED">Evaluation evidence</text>
+<path d="M 2372 565 V 613" fill="none" stroke="#64748B" stroke-width="3"  marker-end="url(#arrow)" />
+<text x="2385" y="596" font-size="18" font-weight="400" fill="#64748B">SQL/TLS</text>
+<rect x="2219" y="622" width="304" height="61" rx="10" fill="#FFF3CD" stroke="#A16207" stroke-width="2"/>
+<text x="2232" y="660" font-size="21" font-weight="700" fill="#854D0E">research_db</text>
+<text x="2220" y="716" font-size="18" font-weight="400" fill="#52647B">Own DB • API / schema có version</text>
+<text x="2220" y="742" font-size="20" font-weight="400" fill="#7C3AED">Research jobs / events</text>
+<path d="M 2372 760 V 841" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<rect x="60" y="848" width="2480" height="118" rx="16" fill="#FFF7ED" stroke="#F59E0B" stroke-width="2"/>
+<text x="85" y="892" font-size="33" font-weight="700" fill="#9A3412">RabbitMQ</text>
+<text x="345" y="892" font-size="29" font-weight="700" fill="#9A3412">AMQPS · Commands &amp; Domain Events</text>
+<text x="85" y="936" font-size="25" font-weight="400" fill="#9A3412">Chuyển thông điệp giữa domain • outbox / inbox • retry / deduplication • không quyết định bước nghiệp vụ tiếp theo</text>
+<rect x="60" y="989" width="2480" height="92" rx="16" fill="#FFFFFF" stroke="#D9E2ED" stroke-width="2"/>
+<text x="85" y="1024" font-size="21" font-weight="700" fill="#52647B">HẠ TẦNG / TÍCH HỢP ĐƯỢC LƯỢC KHỎI LUỒNG CHÍNH</text>
+<text x="85" y="1057" font-size="25" font-weight="400" fill="#52647B">S3: artifacts theo owner  |  Redis: BFF session / Chat hints / Quant cache  |  Nguồn giá, tài liệu  |  LLM / embedding provider</text>
+<text x="60" y="1140" font-size="29" font-weight="700" fill="#172B43">B. MỘT WORKFLOW CỤ THỂ — AI ĐIỀU PHỐI, AI THỰC THI?</text>
+<text x="60" y="1180" font-size="25" font-weight="400" fill="#52647B">Ví dụ: input đã xác nhận → tối ưu danh mục → lưu recommendation → sinh giải thích.</text>
+<rect x="60" y="1215" width="2480" height="163" rx="16" fill="#FFFFFF" stroke="#D9E2ED" stroke-width="2"/>
+<text x="85" y="1263" font-size="34" font-weight="700" fill="#2563EB">01</text>
+<text x="85" y="1300" font-size="23" font-weight="400" fill="#172B43">Gửi lệnh</text>
+<text x="85" y="1331" font-size="23" font-weight="400" fill="#172B43">tính toán</text>
+<rect x="365" y="1240" width="455" height="112" rx="12" fill="#EFF6FF" stroke="#1D4ED8" stroke-width="2"/>
+<text x="386" y="1276" font-size="29" font-weight="700" fill="#1D4ED8">Portfolio</text>
+<text x="386" y="1307" font-size="21" font-weight="400" fill="#52647B">Lưu saga = WAITING_QUANT</text>
+<text x="386" y="1336" font-size="21" font-weight="400" fill="#52647B">Commit input + outbox</text>
+<rect x="1260" y="1253" width="235" height="88" rx="12" fill="#FFF7ED" stroke="#F59E0B" stroke-width="2"/>
+<text x="1286" y="1306" font-size="28" font-weight="700" fill="#9A3412">RabbitMQ</text>
+<rect x="1935" y="1240" width="575" height="112" rx="12" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2"/>
+<text x="1956" y="1276" font-size="29" font-weight="700" fill="#7C3AED">Quant</text>
+<text x="1956" y="1307" font-size="21" font-weight="400" fill="#52647B">Kiểm tra input • chạy BL / solver</text>
+<text x="1956" y="1336" font-size="21" font-weight="400" fill="#52647B">Lưu run + result + outbox</text>
+<path d="M 825 1313 H 1253" fill="none" stroke="#D97706" stroke-width="3"  marker-end="url(#command)" />
+<path d="M 1500 1313 H 1927" fill="none" stroke="#D97706" stroke-width="3"  marker-end="url(#command)" />
+<text x="843" y="1286" font-size="20" font-weight="700" fill="#D97706">COMMAND: optimize.requested</text>
+<text x="1530" y="1286" font-size="22" font-weight="400" fill="#52647B">AMQPS delivery</text>
+<rect x="60" y="1396" width="2480" height="163" rx="16" fill="#FFFFFF" stroke="#D9E2ED" stroke-width="2"/>
+<text x="85" y="1444" font-size="34" font-weight="700" fill="#2563EB">02</text>
+<text x="85" y="1481" font-size="23" font-weight="400" fill="#172B43">Nhận kết quả</text>
+<text x="85" y="1512" font-size="23" font-weight="400" fill="#172B43">và chuyển bước</text>
+<rect x="365" y="1421" width="455" height="112" rx="12" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2"/>
+<text x="386" y="1457" font-size="29" font-weight="700" fill="#7C3AED">Quant</text>
+<text x="386" y="1488" font-size="21" font-weight="400" fill="#52647B">Công bố kết quả đã tính</text>
+<text x="386" y="1517" font-size="21" font-weight="400" fill="#52647B">Không tự sửa dữ liệu Portfolio</text>
+<rect x="1260" y="1434" width="235" height="88" rx="12" fill="#FFF7ED" stroke="#F59E0B" stroke-width="2"/>
+<text x="1286" y="1487" font-size="28" font-weight="700" fill="#9A3412">RabbitMQ</text>
+<rect x="1935" y="1421" width="575" height="112" rx="12" fill="#EFF6FF" stroke="#1D4ED8" stroke-width="2"/>
+<text x="1956" y="1457" font-size="29" font-weight="700" fill="#1D4ED8">Portfolio</text>
+<text x="1956" y="1488" font-size="21" font-weight="400" fill="#52647B">Đối chiếu request / version / constraints</text>
+<text x="1956" y="1517" font-size="21" font-weight="400" fill="#52647B">Lưu recommendation + ready-event outbox</text>
+<path d="M 825 1494 H 1253" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" />
+<path d="M 1500 1494 H 1927" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" />
+<text x="843" y="1467" font-size="20" font-weight="700" fill="#7C3AED">EVENT: optimization.succeeded</text>
+<text x="1530" y="1467" font-size="22" font-weight="400" fill="#52647B">AMQPS delivery</text>
+<rect x="60" y="1577" width="2480" height="163" rx="16" fill="#FFFFFF" stroke="#D9E2ED" stroke-width="2"/>
+<text x="85" y="1625" font-size="34" font-weight="700" fill="#2563EB">03</text>
+<text x="85" y="1662" font-size="23" font-weight="400" fill="#172B43">Tiếp tục</text>
+<text x="85" y="1693" font-size="23" font-weight="400" fill="#172B43">giải thích</text>
+<rect x="365" y="1602" width="455" height="112" rx="12" fill="#EFF6FF" stroke="#1D4ED8" stroke-width="2"/>
+<text x="386" y="1638" font-size="29" font-weight="700" fill="#1D4ED8">Portfolio</text>
+<text x="386" y="1669" font-size="21" font-weight="400" fill="#52647B">Công bố recommendation READY</text>
+<text x="386" y="1698" font-size="21" font-weight="400" fill="#52647B">Trạng thái saga lưu tại portfolio_db</text>
+<rect x="1260" y="1615" width="235" height="88" rx="12" fill="#FFF7ED" stroke="#F59E0B" stroke-width="2"/>
+<text x="1286" y="1668" font-size="28" font-weight="700" fill="#9A3412">RabbitMQ</text>
+<rect x="1935" y="1602" width="575" height="112" rx="12" fill="#EFF6FF" stroke="#1D4ED8" stroke-width="2"/>
+<text x="1956" y="1638" font-size="29" font-weight="700" fill="#1D4ED8">Chat</text>
+<text x="1956" y="1669" font-size="21" font-weight="400" fill="#52647B">Đọc canonical facts • gọi LLM • kiểm tra</text>
+<text x="1956" y="1698" font-size="21" font-weight="400" fill="#52647B">Lưu giải thích → SSE tới Frontend</text>
+<path d="M 825 1675 H 1253" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" />
+<path d="M 1500 1675 H 1927" fill="none" stroke="#7C3AED" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#event)" />
+<text x="843" y="1648" font-size="20" font-weight="700" fill="#7C3AED">EVENT: recommendation.ready</text>
+<text x="1530" y="1648" font-size="22" font-weight="400" fill="#52647B">AMQPS delivery</text>
+<rect x="60" y="1770" width="2480" height="106" rx="16" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="2"/>
+<text x="85" y="1813" font-size="27" font-weight="700" fill="#1D4ED8">ORCHESTRATOR = PORTFOLIO</text>
+<text x="765" y="1813" font-size="27" font-weight="700" fill="#9A3412">BROKER = RABBITMQ</text>
+<text x="1450" y="1813" font-size="27" font-weight="700" fill="#6D28D9">EXECUTORS = QUANT / CHAT</text>
+<text x="85" y="1850" font-size="23" font-weight="400" fill="#52647B">Giữ state, kiểm tra kết quả, chuyển bước.</text>
+<text x="765" y="1850" font-size="23" font-weight="400" fill="#52647B">Chuyển và giao lại command / event.</text>
+<text x="1450" y="1850" font-size="23" font-weight="400" fill="#52647B">Thực hiện tác vụ trong domain được giao.</text>
+<text x="60" y="1925" font-size="22" font-weight="400" fill="#64748B">Các database là quyền sở hữu logic riêng; không bắt buộc mỗi DB là một máy chủ. HTTPS liên service và các workflow khác được lược để làm rõ kiến trúc.</text>
+</svg>

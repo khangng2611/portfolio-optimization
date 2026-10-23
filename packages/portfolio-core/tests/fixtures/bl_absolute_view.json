@@ -1,0 +1,48 @@
+{
+  "fixture_schema_version": 1,
+  "id": "bl_absolute_view",
+  "introduced_in_core": "0.1.0",
+  "provenance": {
+    "source": "synthetic",
+    "created_on": "2026-10-09",
+    "return_units": "daily_simple_returns",
+    "oracle": "Hand-derived: pi=(0.0005,0.000125); unit-confidence absolute equity view averages its prior with 0.001, giving posterior=(0.00075,0.000125). Original return covariance gives f'(x)=0.000825-0.001x; x=0.825. Mean covariance diag=(0.00001,0.000005).",
+    "legacy_parity": false,
+    "model_or_market_data_used": false
+  },
+  "request": {
+    "strategy": "BL_ML",
+    "asset_ids": ["SYNTH_EQUITY", "SYNTH_BOND"],
+    "mean_returns": [0.0008, 0.0002],
+    "covariance": [[0.0004, 0.0], [0.0, 0.0001]],
+    "market_weights": [0.5, 0.5],
+    "views_p": [[1.0, 0.0]],
+    "views_q": [0.001],
+    "view_confidences": [1.0],
+    "tau": 0.05,
+    "delta": 2.5,
+    "constraints": {
+      "risk_aversion": 1.0,
+      "max_position_weight": 0.9,
+      "defensive_asset_ids": ["SYNTH_BOND"],
+      "min_defensive_weight": 0.1,
+      "max_non_defensive_weight": 0.9
+    }
+  },
+  "expected": {
+    "weights": [0.825, 0.175],
+    "objective": 0.0003653125,
+    "solver": "CLARABEL",
+    "solver_status": "optimal",
+    "prior_implied_returns": [0.0005, 0.000125],
+    "posterior_mean_returns": [0.00075, 0.000125],
+    "posterior_mean_covariance": [[0.00001, 0.0], [0.0, 0.000005]],
+    "effective_view_confidences": [1.0]
+  },
+  "tolerances": {
+    "weights_absolute": 1e-7,
+    "objective_absolute": 1e-11,
+    "posterior_absolute": 1e-13,
+    "constraint_absolute": 1e-12
+  }
+}

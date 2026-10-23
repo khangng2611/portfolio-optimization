@@ -58,11 +58,12 @@ def _generate_and_save_nav_plot(
     phase: str,
     timestamp: str,
     plots_dir: Path | None = None,
+    hybrid_nav=None,
 ) -> Path | None:
-    """Generate the EW/MVO/BL NAV comparison figure and save it to disk.
+    """Generate the EW/MVO/BL/HYBRID NAV comparison figure and save it to disk.
 
     The figure has two rows:
-    * Top row  – NAV curves for EW, MVO, BL.
+    * Top row  – NAV curves for EW, MVO, BL, and (optionally) HYBRID.
     * Bottom row – bar charts for Final NAV, Sharpe ratio, and Max Drawdown.
 
     Parameters
@@ -77,6 +78,9 @@ def _generate_and_save_nav_plot(
         Timestamp string already computed for the JSON log (e.g. ``YYYYMMDD_HHMMSS``).
     plots_dir : Path, optional
         Override the default plots directory.
+    hybrid_nav : pd.Series, optional
+        NAV series for the HYBRID strategy. When provided, a 4th line and
+        a 4th bar are added to the figure.
 
     Returns
     -------
@@ -95,10 +99,13 @@ def _generate_and_save_nav_plot(
         metrics = {
             "EW": _compute_nav_metrics(ew_nav),
             "MVO": _compute_nav_metrics(mvo_nav),
-            f"BL\n({view_mode})": _compute_nav_metrics(bl_nav),
+            "BL": _compute_nav_metrics(bl_nav),
         }
-        labels = list(metrics.keys())
         colors = ["#4C72B0", "#DD8452", "#55A868"]
+        if hybrid_nav is not None:
+            metrics[f"HYBRID"] = _compute_nav_metrics(hybrid_nav)
+            colors.append("#8172B2")
+        labels = list(metrics.keys())
 
         fig = plt.figure(figsize=(14, 9))
         gs = fig.add_gridspec(2, 3, height_ratios=[2, 1], hspace=0.45, wspace=0.35)
@@ -107,8 +114,14 @@ def _generate_and_save_nav_plot(
         ax_nav = fig.add_subplot(gs[0, :])
         ax_nav.plot(ew_nav.index, ew_nav.values, label="EW", linewidth=1.5, color=colors[0])
         ax_nav.plot(mvo_nav.index, mvo_nav.values, label="MVO", linewidth=1.5, color=colors[1])
-        ax_nav.plot(bl_nav.index, bl_nav.values, label=f"BL ({view_mode})", linewidth=1.5, color=colors[2])
-        ax_nav.set_title(f"Backtest ({phase}): EW vs MVO vs BL ({view_mode})", fontsize=13)
+        ax_nav.plot(bl_nav.index, bl_nav.values, label="BL", linewidth=1.5, color=colors[2])
+        if hybrid_nav is not None:
+            ax_nav.plot(
+                hybrid_nav.index, hybrid_nav.values,
+                label=f"HYBRID", linewidth=1.8, color=colors[3],
+            )
+        title_strategies = "EW vs MVO vs BL" + (" vs HYBRID" if hybrid_nav is not None else "")
+        ax_nav.set_title(f"Backtest ({phase}): {title_strategies}", fontsize=13)
         ax_nav.set_ylabel("NAV (initial = 1.0)")
         ax_nav.grid(True, alpha=0.3)
         ax_nav.legend(loc="best")
@@ -202,7 +215,7 @@ def _format_weights_history(
         out: dict[str, Any] = {
             "date": date.isoformat() if hasattr(date, "isoformat") else str(date),
         }
-        for strategy in ("MVO", "BL"):
+        for strategy in ("MVO", "BL", "HYBRID"):
             if strategy not in entry:
                 continue
             raw = entry[strategy]
@@ -232,6 +245,7 @@ def log_view_history(
     ew_nav=None,
     mvo_nav=None,
     bl_nav=None,
+    hybrid_nav=None,
 ) -> tuple[Path, Path | None]:
     """Save the full view history from a backtest run to a JSON log file
     and (optionally) save the NAV comparison plot.
@@ -261,6 +275,10 @@ def log_view_history(
     ew_nav, mvo_nav, bl_nav : pd.Series, optional
         NAV time series for each strategy. If all three are provided, a
         NAV comparison plot is generated and saved to ``logs/plots/``.
+    hybrid_nav : pd.Series, optional
+        NAV series for the HYBRID strategy. When provided alongside
+        ``ew_nav``/``mvo_nav``/``bl_nav``, the saved plot includes a 4th
+        line and metric bar for HYBRID.
 
     Returns
     -------
@@ -300,6 +318,7 @@ def log_view_history(
             view_mode=view_mode,
             phase=phase,
             timestamp=timestamp,
+            hybrid_nav=hybrid_nav,
         )
 
     return filepath, plot_path

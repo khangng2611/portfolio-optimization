@@ -69,7 +69,7 @@ def main():
     )
 
     print("\nLoading VN30 universe...")
-    prices, rank_universe, rank_market = load_and_align_ranking_data(prices, args.phase)
+    prices, rank_universe, rank_market = load_and_align_ranking_data(prices, args.phase, args.assets_config)
     print(f"  Aligned: {len(prices)} rows | {len(rank_universe.columns)} VN30 stocks")
 
     results_by_scenario: dict = {}

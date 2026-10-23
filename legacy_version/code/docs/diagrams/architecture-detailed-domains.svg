@@ -1,0 +1,323 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2890" viewBox="0 0 3200 2890">
+<defs>
+<marker id="http" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="#526B89"/></marker>
+<marker id="event" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="#B45309"/></marker>
+</defs><rect width="3200" height="2890" fill="#F8FAFC"/>
+<style>text{font-family:Arial,Helvetica,sans-serif}</style>
+<text x="60" y="75" font-size="50" fill="#182C44" font-weight="700">MICROSERVICES THEO DOMAIN</text>
+<text x="60" y="130" font-size="41" fill="#1D4ED8" font-weight="700">+ EVENT-DRIVEN ORCHESTRATION</text>
+<text x="2220" y="73" font-size="30" fill="#52647B" font-weight="700">PORTFOLIO OPTIMIZATION</text>
+<text x="2220" y="119" font-size="27" fill="#52647B" font-weight="400">Kiến trúc chi tiết • Giai đoạn 2</text>
+<text x="60" y="184" font-size="27" fill="#52647B" font-weight="400">Ba góc nhìn của cùng một hệ thống — giữ đầy đủ các kết nối từ bản Mermaid, bố trí lại để giảm giao cắt.</text>
+<text x="60" y="244" font-size="30" fill="#182C44" font-weight="700">A  DOMAIN BOUNDARIES + DATA OWNERSHIP + EVENT BUS</text>
+<rect x="60" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#2563EB" stroke-width="2"/>
+<text x="80" y="315" font-size="26" fill="#2563EB" font-weight="700">HỘI THOẠI</text>
+<text x="80" y="356" font-size="22" fill="#52647B" font-weight="400">API / worker • deploy độc lập</text>
+<rect x="78" y="389" width="386" height="111" rx="10" fill="#DBEAFE" stroke="#2563EB" stroke-width="2"/>
+<text x="95" y="425" font-size="29" fill="#2563EB" font-weight="700">Chat Service</text>
+<text x="95" y="454" font-size="22" fill="#2563EB" font-weight="400">Intent • scoped tools</text>
+<text x="95" y="483" font-size="22" fill="#2563EB" font-weight="400">Explanations • SSE</text>
+<path d="M 268 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="286" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="78" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="92" y="599" font-size="24" fill="#854D0E" font-weight="700">chat_db</text>
+<text x="80" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="80" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<path d="M 465 454 H 471 V 827" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<text x="72" y="767" font-size="20" fill="#9A3412" font-weight="400">Continuation events</text>
+<rect x="503" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#1D4ED8" stroke-width="4"/>
+<text x="523" y="315" font-size="26" fill="#1D4ED8" font-weight="700">DANH MỤC</text>
+<rect x="521" y="331" width="386" height="35" rx="6" fill="#1D4ED8" stroke="#1D4ED8" stroke-width="2"/>
+<text x="537" y="356" font-size="23" fill="#FFFFFF" font-weight="700">WORKFLOW ORCHESTRATOR</text>
+<rect x="521" y="389" width="386" height="111" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="538" y="425" font-size="29" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<text x="538" y="454" font-size="22" fill="#1D4ED8" font-weight="400">Profile • ledger</text>
+<text x="538" y="483" font-size="22" fill="#1D4ED8" font-weight="400">Allocation saga</text>
+<path d="M 711 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="729" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="521" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="535" y="599" font-size="24" fill="#854D0E" font-weight="700">portfolio_db</text>
+<text x="523" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="523" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<path d="M 908 454 H 914 V 827" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<text x="515" y="767" font-size="20" fill="#9A3412" font-weight="400">Commands / result events</text>
+<text x="515" y="795" font-size="20" fill="#9A3412" font-weight="400">qua transactional outbox</text>
+<rect x="946" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+<text x="966" y="315" font-size="26" fill="#7C3AED" font-weight="700">TỐI ƯU</text>
+<text x="966" y="356" font-size="22" fill="#52647B" font-weight="400">API / worker • deploy độc lập</text>
+<rect x="964" y="389" width="386" height="111" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="981" y="425" font-size="29" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<text x="981" y="454" font-size="22" fill="#7C3AED" font-weight="400">Forecasts • views</text>
+<text x="981" y="483" font-size="22" fill="#7C3AED" font-weight="400">Black–Litterman optimization</text>
+<path d="M 1154 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="1172" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="964" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="978" y="599" font-size="24" fill="#854D0E" font-weight="700">quant_db</text>
+<text x="966" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="966" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<path d="M 1351 454 H 1357 V 827" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<text x="958" y="767" font-size="20" fill="#9A3412" font-weight="400">Optimize / forecast</text>
+<text x="958" y="795" font-size="20" fill="#9A3412" font-weight="400">Ready / result events</text>
+<rect x="1389" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+<text x="1409" y="315" font-size="26" fill="#0F766E" font-weight="700">THỊ TRƯỜNG</text>
+<text x="1409" y="356" font-size="22" fill="#52647B" font-weight="400">API / worker • deploy độc lập</text>
+<rect x="1407" y="389" width="386" height="111" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1424" y="425" font-size="29" fill="#0F766E" font-weight="700">Market Data</text>
+<text x="1424" y="454" font-size="22" fill="#0F766E" font-weight="400">Ingestion • data quality</text>
+<text x="1424" y="483" font-size="22" fill="#0F766E" font-weight="400">Immutable snapshots</text>
+<path d="M 1597 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="1615" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="1407" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="1421" y="599" font-size="24" fill="#854D0E" font-weight="700">market_db</text>
+<text x="1409" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="1409" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<path d="M 1794 454 H 1800 V 827" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<text x="1401" y="767" font-size="20" fill="#9A3412" font-weight="400">dataset.published</text>
+<rect x="1832" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+<text x="1852" y="315" font-size="26" fill="#7C3AED" font-weight="700">MÔ HÌNH</text>
+<text x="1852" y="356" font-size="22" fill="#52647B" font-weight="400">API / worker • deploy độc lập</text>
+<rect x="1850" y="389" width="386" height="111" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1867" y="425" font-size="29" fill="#7C3AED" font-weight="700">ML Platform</text>
+<text x="1867" y="454" font-size="22" fill="#7C3AED" font-weight="400">Training • validation</text>
+<text x="1867" y="483" font-size="22" fill="#7C3AED" font-weight="400">Model registry</text>
+<path d="M 2040 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="2058" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="1850" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="1864" y="599" font-size="24" fill="#854D0E" font-weight="700">ml_db</text>
+<text x="1852" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="1852" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<path d="M 2237 454 H 2243 V 827" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<text x="1844" y="767" font-size="20" fill="#9A3412" font-weight="400">Training commands</text>
+<text x="1844" y="795" font-size="20" fill="#9A3412" font-weight="400">model.published</text>
+<rect x="2275" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#0F766E" stroke-width="2"/>
+<text x="2295" y="315" font-size="26" fill="#0F766E" font-weight="700">TRI THỨC</text>
+<text x="2295" y="356" font-size="22" fill="#52647B" font-weight="400">API / worker • deploy độc lập</text>
+<rect x="2293" y="389" width="386" height="111" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="2310" y="425" font-size="29" fill="#0F766E" font-weight="700">Knowledge Service</text>
+<text x="2310" y="454" font-size="22" fill="#0F766E" font-weight="400">Documents • embeddings</text>
+<text x="2310" y="483" font-size="22" fill="#0F766E" font-weight="400">RAG retrieval</text>
+<path d="M 2483 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="2501" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="2293" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="2307" y="599" font-size="24" fill="#854D0E" font-weight="700">knowledge_db + pgvector</text>
+<text x="2295" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="2295" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<text x="2287" y="776" font-size="20" fill="#0F766E" font-weight="400">HTTPS retrieval; không nối MQ</text>
+<rect x="2718" y="275" width="422" height="450" rx="15" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+<text x="2738" y="315" font-size="26" fill="#7C3AED" font-weight="700">THỰC NGHIỆM</text>
+<text x="2738" y="356" font-size="22" fill="#52647B" font-weight="400">API / worker • deploy độc lập</text>
+<rect x="2736" y="389" width="386" height="111" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="2753" y="425" font-size="29" fill="#7C3AED" font-weight="700">Research Service</text>
+<text x="2753" y="454" font-size="22" fill="#7C3AED" font-weight="400">Backtest • experiments</text>
+<text x="2753" y="483" font-size="22" fill="#7C3AED" font-weight="400">Evaluation / thesis evidence</text>
+<path d="M 2926 503 V 548" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="2944" y="534" font-size="20" fill="#52647B" font-weight="400">SQL/TLS</text>
+<rect x="2736" y="558" width="386" height="65" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="2750" y="599" font-size="24" fill="#854D0E" font-weight="700">research_db</text>
+<text x="2738" y="658" font-size="20" fill="#52647B" font-weight="400">Chỉ service sở hữu được đọc / ghi DB.</text>
+<text x="2738" y="695" font-size="20" fill="#52647B" font-weight="400">API / schema / migrations có version.</text>
+<path d="M 3123 454 H 3129 V 827" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" marker-start="url(#event)"/>
+<text x="2730" y="767" font-size="20" fill="#9A3412" font-weight="400">Research commands</text>
+<text x="2730" y="795" font-size="20" fill="#9A3412" font-weight="400">Completion events</text>
+<rect x="60" y="840" width="3080" height="130" rx="15" fill="#FFF7ED" stroke="#F59E0B" stroke-width="2"/>
+<text x="85" y="890" font-size="37" fill="#9A3412" font-weight="700">RabbitMQ</text>
+<text x="395" y="890" font-size="31" fill="#9A3412" font-weight="700">AMQPS · Commands &amp; Domain Events</text>
+<text x="85" y="938" font-size="27" fill="#9A3412" font-weight="400">Outbox / inbox • delivery ít nhất một lần • retry / deduplication • broker chuyển thông điệp; Portfolio giữ trạng thái và quyết định bước nghiệp vụ.</text>
+<rect x="60" y="1005" width="1520" height="1325" rx="15" fill="#FFFFFF" stroke="#D5DFEB" stroke-width="2"/>
+<rect x="1620" y="1005" width="1520" height="1325" rx="15" fill="#FFFFFF" stroke="#D5DFEB" stroke-width="2"/>
+<text x="85" y="1051" font-size="27" fill="#182C44" font-weight="700">B  HTTPS — ĐIỂM VÀO &amp; LỜI GỌI LIÊN SERVICE</text>
+<text x="85" y="1090" font-size="23" fill="#52647B" font-weight="400">Mũi tên chỉ bên khởi tạo request; response trả trên cùng kết nối.</text>
+<text x="1645" y="1051" font-size="27" fill="#182C44" font-weight="700">C  ARTIFACTS, CACHE &amp; NHÀ CUNG CẤP NGOÀI</text>
+<text x="1645" y="1090" font-size="23" fill="#52647B" font-weight="400">Mỗi nhánh giữ rõ service sử dụng, giao thức và mục đích.</text>
+<rect x="85" y="1120" width="1470" height="295" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<rect x="101" y="1228.5" width="295" height="76" rx="10" fill="#DCFCE7" stroke="#15803D" stroke-width="2"/>
+<text x="118" y="1275.5" font-size="26" fill="#15803D" font-weight="700">Frontend / BFF</text>
+<path d="M 396 1266.5 H 422 M 422 1169 V 1364" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 422 1169 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1159" font-size="22" fill="#52647B" font-weight="400">HTTPS: portfolio API</text>
+<rect x="1220" y="1146" width="315" height="47" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="1237" y="1178.5" font-size="26" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<path d="M 422 1234 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1224" font-size="22" fill="#52647B" font-weight="400">HTTPS: REST + SSE</text>
+<rect x="1220" y="1211" width="315" height="47" rx="10" fill="#DBEAFE" stroke="#2563EB" stroke-width="2"/>
+<text x="1237" y="1243.5" font-size="26" fill="#2563EB" font-weight="700">Chat Service</text>
+<path d="M 422 1299 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1289" font-size="22" fill="#52647B" font-weight="400">HTTPS: market reads</text>
+<rect x="1220" y="1276" width="315" height="47" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1237" y="1308.5" font-size="26" fill="#0F766E" font-weight="700">Market Data</text>
+<path d="M 422 1364 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1354" font-size="22" fill="#52647B" font-weight="400">HTTPS: backtest jobs</text>
+<rect x="1220" y="1341" width="315" height="47" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1237" y="1373.5" font-size="26" fill="#7C3AED" font-weight="700">Research Service</text>
+<rect x="85" y="1430" width="1470" height="230" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<rect x="101" y="1506.0" width="295" height="76" rx="10" fill="#DBEAFE" stroke="#2563EB" stroke-width="2"/>
+<text x="118" y="1553.0" font-size="26" fill="#2563EB" font-weight="700">Chat Service</text>
+<path d="M 396 1544.0 H 422 M 422 1479 V 1609" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 422 1479 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1469" font-size="22" fill="#52647B" font-weight="400">HTTPS: scoped tools</text>
+<rect x="1220" y="1456" width="315" height="47" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="1237" y="1488.5" font-size="26" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<path d="M 422 1544 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1534" font-size="22" fill="#52647B" font-weight="400">HTTPS: market facts</text>
+<rect x="1220" y="1521" width="315" height="47" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1237" y="1553.5" font-size="26" fill="#0F766E" font-weight="700">Market Data</text>
+<path d="M 422 1609 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1599" font-size="22" fill="#52647B" font-weight="400">HTTPS: retrieve citations</text>
+<rect x="1220" y="1586" width="315" height="47" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1237" y="1618.5" font-size="26" fill="#0F766E" font-weight="700">Knowledge Service</text>
+<rect x="85" y="1675" width="1470" height="165" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<rect x="101" y="1718.5" width="295" height="76" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="118" y="1765.5" font-size="26" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<path d="M 396 1756.5 H 422 M 422 1724 V 1789" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 422 1724 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1714" font-size="22" fill="#52647B" font-weight="400">HTTPS: pin snapshot metadata</text>
+<rect x="1220" y="1701" width="315" height="47" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1237" y="1733.5" font-size="26" fill="#0F766E" font-weight="700">Market Data</text>
+<path d="M 422 1789 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1779" font-size="22" fill="#52647B" font-weight="400">HTTPS: resolve ready model version</text>
+<rect x="1220" y="1766" width="315" height="47" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1237" y="1798.5" font-size="26" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<rect x="85" y="1855" width="1470" height="115" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<rect x="101" y="1866.0" width="295" height="76" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="118" y="1913.0" font-size="26" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<path d="M 396 1904.0 H 422 M 422 1904 V 1904" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 422 1904 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="1894" font-size="22" fill="#52647B" font-weight="400">HTTPS: model manifest</text>
+<rect x="1220" y="1881" width="315" height="47" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1237" y="1913.5" font-size="26" fill="#7C3AED" font-weight="700">ML Platform</text>
+<rect x="85" y="1985" width="1470" height="165" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<rect x="101" y="2028.5" width="295" height="76" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="118" y="2075.5" font-size="26" fill="#7C3AED" font-weight="700">Research Service</text>
+<path d="M 396 2066.5 H 422 M 422 2034 V 2099" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 422 2034 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="2024" font-size="22" fill="#52647B" font-weight="400">HTTPS: pinned dataset metadata</text>
+<rect x="1220" y="2011" width="315" height="47" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1237" y="2043.5" font-size="26" fill="#0F766E" font-weight="700">Market Data</text>
+<path d="M 422 2099 H 1205" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<text x="440" y="2089" font-size="22" fill="#52647B" font-weight="400">HTTPS: historical model manifest</text>
+<rect x="1220" y="2076" width="315" height="47" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1237" y="2108.5" font-size="26" fill="#7C3AED" font-weight="700">ML Platform</text>
+<text x="100" y="2197" font-size="23" fill="#52647B" font-weight="400">Frontend = Next.js UI + server BFF. Chỉ BFF dùng Redis session.</text>
+<text x="100" y="2235" font-size="23" fill="#52647B" font-weight="400">Các tên service lặp ở B/C là cùng service tại A, không phải bản deploy mới.</text>
+<text x="100" y="2273" font-size="23" fill="#52647B" font-weight="400">Các API này bổ sung cho luồng bất đồng bộ, không thay thế event bus.</text>
+<rect x="1645" y="1120" width="1470" height="347" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<path d="M 2755 1166 V 1414" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 2755 1290.0 H 2803" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<rect x="2815" y="1241.0" width="280" height="98" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="2832" y="1277.0" font-size="26" fill="#A16207" font-weight="700">S3</text>
+<text x="2832" y="1309.0" font-size="22" fill="#A16207" font-weight="400">Owner + version</text>
+<rect x="1660" y="1142" width="290" height="48" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1677" y="1175.0" font-size="26" fill="#0F766E" font-weight="700">Market Data</text>
+<path d="M 1955 1166 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1156" font-size="22" fill="#52647B" font-weight="400">HTTPS: dataset artifacts</text>
+<rect x="1660" y="1204" width="290" height="48" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1677" y="1237.0" font-size="26" fill="#7C3AED" font-weight="700">ML Platform</text>
+<path d="M 1955 1228 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1218" font-size="22" fill="#52647B" font-weight="400">HTTPS: model artifacts</text>
+<rect x="1660" y="1266" width="290" height="48" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1677" y="1299.0" font-size="26" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<path d="M 1955 1290 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1280" font-size="22" fill="#52647B" font-weight="400">HTTPS: scoped reads / own run writes</text>
+<rect x="1660" y="1328" width="290" height="48" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1677" y="1361.0" font-size="26" fill="#7C3AED" font-weight="700">Research Service</text>
+<path d="M 1955 1352 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1342" font-size="22" fill="#52647B" font-weight="400">HTTPS: scoped reads / experiment writes</text>
+<rect x="1660" y="1390" width="290" height="48" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1677" y="1423.0" font-size="26" fill="#0F766E" font-weight="700">Knowledge Service</text>
+<path d="M 1955 1414 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1404" font-size="22" fill="#52647B" font-weight="400">HTTPS: source documents</text>
+<rect x="1645" y="1482" width="1470" height="223" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<path d="M 2755 1528 V 1652" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 2755 1590.0 H 2803" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<rect x="2815" y="1541.0" width="280" height="98" rx="10" fill="#FEF3C7" stroke="#A16207" stroke-width="2"/>
+<text x="2832" y="1577.0" font-size="26" fill="#A16207" font-weight="700">Redis</text>
+<text x="2832" y="1609.0" font-size="22" fill="#A16207" font-weight="400">Session / cache</text>
+<rect x="1660" y="1504" width="290" height="48" rx="10" fill="#DCFCE7" stroke="#15803D" stroke-width="2"/>
+<text x="1677" y="1537.0" font-size="26" fill="#15803D" font-weight="700">Frontend / BFF</text>
+<path d="M 1955 1528 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1518" font-size="22" fill="#52647B" font-weight="400">RESP/TLS: session — chỉ server BFF</text>
+<rect x="1660" y="1566" width="290" height="48" rx="10" fill="#DBEAFE" stroke="#2563EB" stroke-width="2"/>
+<text x="1677" y="1599.0" font-size="26" fill="#2563EB" font-weight="700">Chat Service</text>
+<path d="M 1955 1590 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1580" font-size="22" fill="#52647B" font-weight="400">RESP/TLS: SSE hints</text>
+<rect x="1660" y="1628" width="290" height="48" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1677" y="1661.0" font-size="26" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<path d="M 1955 1652 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1642" font-size="22" fill="#52647B" font-weight="400">RESP/TLS: derived forecast cache</text>
+<rect x="1645" y="1720" width="1470" height="161" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<path d="M 2755 1766 V 1828" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 2755 1797.0 H 2803" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<rect x="2815" y="1748.0" width="280" height="98" rx="10" fill="#E2E8F0" stroke="#475569" stroke-width="2"/>
+<text x="2832" y="1784.0" font-size="26" fill="#475569" font-weight="700">Sources</text>
+<text x="2832" y="1816.0" font-size="22" fill="#475569" font-weight="400">Giá / NAV / tài liệu</text>
+<rect x="1660" y="1742" width="290" height="48" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1677" y="1775.0" font-size="26" fill="#0F766E" font-weight="700">Market Data</text>
+<path d="M 1955 1766 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1756" font-size="22" fill="#52647B" font-weight="400">HTTPS: source adapters</text>
+<rect x="1660" y="1804" width="290" height="48" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1677" y="1837.0" font-size="26" fill="#0F766E" font-weight="700">Knowledge Service</text>
+<path d="M 1955 1828 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1818" font-size="22" fill="#52647B" font-weight="400">HTTPS: allowlisted document ingestion</text>
+<rect x="1645" y="1896" width="1470" height="161" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+<path d="M 2755 1942 V 2004" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<path d="M 2755 1973.0 H 2803" fill="none" stroke="#526B89" stroke-width="2.5"  marker-end="url(#http)" />
+<rect x="2815" y="1924.0" width="280" height="98" rx="10" fill="#E2E8F0" stroke="#475569" stroke-width="2"/>
+<text x="2832" y="1960.0" font-size="26" fill="#475569" font-weight="700">LLM / Embedding</text>
+<text x="2832" y="1992.0" font-size="22" fill="#475569" font-weight="400">Hosted provider</text>
+<rect x="1660" y="1918" width="290" height="48" rx="10" fill="#DBEAFE" stroke="#2563EB" stroke-width="2"/>
+<text x="1677" y="1951.0" font-size="26" fill="#2563EB" font-weight="700">Chat Service</text>
+<path d="M 1955 1942 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1932" font-size="22" fill="#52647B" font-weight="400">HTTPS: structured intent / explanation</text>
+<rect x="1660" y="1980" width="290" height="48" rx="10" fill="#CCFBF1" stroke="#0F766E" stroke-width="2"/>
+<text x="1677" y="2013.0" font-size="26" fill="#0F766E" font-weight="700">Knowledge Service</text>
+<path d="M 1955 2004 H 2755" fill="none" stroke="#526B89" stroke-width="2.5"/>
+<text x="1980" y="1994" font-size="22" fill="#52647B" font-weight="400">HTTPS: embedding batches</text>
+<text x="1660" y="2110" font-size="23" fill="#52647B" font-weight="400">PostgreSQL: 7 owned databases đã vẽ trực tiếp trong từng domain tại A.</text>
+<text x="1660" y="2148" font-size="23" fill="#52647B" font-weight="400">S3: quyền đọc / ghi giới hạn theo owner và artifact manifest.</text>
+<text x="1660" y="2186" font-size="23" fill="#52647B" font-weight="400">Redis: cache / hints không thay thế trạng thái nghiệp vụ bền vững.</text>
+<text x="1660" y="2224" font-size="23" fill="#52647B" font-weight="400">Nguồn / LLM là external providers, không có quyền truy cập DB nội bộ.</text>
+<text x="1660" y="2262" font-size="23" fill="#52647B" font-weight="400">Identity, ingress và monitoring nằm ngoài phạm vi bản Mermaid này.</text>
+<text x="60" y="2396" font-size="29" fill="#182C44" font-weight="700">D  PHÓNG TO ALLOCATION SAGA — PORTFOLIO ĐIỀU PHỐI QUA COMMAND / EVENT</text>
+<rect x="60" y="2423" width="3080" height="93" rx="15" fill="#FFFFFF" stroke="#D5DFEB" stroke-width="2"/>
+<text x="80" y="2479" font-size="29" fill="#1D4ED8" font-weight="700">01</text>
+<rect x="150" y="2441" width="330" height="57" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="167" y="2478.5" font-size="26" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<text x="500" y="2457" font-size="21" fill="#52647B" font-weight="400">Lưu saga + input + outbox</text>
+<path d="M 490 2489 H 1372" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<text x="920" y="2457" font-size="21" fill="#9A3412" font-weight="700">COMMAND: optimize.requested</text>
+<rect x="1385" y="2441" width="260" height="57" rx="10" fill="#FFEDD5" stroke="#C2410C" stroke-width="2"/>
+<text x="1402" y="2478.5" font-size="26" fill="#C2410C" font-weight="700">RabbitMQ</text>
+<path d="M 1658 2469 H 1855" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<rect x="1870" y="2441" width="350" height="57" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="1887" y="2478.5" font-size="26" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<text x="2245" y="2478" font-size="24" fill="#52647B" font-weight="400">Chạy BL / solver; lưu result + outbox</text>
+<rect x="60" y="2528" width="3080" height="93" rx="15" fill="#FFFFFF" stroke="#D5DFEB" stroke-width="2"/>
+<text x="80" y="2584" font-size="29" fill="#1D4ED8" font-weight="700">02</text>
+<rect x="150" y="2546" width="330" height="57" rx="10" fill="#EDE9FE" stroke="#7C3AED" stroke-width="2"/>
+<text x="167" y="2583.5" font-size="26" fill="#7C3AED" font-weight="700">Quant Serving</text>
+<text x="500" y="2562" font-size="21" fill="#52647B" font-weight="400">Phát kết quả đã commit</text>
+<path d="M 490 2594 H 1372" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<text x="920" y="2562" font-size="21" fill="#9A3412" font-weight="700">EVENT: optimization.succeeded</text>
+<rect x="1385" y="2546" width="260" height="57" rx="10" fill="#FFEDD5" stroke="#C2410C" stroke-width="2"/>
+<text x="1402" y="2583.5" font-size="26" fill="#C2410C" font-weight="700">RabbitMQ</text>
+<path d="M 1658 2574 H 1855" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<rect x="1870" y="2546" width="350" height="57" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="1887" y="2583.5" font-size="26" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<text x="2245" y="2583" font-size="24" fill="#52647B" font-weight="400">Kiểm tra version / constraints; lưu recommendation</text>
+<rect x="60" y="2633" width="3080" height="93" rx="15" fill="#FFFFFF" stroke="#D5DFEB" stroke-width="2"/>
+<text x="80" y="2689" font-size="29" fill="#1D4ED8" font-weight="700">03</text>
+<rect x="150" y="2651" width="330" height="57" rx="10" fill="#DBEAFE" stroke="#1D4ED8" stroke-width="2"/>
+<text x="167" y="2688.5" font-size="26" fill="#1D4ED8" font-weight="700">Portfolio Service</text>
+<text x="500" y="2667" font-size="21" fill="#52647B" font-weight="400">Phát đề xuất đã sẵn sàng</text>
+<path d="M 490 2699 H 1372" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<text x="920" y="2667" font-size="21" fill="#9A3412" font-weight="700">EVENT: recommendation.ready</text>
+<rect x="1385" y="2651" width="260" height="57" rx="10" fill="#FFEDD5" stroke="#C2410C" stroke-width="2"/>
+<text x="1402" y="2688.5" font-size="26" fill="#C2410C" font-weight="700">RabbitMQ</text>
+<path d="M 1658 2679 H 1855" fill="none" stroke="#B45309" stroke-width="2.5" stroke-dasharray="10 7" marker-end="url(#event)" />
+<rect x="1870" y="2651" width="350" height="57" rx="10" fill="#DBEAFE" stroke="#2563EB" stroke-width="2"/>
+<text x="1887" y="2688.5" font-size="26" fill="#2563EB" font-weight="700">Chat Service</text>
+<text x="2245" y="2688" font-size="24" fill="#52647B" font-weight="400">Canonical facts → LLM → kiểm tra → SSE</text>
+<text x="60" y="2785" font-size="25" fill="#52647B" font-weight="400">Quyền sở hữu DB ≠ một máy chủ riêng cho mỗi DB. Saga là state machine bền vững trong Portfolio; RabbitMQ không thay vai trò orchestrator.</text>
+<text x="60" y="2830" font-size="24" fill="#52647B" font-weight="400">Khung = domain / ranh giới triển khai   •   Xanh dương = nghiệp vụ   •   Xanh ngọc = dữ liệu / tri thức   •   Tím = quant / ML   •   Vàng = storage   •   Cam = messaging</text>
+<text x="60" y="2870" font-size="23" fill="#64748B" font-weight="400">37/37 kết nối gốc được đối chiếu trong A–C. Các mũi tên tại D phóng to cùng luồng, không bổ sung service hoặc thay đổi quyền sở hữu.</text>
+</svg>

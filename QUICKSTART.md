@@ -24,6 +24,22 @@ python crawl/fund.py
 python crawl/gold.py
 ```
 
+Với giá vàng, có thể crawl cập nhật một khoảng thời gian bất kỳ (không phụ thuộc
+vào ngày chia train/test trong `config.py`) và merge vào các file gold CSV sẵn có:
+
+```bash
+# Crawl từ ngày cuối cùng đã lưu đến hôm nay
+python crawl/gold.py --update
+
+# Hoặc chỉ định khoảng thời gian (YYYY-MM-DD hoặc DD/MM/YYYY)
+python crawl/gold.py --update --start 2026-07-20 --end 2026-08-10
+```
+
+Mỗi file (`gold_full.csv`, `gold_test.csv`, `gold_train.csv`) chỉ nhận những
+ngày nằm trong phạm vi phủ sóng của riêng file đó (train là đoạn đóng kết thúc
+ở SPLIT_DATE; full/test mở về phía hiện tại). Crawl lại một ngày null
+(nghỉ lễ, lỗi API) không xóa giá trị đã lưu (ffill từ ngày liền trước).
+
 ## 3. Cấu hình dự án
 
 Tất cả tham số mặc định đã được tập trung vào `config.py` (ở root dự án):
@@ -47,7 +63,7 @@ INITIAL_NAV = 1.0
 # Black-Litterman
 BL_TAU = 0.05
 BL_DELTA = 2.5
-BL_VIEW_CONFIDENCE = 0.5
+BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL = 0.5
 
 # View generation
 VIEW_MODE = "combined"        # mặc định hiện tại
@@ -57,7 +73,7 @@ COMBINED_VIEW_WEIGHTS = (0.4, 0.3, 0.3, 0.0)  # (rule, relative, ml, static)
 ML_MODEL_TYPE = "xgboost"
 DEFAULT_FEATURE_WINDOW = 20
 DEFAULT_PREDICTION_HORIZON = 5
-ML_MIN_RETURN_THRESHOLD = 0.005
+ML_MIN_ALLOWED_PREDICTION_RETURN = 0.005
 ```
 
 Module XGBoost có thêm file cấu hình riêng tại `gen_view/xgboost/config.py` (hyperparams, feature periods, confidence heuristic).

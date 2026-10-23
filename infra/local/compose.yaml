@@ -1,0 +1,291 @@
+name: portfolio-software
+
+x-keycloak-environment: &keycloak-environment
+  KC_DB: postgres
+  KC_DB_URL: jdbc:postgresql://postgres:5432/identity_db
+  KC_HOSTNAME: http://localhost:8080
+  KC_HEALTH_ENABLED: "true"
+  KC_HTTP_ENABLED: "true"
+  KC_CACHE: local
+
+x-portfolio-environment: &portfolio-environment
+  DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
+  OIDC_ISSUER: http://localhost:8080/realms/portfolio
+  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_AUDIENCE: portfolio-api
+  OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+  QUANT_API_URL: http://quant-api:8000
+  QUANT_CLIENT_SECRET: ${QUANT_CLIENT_SECRET:?Run bootstrap.py}
+
+x-quant-environment: &quant-environment
+  DATABASE_URL: postgresql+psycopg://quant_runtime:${QUANT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/quant_db
+  OIDC_ISSUER: http://localhost:8080/realms/portfolio
+  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_AUDIENCE: quant-api
+  BUNDLE_DIRECTORY: /bundles
+  ALLOW_DEMO_INPUTS: "true"
+
+x-market-environment: &market-environment
+  DATABASE_URL: postgresql+psycopg://market_runtime:${MARKET_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/market_db
+  OIDC_ISSUER: http://localhost:8080/realms/portfolio
+  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_AUDIENCE: market-api
+  DATASET_DIRECTORY: /datasets
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 15s
+
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    environment:
+      POSTGRES_USER: local_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bootstrap.py}
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    ports: ["127.0.0.1:5433:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./.generated/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U local_admin -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.3.6-management
+    hostname: rabbitmq
+    ports: ["127.0.0.1:5673:5672", "127.0.0.1:15673:15672"]
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./.generated/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2.10-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Run bootstrap.py}
+    ports: ["127.0.0.1:6380:6379"]
+    volumes:
+      - redis-data:/data
+      - ./.generated/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  identity-migrate:
+    image: quay.io/keycloak/keycloak:26.7.4
+    entrypoint: ["/bin/bash", "/init/keycloak-init.sh"]
+    environment:
+      <<: *keycloak-environment
+      KC_DB_USERNAME: identity_migrator
+      KC_DB_PASSWORD: ${IDENTITY_MIGRATOR_PASSWORD:?Run bootstrap.py}
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run bootstrap.py}
+    volumes:
+      - ./keycloak-init.sh:/init/keycloak-init.sh:ro
+      - ./.generated/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: ["start-dev", "--spi-connections-jpa--quarkus--migration-strategy=validate"]
+    environment:
+      <<: *keycloak-environment
+      KC_DB_USERNAME: identity_runtime
+      KC_DB_PASSWORD: ${IDENTITY_RUNTIME_PASSWORD:?Run bootstrap.py}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      identity-migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; read -r status <&3; [[ \"$$status\" == *'200 OK'* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  portfolio-migrate:
+    build: {context: ../.., dockerfile: services/portfolio/Dockerfile}
+    image: portfolio-software-portfolio:local
+    command: ["alembic", "-c", "/app/services/portfolio/alembic.ini", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://portfolio_migrator:${PORTFOLIO_MIGRATOR_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  quant-migrate:
+    build: {context: ../.., dockerfile: services/quant-serving/Dockerfile}
+    image: portfolio-software-quant:local
+    command: ["alembic", "-c", "/app/services/quant-serving/alembic.ini", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://quant_migrator:${QUANT_MIGRATOR_PASSWORD:?Run bootstrap.py}@postgres:5432/quant_db
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  market-migrate:
+    build: {context: ../.., dockerfile: services/market-data/Dockerfile}
+    image: portfolio-software-market:local
+    command: ["alembic", "-c", "/app/services/market-data/alembic.ini", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://market_migrator:${MARKET_MIGRATOR_PASSWORD:?Run bootstrap.py}@postgres:5432/market_db
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  market-api:
+    image: portfolio-software-market:local
+    environment: *market-environment
+    ports: ["127.0.0.1:8003:8000"]
+    volumes: ["./.generated/datasets:/datasets:ro"]
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  market-dispatch:
+    image: portfolio-software-market:local
+    command: ["python", "-m", "market_service.worker", "dispatch"]
+    environment:
+      <<: *market-environment
+      BROKER_URL: amqp://market_publisher:${MARKET_PUBLISHER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
+    volumes: ["./.generated/datasets:/datasets:ro"]
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  market-consume:
+    image: portfolio-software-market:local
+    command: ["python", "-m", "market_service.worker", "consume"]
+    environment:
+      <<: *market-environment
+      BROKER_URL: amqp://market_consumer:${MARKET_CONSUMER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
+    volumes: ["./.generated/datasets:/datasets:ro"]
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  portfolio-api:
+    image: portfolio-software-portfolio:local
+    environment: *portfolio-environment
+    ports: ["127.0.0.1:8001:8000"]
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
+      quant-api: {condition: service_healthy}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  quant-api:
+    image: portfolio-software-quant:local
+    environment: *quant-environment
+    ports: ["127.0.0.1:8002:8000"]
+    volumes: ["./.generated/bundles:/bundles:ro"]
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  portfolio-dispatch:
+    image: portfolio-software-portfolio:local
+    command: ["python", "-m", "portfolio_service.worker", "dispatch"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
+      BROKER_URL: amqp://portfolio_publisher:${PORTFOLIO_PUBLISHER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  portfolio-consume:
+    image: portfolio-software-portfolio:local
+    command: ["python", "-m", "portfolio_service.worker", "consume"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
+      BROKER_URL: amqp://portfolio_consumer:${PORTFOLIO_CONSUMER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  quant-dispatch:
+    image: portfolio-software-quant:local
+    command: ["python", "-m", "quant_service.worker", "dispatch"]
+    environment:
+      <<: *quant-environment
+      BROKER_URL: amqp://quant_publisher:${QUANT_PUBLISHER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
+    volumes: ["./.generated/bundles:/bundles:ro"]
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  quant-consume:
+    image: portfolio-software-quant:local
+    command: ["python", "-m", "quant_service.worker", "consume"]
+    environment:
+      <<: *quant-environment
+      BROKER_URL: amqp://quant_consumer:${QUANT_CONSUMER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
+    volumes: ["./.generated/bundles:/bundles:ro"]
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  web:
+    build: {context: ../../apps/web, dockerfile: Dockerfile}
+    image: portfolio-software-web:local
+    environment:
+      APP_ORIGIN: http://localhost:3000
+      OIDC_ISSUER: http://localhost:8080/realms/portfolio
+      OIDC_INTERNAL_ORIGIN: http://keycloak:8080
+      OIDC_CLIENT_ID: portfolio-web
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Run bootstrap.py}
+      OIDC_AUDIENCE: portfolio-api
+      OIDC_SCOPE: openid profile email portfolio:read portfolio:write
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Run bootstrap.py}@redis:6379/0
+      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Run bootstrap.py}
+      PORTFOLIO_API_URL: http://portfolio-api:8000
+      ALLOW_INSECURE_HTTP: "true"
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      portfolio-api: {condition: service_healthy}
+      keycloak: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  redis-data:

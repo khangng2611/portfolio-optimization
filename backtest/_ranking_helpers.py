@@ -30,7 +30,7 @@ from config import (
     RISK_AVERSION_STRESS,
     RANKING_VIEW_SPREAD,
     VOL_DAMPENER_THRESHOLD,
-    ML_MIN_RETURN_THRESHOLD,
+    ML_MIN_ALLOWED_PREDICTION_RETURN,
     RETRAIN_FREQUENCY
 )
 
@@ -124,7 +124,11 @@ def ranking_sub_optimize(
     """Run BL posterior + constrained MVO on the active-asset sub-set,
     then map weights back to the full asset vector.
 
-    Returns ``bl_weight`` (full-size vector of length *m*, zeros elsewhere).
+    Returns ``(bl_weight, mvo_weight)`` — both full-size vectors of length
+    *m*, with non-zero entries only on the active sub-universe.  The MVO
+    leg uses the same constrained optimiser (defensive floor / equity cap)
+    but **without** BL views, so it can be blended apples-to-apples with
+    the BL leg in the HYBRID strategy.
     """
     sub_mu = mu[active_indices]
     sub_sigma = sigma[np.ix_(active_indices, active_indices)]
@@ -152,10 +156,23 @@ def ranking_sub_optimize(
         defensive_assets=DEFAULT_DEFENSIVE_ASSETS,
     )
 
+    # Constrained MVO on the same sub-universe (no BL views) for HYBRID.
+    sub_mvo_weight = optimize_weight_ranking(
+        sub_mu,
+        sub_sigma,
+        active_asset_names,
+        risk_aversion=current_risk_aversion,
+        min_defensive_weight=MIN_DEFENSIVE_WEIGHT,
+        max_equity_exposure=MAX_EQUITY_EXPOSURE,
+        defensive_assets=DEFAULT_DEFENSIVE_ASSETS,
+    )
+
     bl_weight = np.zeros(m)
+    mvo_weight = np.zeros(m)
     for i, idx in enumerate(active_indices):
         bl_weight[idx] = sub_bl_weight[i]
-    return bl_weight
+        mvo_weight[idx] = sub_mvo_weight[i]
+    return bl_weight, mvo_weight
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +223,7 @@ def generate_ranking_mode_views(
 
 def generate_ranking_abs_mode_views(
     t, ranking_abs_model, selected_stocks, ranking_universe_prices,
-    active_asset_names,
+    active_asset_names, returns,
 ):
     """Generate absolute ML views from XGBoostEnsembleModel."""
     if ranking_abs_model.is_trained and selected_stocks is not None:
@@ -215,10 +232,14 @@ def generate_ranking_abs_mode_views(
             lookback_start:t
         ]
         predictions = ranking_abs_model.predict(stock_prices_recent)
+        # Recent returns slice for volatility-adjusted view scaling (Option B)
+        vol_start = max(0, t - 20)
+        recent_returns = returns.iloc[vol_start:t]
         ml_views = generate_ml_views(
             predictions,
             prediction_horizon=ranking_abs_model.prediction_horizon,
-            min_return_threshold=ML_MIN_RETURN_THRESHOLD,
+            min_return_threshold=ML_MIN_ALLOWED_PREDICTION_RETURN,
+            returns=recent_returns,
         )
         return build_views_matrix(ml_views, active_asset_names)
 
@@ -251,7 +272,8 @@ def retrain_ranking_abs_model_if_due(
     """Retrain the XGBoostEnsembleModel if the retrain interval has elapsed."""
     if t - last_retrain_t >= RETRAIN_FREQUENCY or not ranking_abs_model.is_trained:
         train_end = t - DEFAULT_PREDICTION_HORIZON
-        if train_end > (DEFAULT_FEATURE_WINDOW + DEFAULT_PREDICTION_HORIZON + MIN_TRAIN_SAMPLES):
+        threshold = DEFAULT_FEATURE_WINDOW + DEFAULT_PREDICTION_HORIZON + MIN_TRAIN_SAMPLES
+        if train_end > threshold:
             stock_prices_train = ranking_universe_prices[selected_stocks].iloc[:train_end]
             ranking_abs_model.train(stock_prices_train, verbose=False)
             return t
@@ -300,8 +322,12 @@ def run_ranking_step(
     Returns
     -------
     tuple
-        ``(bl_weight, views_record)`` where *bl_weight* is the full-size weight
-        vector and *views_record* is the dict to append to ``views_history``.
+        ``(bl_weight, mvo_weight, regime, views_record)`` where:
+        * ``bl_weight`` and ``mvo_weight`` are full-size weight vectors
+          (non-zero only on the active sub-universe). ``mvo_weight`` is the
+          constrained MVO leg used by the HYBRID strategy.
+        * ``regime`` is the dict returned by ``detect_market_regime``.
+        * ``views_record`` is the dict to append to ``views_history``.
     """
     m = len(assets)
 
@@ -342,7 +368,7 @@ def run_ranking_step(
     else:
         p_view, q_view, conf_view, view_names = generate_ranking_abs_mode_views(
             t, state["ranking_abs_model"], selected_stocks,
-            ranking_universe_prices, active_asset_names,
+            ranking_universe_prices, active_asset_names, returns,
         )
 
     # --- Risk management ---
@@ -359,9 +385,9 @@ def run_ranking_step(
     }
 
     # --- Sub-optimisation ---
-    bl_weight = ranking_sub_optimize(
+    bl_weight, mvo_weight = ranking_sub_optimize(
         mu, sigma, active_indices, active_asset_names,
         p_view, q_view, conf_view, regime, m,
     )
 
-    return bl_weight, views_record
+    return bl_weight, mvo_weight, regime, views_record

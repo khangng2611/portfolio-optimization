@@ -1,0 +1,63 @@
+# Opt-in localhost tracing overlay; always combine with compose.yaml.
+# Jaeger uses its default all-in-one, transient in-memory configuration.
+x-tracing-environment: &tracing-environment
+  OTEL_TRACES_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+  OTEL_TRACES_SAMPLER: always_on
+  TRACE_VIEWER_URL: http://localhost:16686
+
+services:
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
+    ports: ["127.0.0.1:16686:16686", "127.0.0.1:4318:4318"]
+    restart: unless-stopped
+
+  web:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: web-bff
+
+  portfolio-api:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: portfolio-api
+
+  portfolio-dispatch:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: portfolio-dispatch
+
+  portfolio-consume:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: portfolio-consume
+
+  quant-api:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: quant-api
+
+  quant-dispatch:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: quant-dispatch
+
+  quant-consume:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: quant-consume
+
+  market-api:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: market-api
+
+  market-dispatch:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: market-dispatch
+
+  market-consume:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: market-consume

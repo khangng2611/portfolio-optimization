@@ -155,3 +155,38 @@ def optimize_weight_ranking(
         for i in stock_indices:
             fallback[i] = stock_w
     return fallback
+
+
+def blend_weights(
+    w_mvo: np.ndarray,
+    w_bl: np.ndarray,
+    alpha: float,
+) -> np.ndarray:
+    """Convex combination ``alpha * w_mvo + (1 - alpha) * w_bl``.
+
+    Used by the HYBRID strategy to mix MVO and BL portfolios with a
+    regime-aware ``alpha`` (MVO share).  ``alpha`` is clipped to ``[0, 1]``,
+    negative components are floored at zero, the result is renormalised to
+    sum to 1, and the standard ``MIN_WEIGHT_THRESHOLD`` post-processing is
+    applied so micro-positions are removed.
+
+    Both inputs must have the same shape; in ranking modes the caller is
+    responsible for ensuring that ``w_mvo`` and ``w_bl`` are defined on the
+    same active sub-universe (zero elsewhere).
+    """
+    w_mvo = np.asarray(w_mvo, dtype=float)
+    w_bl = np.asarray(w_bl, dtype=float)
+    if w_mvo.shape != w_bl.shape:
+        raise ValueError(
+            f"blend_weights: shape mismatch {w_mvo.shape} vs {w_bl.shape}"
+        )
+
+    a = float(np.clip(alpha, 0.0, 1.0))
+    w = a * w_mvo + (1.0 - a) * w_bl
+    w = np.maximum(w, 0.0)
+
+    total = w.sum()
+    if total <= 0:
+        return np.full_like(w, 1.0 / len(w))
+    w = w / total
+    return _apply_min_weight_threshold(w)

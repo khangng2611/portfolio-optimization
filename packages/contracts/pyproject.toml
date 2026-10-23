@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portfolio-contracts"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["pydantic==2.11.9", "kombu==5.5.4", "portfolio-service-observability==0.1.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

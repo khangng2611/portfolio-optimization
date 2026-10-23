@@ -111,7 +111,7 @@ Rule-based (trong `view_generators.py`):
 Black-Litterman (trong `config.py`):
 - `BL_TAU = 0.05` - Tham số điều chỉnh mô hình
 - `BL_DELTA = 2.5` - Hệ số rủi ro
-- `BL_VIEW_CONFIDENCE = 0.5` - Độ tin cậy mặc định
+- `BL_VIEW_DEFAULT_CONFIDENCE_WHEN_NULL = 0.5` - Độ tin cậy mặc định
 
 ML Defaults (trong `config.py`):
 - `DEFAULT_FEATURE_WINDOW = 20` - Cửa sổ feature

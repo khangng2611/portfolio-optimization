@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portfolio-core"
+version = "0.1.0"
+description = "Deterministic, explicit-input portfolio allocation numerical core"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy==2.2.6", "cvxpy==1.8.2", "clarabel==0.11.1"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

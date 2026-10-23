@@ -1,0 +1,103 @@
+name: Software services
+on:
+  push:
+    paths: ['apps/**', 'packages/**', 'services/**', 'infra/**', 'tests/software/**', 'scripts/**', '.github/workflows/software.yml']
+  pull_request:
+    paths: ['apps/**', 'packages/**', 'services/**', 'infra/**', 'tests/software/**', 'scripts/**', '.github/workflows/software.yml']
+  workflow_dispatch:
+    inputs:
+      tracing:
+        description: 'Run the optional local Jaeger tracing and dispatcher-restart smoke gate'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -c services/quant-serving/requirements.lock -e packages/contracts -e packages/service-auth -e packages/service-observability -e packages/portfolio-core -e services/portfolio -e services/quant-serving -e services/market-data pytest==8.4.2 ruff==0.13.2
+      - run: python -m pytest tests/software packages/portfolio-core/tests -q
+      - run: ruff check packages services tests/software infra scripts/export_software_contracts.py scripts/lock_software_dependencies.py scripts/smoke_software.py scripts/smoke_tracing.py scripts/setup_software.py
+      - run: python scripts/export_software_contracts.py && git diff --exit-code -- packages/contracts/openapi packages/contracts/events
+      - name: Validate local stack configuration
+        run: python infra/local/bootstrap.py && docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml config --quiet
+      - name: Validate opt-in tracing overlay without expanded credentials
+        run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml config --quiet
+      - name: Validate staging template with placeholders only
+        run: python infra/staging/validate.py --env-file infra/staging/.env.example --allow-example && docker compose --env-file infra/staging/.env.example -f infra/staging/compose.yaml config --quiet
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Install isolated Redis test runtime
+        run: sudo apt-get update -qq && sudo apt-get install -y redis-server
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+  local-stack:
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install kombu==5.5.4 'psycopg[binary]==3.2.10' httpx==0.28.1
+      - run: python infra/local/bootstrap.py --enable-test-client
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml build
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --wait --wait-timeout 300
+      - name: Reconcile local configuration twice without resets
+        run: python infra/local/upgrade.py && python infra/local/upgrade.py
+      - run: python infra/local/verify_boundaries.py
+      - run: python scripts/smoke_software.py
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml restart portfolio-api portfolio-consume portfolio-dispatch quant-api quant-consume quant-dispatch market-api market-consume market-dispatch
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --wait --wait-timeout 120
+      - run: python scripts/smoke_software.py --verify-receipt
+      - name: Container status
+        if: always()
+        run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml ps -a
+      - name: Stop disposable CI stack
+        if: always()
+        run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml down
+  local-tracing:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.tracing }}
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install kombu==5.5.4 'psycopg[binary]==3.2.10' httpx==0.28.1
+      - run: python infra/local/bootstrap.py --enable-test-client
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml config --quiet
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml build
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --wait --wait-timeout 300
+      - run: python infra/local/upgrade.py
+      - run: python infra/local/verify_boundaries.py
+      - run: python scripts/smoke_software.py
+      - name: Verify end-to-end trace and durable dispatcher context
+        run: python scripts/smoke_tracing.py --restart-dispatcher --collector-outage
+      - run: python scripts/smoke_software.py --verify-receipt
+      - name: Container status
+        if: always()
+        run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml ps -a
+      - name: Stop disposable tracing CI stack
+        if: always()
+        run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml down

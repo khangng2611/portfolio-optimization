@@ -1,0 +1,68 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "input_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Hash",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "bundle_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Hash",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "SUCCEEDED",
+        "FAILED"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    }
+  },
+  "required": [
+    "job_id",
+    "input_hash",
+    "run_id",
+    "bundle_hash",
+    "status"
+  ],
+  "title": "OptimizeResult",
+  "type": "object"
+}

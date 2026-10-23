@@ -1,0 +1,159 @@
+@startuml portfolio_architecture
+' Source: docs/ARCHITECTURE_OVERVIEW.md
+' 14 nodes, 37 connections. Packages group domains; they are not extra services.
+title
+Portfolio Optimization
+Microservices theo domain + Event-driven orchestration
+end title
+
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 11
+skinparam ArrowColor #52647B
+skinparam nodesep 45
+skinparam ranksep 65
+skinparam packageStyle rectangle
+skinparam packageBackgroundColor #F8FAFC
+skinparam packageBorderColor #CBD5E1
+hide stereotype
+
+skinparam component {
+  BackgroundColor<<frontend>> #D4EDDA
+  BorderColor<<frontend>> #28A745
+  BackgroundColor<<business>> #CCE5FF
+  BorderColor<<business>> #2563EB
+  BackgroundColor<<dataKnowledge>> #CCFBF1
+  BorderColor<<dataKnowledge>> #0F766E
+  BackgroundColor<<quantML>> #EDE9FE
+  BorderColor<<quantML>> #7C3AED
+  BackgroundColor<<external>> #F1F5F9
+  BorderColor<<external>> #64748B
+}
+skinparam database {
+  BackgroundColor #FFF3CD
+  BorderColor #A16207
+}
+skinparam queue {
+  BackgroundColor #FFEDD5
+  BorderColor #EA580C
+}
+
+package "Giao diện" {
+  component "Frontend\nNext.js UI + server BFF" as Web <<frontend>>
+}
+
+package "Domain services — triển khai độc lập" {
+  package "Danh mục" {
+    component "Portfolio Service\nProfile • ledger • allocation saga\nWORKFLOW ORCHESTRATOR" as Portfolio <<business>>
+  }
+  package "Hội thoại" {
+    component "Chat Service\nIntent • tools • explanations • SSE" as Chat <<business>>
+  }
+  package "Thị trường" {
+    component "Market Data Service\nIngestion • snapshots" as Market <<dataKnowledge>>
+  }
+  package "Tri thức" {
+    component "Knowledge Service\nRAG retrieval" as Knowledge <<dataKnowledge>>
+  }
+  package "Tối ưu" {
+    component "Quant Serving\nForecasts • BL optimization" as Quant <<quantML>>
+  }
+  package "Mô hình" {
+    component "ML Platform\nTraining • registry" as ML <<quantML>>
+  }
+  package "Thực nghiệm" {
+    component "Research Service\nBacktest • experiments" as Research <<quantML>>
+  }
+}
+
+package "Event-driven integration" {
+  queue "RabbitMQ\nCommands + domain events" as MQ
+}
+
+package "Storage và cache" {
+  database "PostgreSQL databases\nDB riêng theo owner\nKnowledge có pgvector" as DB
+  database "S3\nArtifacts theo owner, version" as S3
+  database "Redis\nSession • cache • stream hints" as Redis
+}
+
+package "External providers" {
+  component "Nguồn giá / NAV / tài liệu" as Sources <<external>>
+  component "Hosted LLM / embedding provider" as LLM <<external>>
+}
+
+' HTTPS / RESP / SQL: solid arrows. AMQPS: dashed arrows.
+Web --> Portfolio : HTTPS
+Web --> Chat : HTTPS: REST và SSE
+Web --> Market : HTTPS: market reads
+Web --> Research : HTTPS: backtest jobs
+Web --> Redis : RESP/TLS: session, chỉ server BFF
+Chat --> Portfolio : HTTPS: scoped tools
+Chat --> Market : HTTPS: facts
+Chat --> Knowledge : HTTPS: retrieve citations
+Chat --> LLM : HTTPS: structured intent / explanation
+Knowledge --> LLM : HTTPS: embedding batches
+Portfolio --> Market : HTTPS: pin snapshot metadata
+Portfolio --> Quant : HTTPS: resolve ready model version
+Portfolio <..> MQ : AMQPS: commands / result events qua outbox
+Chat <..> MQ : AMQPS: continuation events
+Market ..> MQ : AMQPS: dataset.published
+ML <..> MQ : AMQPS: training commands / model.published
+Quant <..> MQ : AMQPS: optimize / forecast / ready events
+Research <..> MQ : AMQPS: research commands / completion
+Quant --> ML : HTTPS: model manifest
+Research --> Market : HTTPS: pinned dataset metadata
+Research --> ML : HTTPS: historical model manifest
+Market --> Sources : HTTPS: source adapters
+Knowledge --> Sources : HTTPS: allowlisted document ingestion
+Portfolio --> DB : SQL over TLS: portfolio_db only
+Chat --> DB : SQL over TLS: chat_db only
+Market --> DB : SQL over TLS: market_db only
+Quant --> DB : SQL over TLS: quant_db only
+ML --> DB : SQL over TLS: ml_db only
+Knowledge --> DB : SQL over TLS: knowledge_db only
+Research --> DB : SQL over TLS: research_db only
+Market --> S3 : HTTPS: dataset artifacts
+ML --> S3 : HTTPS: model artifacts
+Quant --> S3 : HTTPS: scoped artifact reads / own run writes
+Research --> S3 : HTTPS: scoped reads / own experiment writes
+Knowledge --> S3 : HTTPS: source documents
+Chat --> Redis : RESP/TLS: SSE hints
+Quant --> Redis : RESP/TLS: derived forecast cache
+
+note bottom of Portfolio
+  Giữ trạng thái saga, kiểm tra kết quả
+  và quyết định bước nghiệp vụ tiếp theo.
+end note
+
+note bottom of DB
+  Node này gộp các database logic riêng.
+  Không cho phép service đọc/ghi DB của service khác.
+end note
+
+note bottom of Redis
+  Chỉ server BFF truy cập session store.
+  Trình duyệt không kết nối trực tiếp Redis.
+end note
+
+note bottom of MQ
+  Broker chuyển command/event; không điều phối nghiệp vụ.
+  Outbox/inbox, retry và deduplication tại các service.
+end note
+
+legend bottom left
+  |= Màu |= Nhóm |
+  | <back:#D4EDDA> Xanh lá </back> | Frontend / BFF |
+  | <back:#CCE5FF> Xanh dương </back> | Nghiệp vụ / hội thoại |
+  | <back:#CCFBF1> Xanh ngọc </back> | Dữ liệu / tri thức |
+  | <back:#EDE9FE> Tím </back> | Quant / ML / research |
+  | <back:#FFEDD5> Cam </back> | Message broker |
+  | <back:#FFF3CD> Vàng </back> | Storage / cache |
+  | <back:#F1F5F9> Xám </back> | External providers |
+  Đường liền: HTTPS / SQL / RESP qua TLS.
+  Đường đứt: AMQPS commands / events.
+endlegend
+@enduml

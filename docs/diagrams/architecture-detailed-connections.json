@@ -1,0 +1,192 @@
+{
+  "source": "docs/ARCHITECTURE_OVERVIEW.md",
+  "source_connections": 37,
+  "visualized_connections": 37,
+  "connections": [
+    {
+      "from": "Chat",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "Chat",
+      "to": "Knowledge",
+      "direction": "-->"
+    },
+    {
+      "from": "Chat",
+      "to": "LLM",
+      "direction": "-->"
+    },
+    {
+      "from": "Chat",
+      "to": "MQ",
+      "direction": "<-->"
+    },
+    {
+      "from": "Chat",
+      "to": "Market",
+      "direction": "-->"
+    },
+    {
+      "from": "Chat",
+      "to": "Portfolio",
+      "direction": "-->"
+    },
+    {
+      "from": "Chat",
+      "to": "Redis",
+      "direction": "-->"
+    },
+    {
+      "from": "Knowledge",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "Knowledge",
+      "to": "LLM",
+      "direction": "-->"
+    },
+    {
+      "from": "Knowledge",
+      "to": "S3",
+      "direction": "-->"
+    },
+    {
+      "from": "Knowledge",
+      "to": "Sources",
+      "direction": "-->"
+    },
+    {
+      "from": "ML",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "ML",
+      "to": "MQ",
+      "direction": "<-->"
+    },
+    {
+      "from": "ML",
+      "to": "S3",
+      "direction": "-->"
+    },
+    {
+      "from": "Market",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "Market",
+      "to": "MQ",
+      "direction": "-->"
+    },
+    {
+      "from": "Market",
+      "to": "S3",
+      "direction": "-->"
+    },
+    {
+      "from": "Market",
+      "to": "Sources",
+      "direction": "-->"
+    },
+    {
+      "from": "Portfolio",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "Portfolio",
+      "to": "MQ",
+      "direction": "<-->"
+    },
+    {
+      "from": "Portfolio",
+      "to": "Market",
+      "direction": "-->"
+    },
+    {
+      "from": "Portfolio",
+      "to": "Quant",
+      "direction": "-->"
+    },
+    {
+      "from": "Quant",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "Quant",
+      "to": "ML",
+      "direction": "-->"
+    },
+    {
+      "from": "Quant",
+      "to": "MQ",
+      "direction": "<-->"
+    },
+    {
+      "from": "Quant",
+      "to": "Redis",
+      "direction": "-->"
+    },
+    {
+      "from": "Quant",
+      "to": "S3",
+      "direction": "-->"
+    },
+    {
+      "from": "Research",
+      "to": "DB",
+      "direction": "-->"
+    },
+    {
+      "from": "Research",
+      "to": "ML",
+      "direction": "-->"
+    },
+    {
+      "from": "Research",
+      "to": "MQ",
+      "direction": "<-->"
+    },
+    {
+      "from": "Research",
+      "to": "Market",
+      "direction": "-->"
+    },
+    {
+      "from": "Research",
+      "to": "S3",
+      "direction": "-->"
+    },
+    {
+      "from": "Web",
+      "to": "Chat",
+      "direction": "-->"
+    },
+    {
+      "from": "Web",
+      "to": "Market",
+      "direction": "-->"
+    },
+    {
+      "from": "Web",
+      "to": "Portfolio",
+      "direction": "-->"
+    },
+    {
+      "from": "Web",
+      "to": "Redis",
+      "direction": "-->"
+    },
+    {
+      "from": "Web",
+      "to": "Research",
+      "direction": "-->"
+    }
+  ]
+}

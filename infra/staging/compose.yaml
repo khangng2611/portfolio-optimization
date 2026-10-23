@@ -1,0 +1,208 @@
+name: portfolio-staging
+
+# External PostgreSQL, RabbitMQ, Redis and Keycloak are provisioned separately.
+# Validate the supplied env file before using this template. No local/demo accounts.
+x-trust-environment: &trust-environment
+  SSL_CERT_FILE: /ca/ca.pem
+  PGSSLROOTCERT: /ca/ca.pem
+  BROKER_CA_FILE: /ca/ca.pem
+
+x-portfolio-environment: &portfolio-environment
+  <<: *trust-environment
+  DATABASE_URL: ${PORTFOLIO_DATABASE_URL:?Required runtime database URL}
+  OIDC_ISSUER: ${OIDC_ISSUER:?Required HTTPS issuer}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:?Required HTTPS JWKS URL}
+  OIDC_AUDIENCE: portfolio-api
+  OIDC_TOKEN_URL: ${OIDC_TOKEN_URL:?Required HTTPS token endpoint}
+  QUANT_API_URL: http://quant-api:8000
+  QUANT_CLIENT_SECRET: ${QUANT_CLIENT_SECRET:?Required confidential service client secret}
+
+x-quant-environment: &quant-environment
+  <<: *trust-environment
+  DATABASE_URL: ${QUANT_DATABASE_URL:?Required runtime database URL}
+  OIDC_ISSUER: ${OIDC_ISSUER:?Required HTTPS issuer}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:?Required HTTPS JWKS URL}
+  OIDC_AUDIENCE: quant-api
+  BUNDLE_DIRECTORY: /bundles
+  ALLOW_DEMO_INPUTS: "false"
+
+x-market-environment: &market-environment
+  <<: *trust-environment
+  DATABASE_URL: ${MARKET_DATABASE_URL:?Required runtime database URL}
+  OIDC_ISSUER: ${OIDC_ISSUER:?Required HTTPS issuer}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:?Required HTTPS JWKS URL}
+  OIDC_AUDIENCE: market-api
+  DATASET_DIRECTORY: /datasets
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 15s
+
+services:
+  portfolio-migrate:
+    image: ${PORTFOLIO_IMAGE:?Required versioned portfolio image}
+    command: ["alembic", "-c", "/app/services/portfolio/alembic.ini", "upgrade", "head"]
+    environment:
+      <<: *trust-environment
+      MIGRATION_DATABASE_URL: ${PORTFOLIO_MIGRATION_DATABASE_URL:?Required migrator database URL}
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    restart: "no"
+
+  quant-migrate:
+    image: ${QUANT_IMAGE:?Required versioned quant image}
+    command: ["alembic", "-c", "/app/services/quant-serving/alembic.ini", "upgrade", "head"]
+    environment:
+      <<: *trust-environment
+      MIGRATION_DATABASE_URL: ${QUANT_MIGRATION_DATABASE_URL:?Required migrator database URL}
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    restart: "no"
+
+  market-migrate:
+    image: ${MARKET_IMAGE:?Required versioned market image}
+    command: ["alembic", "-c", "/app/services/market-data/alembic.ini", "upgrade", "head"]
+    environment:
+      <<: *trust-environment
+      MIGRATION_DATABASE_URL: ${MARKET_MIGRATION_DATABASE_URL:?Required migrator database URL}
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    restart: "no"
+
+  portfolio-api:
+    image: ${PORTFOLIO_IMAGE:?Required versioned portfolio image}
+    environment: *portfolio-environment
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    ports: ["127.0.0.1:8001:8000"]
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+      quant-api: {condition: service_healthy}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  quant-api:
+    image: ${QUANT_IMAGE:?Required versioned quant image}
+    environment: *quant-environment
+    volumes:
+      - ${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro
+      - ${BUNDLE_DIRECTORY:?Required host bundle directory}:/bundles:ro
+    ports: ["127.0.0.1:8002:8000"]
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  market-api:
+    image: ${MARKET_IMAGE:?Required versioned market image}
+    environment: *market-environment
+    volumes:
+      - ${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro
+      - ${DATASET_DIRECTORY:?Required host dataset directory}:/datasets:ro
+    ports: ["127.0.0.1:8003:8000"]
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  portfolio-dispatch:
+    image: ${PORTFOLIO_IMAGE:?Required versioned portfolio image}
+    command: ["python", "-m", "portfolio_service.worker", "dispatch"]
+    environment:
+      <<: *trust-environment
+      DATABASE_URL: ${PORTFOLIO_DATABASE_URL:?Required runtime database URL}
+      BROKER_URL: ${PORTFOLIO_PUBLISHER_BROKER_URL:?Required AMQPS publisher URL}
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  portfolio-consume:
+    image: ${PORTFOLIO_IMAGE:?Required versioned portfolio image}
+    command: ["python", "-m", "portfolio_service.worker", "consume"]
+    environment:
+      <<: *trust-environment
+      DATABASE_URL: ${PORTFOLIO_DATABASE_URL:?Required runtime database URL}
+      BROKER_URL: ${PORTFOLIO_CONSUMER_BROKER_URL:?Required AMQPS consumer URL}
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  quant-dispatch:
+    image: ${QUANT_IMAGE:?Required versioned quant image}
+    command: ["python", "-m", "quant_service.worker", "dispatch"]
+    environment:
+      <<: *quant-environment
+      BROKER_URL: ${QUANT_PUBLISHER_BROKER_URL:?Required AMQPS publisher URL}
+    volumes:
+      - ${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro
+      - ${BUNDLE_DIRECTORY:?Required host bundle directory}:/bundles:ro
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  quant-consume:
+    image: ${QUANT_IMAGE:?Required versioned quant image}
+    command: ["python", "-m", "quant_service.worker", "consume"]
+    environment:
+      <<: *quant-environment
+      BROKER_URL: ${QUANT_CONSUMER_BROKER_URL:?Required AMQPS consumer URL}
+    volumes:
+      - ${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro
+      - ${BUNDLE_DIRECTORY:?Required host bundle directory}:/bundles:ro
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  market-dispatch:
+    image: ${MARKET_IMAGE:?Required versioned market image}
+    command: ["python", "-m", "market_service.worker", "dispatch"]
+    environment:
+      <<: *market-environment
+      BROKER_URL: ${MARKET_PUBLISHER_BROKER_URL:?Required AMQPS publisher URL}
+    volumes:
+      - ${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro
+      - ${DATASET_DIRECTORY:?Required host dataset directory}:/datasets:ro
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  market-consume:
+    image: ${MARKET_IMAGE:?Required versioned market image}
+    command: ["python", "-m", "market_service.worker", "consume"]
+    environment:
+      <<: *market-environment
+      BROKER_URL: ${MARKET_CONSUMER_BROKER_URL:?Required AMQPS consumer URL}
+    volumes:
+      - ${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro
+      - ${DATASET_DIRECTORY:?Required host dataset directory}:/datasets:ro
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE:?Required versioned web image}
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:?Required HTTPS app origin}
+      OIDC_ISSUER: ${OIDC_ISSUER:?Required HTTPS issuer}
+      OIDC_INTERNAL_ORIGIN: ${OIDC_INTERNAL_ORIGIN:?Required HTTPS identity origin}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?Required confidential BFF client ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Required confidential BFF secret}
+      OIDC_AUDIENCE: portfolio-api
+      OIDC_SCOPE: openid profile email portfolio:read portfolio:write
+      REDIS_URL: ${REDIS_URL:?Required TLS Redis URL}
+      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Required 32-byte base64 session key}
+      PORTFOLIO_API_URL: http://portfolio-api:8000
+      ALLOW_INSECURE_HTTP: "false"
+      NODE_EXTRA_CA_CERTS: /ca/ca.pem
+    volumes: ["${TLS_CA_DIRECTORY:?Required host CA directory}:/ca:ro"]
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      portfolio-api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped

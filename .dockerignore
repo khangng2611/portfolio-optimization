@@ -1,0 +1,16 @@
+# Backend builds need only installable packages and their owning services.
+**
+!packages/
+!packages/**
+!services/
+!services/**
+**/.git
+**/.generated
+**/.env*
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/*.egg-info
+**/dist
+**/build

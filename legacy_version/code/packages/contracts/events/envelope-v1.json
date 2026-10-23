@@ -1,0 +1,54 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "type": {
+      "enum": [
+        "quant.optimize.requested",
+        "quant.optimization.completed"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "producer": {
+      "enum": [
+        "portfolio",
+        "quant-serving"
+      ],
+      "title": "Producer",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "type",
+    "producer",
+    "correlation_id",
+    "payload"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}

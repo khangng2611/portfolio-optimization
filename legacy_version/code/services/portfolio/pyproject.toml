@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portfolio-service"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["portfolio-contracts==0.1.0", "portfolio-service-auth==0.1.0", "fastapi==0.118.0", "uvicorn==0.37.0", "sqlalchemy==2.0.43", "alembic==1.16.5", "psycopg[binary]==3.2.10", "httpx==0.28.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

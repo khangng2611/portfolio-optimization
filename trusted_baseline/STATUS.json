@@ -1,0 +1,29 @@
+{
+  "status": "numerically_verified_not_certified",
+  "strict_decision": "NOT READY FOR STEP 2",
+  "requested_start": "2020-01-01",
+  "requested_split": "2023-10-01",
+  "requested_end_inclusive": "2026-04-30",
+  "evaluation_end": "2026-04-29",
+  "primary_run_id": "corrected-paper-period-20261004T132742",
+  "repeat_run_id": "corrected-paper-period-repeat-20261004T133908",
+  "active_exports": "outputs/step1/paper_period/corrected",
+  "observed_oos_returns": 641,
+  "independent_actual_checks_passed": 52,
+  "fresh_repeat_checks_passed": 40,
+  "prior_July_runs_preserved": ["corrected-20261004T085654", "corrected-20261004T090341"],
+  "regression_tests": {
+    "passed": 27,
+    "failed": 0
+  },
+  "deterministic_repeat": "13 CSV byte-identical; all actual predictions identical",
+  "source": "legacy snapshot with documented integrity-only repairs",
+  "limitations": [
+    "Historical VFF/GOLD public release and revisions unverified",
+    "GOLD quote identity, original observation versus imputation, units/location metadata incomplete",
+    "Stock adjusted/raw and corporate-action/total-return semantics unverified",
+    "Original manuscript independently regenerated model decisions not established; archived-decision arithmetic replay only"
+  ],
+  "report": "/Users/nguyenkhang/Documents/MASTER/Thesis/source/portfolio-optimization/report.md",
+  "metadata_note": "STATUS/README updated after both April runs. Each April source_snapshot preserves creation-time metadata. Original July metadata also retained. Runtime CLI resolves the requested April profile; on-disk config retains July default. Scientific code/config/inputs unchanged by this date rerun."
+}

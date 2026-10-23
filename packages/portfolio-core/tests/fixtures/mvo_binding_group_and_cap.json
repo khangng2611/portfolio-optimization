@@ -1,0 +1,37 @@
+{
+  "fixture_schema_version": 1,
+  "id": "mvo_binding_group_and_cap",
+  "introduced_in_core": "0.1.0",
+  "provenance": {
+    "source": "synthetic",
+    "created_on": "2026-10-09",
+    "return_units": "daily_simple_returns",
+    "oracle": "Hand-derived KKT optimum in GOLD/EQUITY/BOND order: (0.05,0.4,0.55). Equity marginal utility 0.00118 exceeds bond 0.00029 and gold 0.00009, saturating equity's group limit. Bond's greater marginal utility saturates its cap. Objective=0.000825-0.0000945.",
+    "legacy_parity": false,
+    "model_or_market_data_used": false
+  },
+  "request": {
+    "strategy": "MVO",
+    "asset_ids": ["SYNTH_GOLD", "SYNTH_EQUITY", "SYNTH_BOND"],
+    "mean_returns": [0.0001, 0.0015, 0.0004],
+    "covariance": [[0.0001, 0.0, 0.0], [0.0, 0.0004, 0.0], [0.0, 0.0, 0.0001]],
+    "constraints": {
+      "risk_aversion": 1.0,
+      "max_position_weight": 0.55,
+      "defensive_asset_ids": ["SYNTH_BOND", "SYNTH_GOLD"],
+      "min_defensive_weight": 0.55,
+      "max_non_defensive_weight": 0.4
+    }
+  },
+  "expected": {
+    "weights": [0.05, 0.4, 0.55],
+    "objective": 0.0007305,
+    "solver": "CLARABEL",
+    "solver_status": "optimal"
+  },
+  "tolerances": {
+    "weights_absolute": 1e-7,
+    "objective_absolute": 1e-11,
+    "constraint_absolute": 1e-12
+  }
+}

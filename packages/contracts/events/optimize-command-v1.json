@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "Constraints": {
+      "additionalProperties": false,
+      "properties": {
+        "risk_aversion": {
+          "default": 1.5,
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "title": "Risk Aversion",
+          "type": "number"
+        },
+        "max_position_weight": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Max Position Weight",
+          "type": "number"
+        },
+        "defensive_asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Defensive Asset Ids",
+          "type": "array"
+        },
+        "min_defensive_weight": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Defensive Weight",
+          "type": "number"
+        },
+        "max_non_defensive_weight": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Non Defensive Weight",
+          "type": "number"
+        }
+      },
+      "title": "Constraints",
+      "type": "object"
+    },
+    "ReadyInput": {
+      "additionalProperties": false,
+      "properties": {
+        "bundle_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Bundle Id",
+          "type": "string"
+        },
+        "bundle_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Bundle Hash",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "model_bundle_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Bundle Id"
+        },
+        "asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 2,
+          "title": "Asset Ids",
+          "type": "array"
+        },
+        "as_of_date": {
+          "title": "As Of Date",
+          "type": "string"
+        },
+        "valid_until": {
+          "format": "date-time",
+          "title": "Valid Until",
+          "type": "string"
+        },
+        "demo": {
+          "default": false,
+          "title": "Demo",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bundle_id",
+        "bundle_hash",
+        "snapshot_id",
+        "asset_ids",
+        "as_of_date",
+        "valid_until"
+      ],
+      "title": "ReadyInput",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "owner_user_id": {
+      "format": "uuid",
+      "title": "Owner User Id",
+      "type": "string"
+    },
+    "portfolio_id": {
+      "format": "uuid",
+      "title": "Portfolio Id",
+      "type": "string"
+    },
+    "portfolio_version": {
+      "minimum": 1,
+      "title": "Portfolio Version",
+      "type": "integer"
+    },
+    "strategy": {
+      "enum": [
+        "EW",
+        "MVO",
+        "BL_ML"
+      ],
+      "title": "Strategy",
+      "type": "string"
+    },
+    "core_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Core Version",
+      "type": "string"
+    },
+    "capital_vnd": {
+      "title": "Capital Vnd",
+      "type": "string"
+    },
+    "inputs": {
+      "$ref": "#/$defs/ReadyInput"
+    },
+    "constraints": {
+      "$ref": "#/$defs/Constraints"
+    },
+    "deadline": {
+      "format": "date-time",
+      "title": "Deadline",
+      "type": "string"
+    },
+    "input_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "owner_user_id",
+    "portfolio_id",
+    "portfolio_version",
+    "strategy",
+    "capital_vnd",
+    "inputs",
+    "constraints",
+    "deadline",
+    "input_hash"
+  ],
+  "title": "OptimizeCommand",
+  "type": "object"
+}

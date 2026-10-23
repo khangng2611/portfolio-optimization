@@ -1,0 +1,1300 @@
+{
+  "info": {
+    "_postman_id": "302a2a4c-3e86-45d8-8d5a-9447d8e46a1f",
+    "name": "Portfolio software — local APIs",
+    "description": "Disposable local stack only. Xem docs/software/SETUP_AND_API_TESTING.md. Điền secrets ở local environment; không export tokens. Async jobs cần poll thủ công trước khi đọc kết quả.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "00 Health",
+      "item": [
+        {
+          "name": "Portfolio ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/health/ready",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quant ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{quant_url}}/health/ready",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Market ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}/health/ready",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Alice access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Chỉ dùng confidential password-grant client trong disposable local realm. Credentials và token để ở environment local; không console.log hoặc export.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{test_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{test_client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{alice_username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{alice_password}}",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid portfolio:read portfolio:write market:read market:write",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set(\"access_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Chỉ dùng confidential password-grant client trong disposable local realm. Credentials và token để ở environment local; không console.log hoặc export.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{test_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{test_client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{bob_username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{bob_password}}",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid portfolio:read portfolio:write market:read market:write",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set(\"bob_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Data operator access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Chỉ dùng confidential password-grant client trong disposable local realm. Credentials và token để ở environment local; không console.log hoặc export.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{test_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{test_client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{operator_username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{operator_password}}",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid portfolio:read portfolio:write market:read market:write",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set(\"market_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Portfolio",
+      "item": [
+        {
+          "name": "Unauthenticated request is rejected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/portfolios",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create portfolio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{portfolio_url}}/api/v1/portfolios",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Danh mục Postman demo\",\n  \"capital_vnd\": \"1000000\",\n  \"universe_id\": \"DEMO\",\n  \"risk_aversion\": 1.5,\n  \"max_position_weight\": 0.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set(\"portfolio_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List own portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/portfolios",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get portfolio and ETag",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set(\"portfolio_etag\", pm.response.headers.get(\"ETag\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update using If-Match",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "If-Match",
+                "value": "{{portfolio_etag}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}",
+            "description": "GET lấy ETag trước. Thiếu If-Match trả 428; ETag cũ trả 412.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Danh mục đã cập nhật\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set(\"portfolio_etag\", pm.response.headers.get(\"ETag\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request MVO recommendation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{recommendation_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}/recommendations",
+            "description": "Giữ key cho retry. Xóa recommendation_key để tạo một yêu cầu mới.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"MVO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"recommendation_key\")) pm.environment.set(\"recommendation_key\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) { const x = pm.response.json(); pm.environment.set(\"job_id\", x.job_id); pm.environment.set(\"status_url\", x.status_url); pm.environment.unset(\"recommendation_id\"); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry same recommendation key and body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{recommendation_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}/recommendations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"MVO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) pm.test(\"Same job on retry\", () => pm.expect(pm.response.json().job_id).to.eql(pm.environment.get(\"job_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Same key with different body is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{recommendation_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}/recommendations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"EW\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Poll recommendation job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}{{status_url}}",
+            "description": "Gửi lại thủ công đến SUCCEEDED. Không chạy request kết quả khi đang QUEUED. Runner không tự poll."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { const x = pm.response.json(); pm.test(\"Known job state\", () => pm.expect([\"QUEUED\", \"SUCCEEDED\", \"FAILED\"]).to.include(x.status)); if (x.status === \"SUCCEEDED\") pm.environment.set(\"recommendation_id\", x.recommendation_id); if (x.status === \"FAILED\") pm.test(\"Job succeeds\", () => pm.expect(x.status).to.eql(\"SUCCEEDED\")); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read persisted recommendation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/recommendations/{{recommendation_id}}",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { const x = pm.response.json(); const w = x.weights.map(Number); pm.test(\"Weights satisfy constraints\", () => { pm.expect(Math.abs(w.reduce((a,b) => a+b,0)-1)).to.be.below(1e-7); pm.expect(Math.max(...w)).to.be.at.most(0.5000001); }); pm.test(\"Provenance exists\", () => { pm.expect(x.strategy).to.eql(\"MVO\"); pm.expect(x.core_version).to.eql(\"0.1.0\"); pm.expect(x.bundle_hash).to.match(/^[a-f0-9]{64}$/); pm.expect(x.data_snapshot_id).to.be.a(\"string\").and.not.empty; }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read recommendation history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}/recommendations",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DEMO BL_ML without approved model is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}/recommendations",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"strategy\": \"BL_ML\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 503\", () => pm.response.to.have.status(503));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Ownership",
+      "item": [
+        {
+          "name": "Bob cannot read Alice portfolio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/portfolios/{{portfolio_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bob_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob cannot read Alice job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/jobs/portfolio/{{job_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bob_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob cannot read Alice recommendation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolio_url}}/api/v1/recommendations/{{recommendation_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bob_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Market",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{market_token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Ingest registered DEMO_STOCK CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{ingestion_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{market_url}}/api/v1/market/ingestions",
+            "description": "Server registry CSV; không truyền path/URL. Ngày mặc định UTC hôm nay, chỉnh environment nếu dùng dataset khác.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataset_id\": \"DEMO_STOCK\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const today = new Date().toISOString().slice(0,10);",
+                  "for (const name of [\"market_start_date\", \"market_end_date\", \"market_as_of_date\"]) if (!pm.environment.get(name)) pm.environment.set(name, today);",
+                  "if (!pm.environment.get(\"ingestion_key\")) pm.environment.set(\"ingestion_key\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) { const x=pm.response.json(); pm.environment.set(\"market_job_id\", x.job_id); pm.environment.set(\"market_status_url\", x.status_url); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry same ingestion key and body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{ingestion_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{market_url}}/api/v1/market/ingestions",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataset_id\": \"DEMO_STOCK\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) pm.test(\"Same ingestion job\", () => pm.expect(pm.response.json().job_id).to.eql(pm.environment.get(\"market_job_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conflicting ingestion key is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{ingestion_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{market_url}}/api/v1/market/ingestions",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observations\": [\n    {\n      \"asset_id\": \"{{market_asset_id}}\",\n      \"kind\": \"stock\",\n      \"observation_date\": \"{{market_end_date}}\",\n      \"price\": \"25000\",\n      \"source_unit\": \"VND/share\",\n      \"provider\": \"synthetic-local\",\n      \"price_type\": \"close\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const today = new Date().toISOString().slice(0,10);",
+                  "for (const name of [\"market_start_date\", \"market_end_date\", \"market_as_of_date\"]) if (!pm.environment.get(name)) pm.environment.set(name, today);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Poll ingestion job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}{{market_status_url}}",
+            "description": "Gửi lại đến SUCCEEDED rồi đọc prices/tạo snapshot. FAILED có error; không suy ra job thành công chỉ từ HTTP 200."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { const x=pm.response.json(); pm.test(\"Known ingestion state\", () => pm.expect([\"QUEUED\", \"SUCCEEDED\", \"FAILED\"]).to.include(x.status)); if (x.status === \"FAILED\") pm.test(\"Ingestion succeeds\", () => pm.expect(x.status).to.eql(\"SUCCEEDED\")); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob cannot read operator ingestion job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}/api/v1/jobs/market/{{market_job_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bob_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Investor cannot ingest",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{market_url}}/api/v1/market/ingestions",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataset_id\": \"DEMO_STOCK\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List market assets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}/api/v1/market/assets",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read asset price revisions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}/api/v1/market/prices?asset_id={{market_asset_id}}&start_date={{market_start_date}}&end_date={{market_end_date}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const today = new Date().toISOString().slice(0,10);",
+                  "for (const name of [\"market_start_date\", \"market_end_date\", \"market_as_of_date\"]) if (!pm.environment.get(name)) pm.environment.set(name, today);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create immutable snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{market_url}}/api/v1/market/snapshots",
+            "description": "Thiếu/stale dữ liệu trả 409. Chọn range/as-of theo observations đã ingest.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset_ids\": [\n    \"{{market_asset_id}}\"\n  ],\n  \"start_date\": \"{{market_start_date}}\",\n  \"end_date\": \"{{market_end_date}}\",\n  \"as_of_date\": \"{{market_as_of_date}}\",\n  \"max_age_days\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const today = new Date().toISOString().slice(0,10);",
+                  "for (const name of [\"market_start_date\", \"market_end_date\", \"market_as_of_date\"]) if (!pm.environment.get(name)) pm.environment.set(name, today);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) { const x=pm.response.json(); pm.environment.set(\"snapshot_id\", x.id); pm.environment.set(\"snapshot_hash\", x.content_hash); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read snapshot manifest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}/api/v1/market/snapshots/{{snapshot_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.test(\"Immutable snapshot hash\", () => pm.expect(pm.response.json().content_hash).to.eql(pm.environment.get(\"snapshot_hash\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read pinned snapshot observations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{market_url}}/api/v1/market/snapshots/{{snapshot_id}}/observations",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest normalized observations (optional)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{normalized_ingestion_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{market_url}}/api/v1/market/ingestions",
+            "description": "Một request dùng dataset_id HOẶC observations. Giá/unit phải phù hợp asset kind. Xóa normalized_ingestion_key trước khi gửi body khác; poll job rồi kiểm tra snapshot cũ vẫn cùng hash.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observations\": [\n    {\n      \"asset_id\": \"{{market_asset_id}}\",\n      \"kind\": \"stock\",\n      \"observation_date\": \"{{market_end_date}}\",\n      \"price\": \"25000\",\n      \"source_unit\": \"VND/share\",\n      \"provider\": \"synthetic-local\",\n      \"price_type\": \"close\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const today = new Date().toISOString().slice(0,10);",
+                  "for (const name of [\"market_start_date\", \"market_end_date\", \"market_as_of_date\"]) if (!pm.environment.get(name)) pm.environment.set(name, today);",
+                  "if (!pm.environment.get(\"normalized_ingestion_key\")) pm.environment.set(\"normalized_ingestion_key\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) { const x=pm.response.json(); pm.environment.set(\"market_job_id\", x.job_id); pm.environment.set(\"market_status_url\", x.status_url); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Quant (optional)",
+      "item": [
+        {
+          "name": "Quant service token (optional)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Token service-to-service; cần QUANT_CLIENT_SECRET. Không dùng human test token cho Quant.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "portfolio-service",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{quant_client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "quant:resolve",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set(\"quant_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve prepared MVO inputs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{quant_url}}/internal/v1/inputs/ready?universe_id=DEMO&strategy=MVO",
+            "description": "Prepared bundle catalog riêng; Market snapshots chưa tự biến thành Quant bundle.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{quant_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

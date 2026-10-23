@@ -2,6 +2,10 @@
 
 Dự án nghiên cứu tối ưu hóa danh mục đầu tư cho thị trường Việt Nam, tập trung vào việc so sánh các chiến lược phân bổ tài sản và cải tiến mô hình Black-Litterman bằng views động.
 
+Phần ứng dụng giai đoạn 2 nằm trong `apps/`, `services/`, `packages/` và `infra/`. Xem [hướng dẫn chạy Identity/BFF và recommendation API](docs/software/README.md). Các lệnh nghiên cứu Phase 1 bên dưới giữ nguyên.
+
+Setup phần mềm và thử API: [hướng dẫn tiếng Việt, Swagger và Postman](docs/software/SETUP_AND_API_TESTING.md). Chạy nhanh từ repo root: `python3 scripts/setup_software.py up --enable-test-client`.
+
 ## Mục lục
 
 1. [Tổng quan](#tổng-quan)

@@ -1,0 +1,59 @@
+{
+  "selection": {
+    "K": 5,
+    "cadence": 20,
+    "simple_window_returns": 20,
+    "first_IS_available_returns": 19,
+    "random_seeds": [
+      7,
+      11,
+      19,
+      23,
+      31,
+      43,
+      59,
+      71,
+      83,
+      97
+    ]
+  },
+  "allocation": {
+    "window": 20,
+    "rebalance": 5,
+    "risk_aversion": 1.5,
+    "max_position": 0.5,
+    "min_weight": 0.01,
+    "non_VFF_cap": 0.7,
+    "VFF_floor_nominal": 0.15,
+    "VFF_floor_effective": 0.30000000000000004,
+    "tau": 0.05,
+    "delta": 2.5,
+    "w_eq": "equal weight in current active universe",
+    "constraint_tolerance": 1e-08,
+    "regime_views": "off in all A/B arms",
+    "risk_aversion_regime_adjustment": "off in all A/B arms",
+    "B2_confidence": "saved dynamic ML confidence, includes frozen volatility dampener"
+  },
+  "costs_bps_per_side": [
+    0,
+    10,
+    25,
+    50
+  ],
+  "cost_method": "execution-day multiplicative haircut; include initial buy; exclude initial funding from turnover",
+  "bootstrap": {
+    "method": "non-circular moving blocks, joint paired indices",
+    "block": 10,
+    "replicates": 1000,
+    "seed": 20261014,
+    "random_aggregate": "cross-seed median return each date, analytical not investable"
+  },
+  "OOS": {
+    "anchor": "2023-09-29",
+    "first_return": "2023-10-02",
+    "last_return": "2026-04-29",
+    "n_returns": 641
+  },
+  "optional_mechanisms": "SKIPPED — no additional comparisons; H4/H5 not tested",
+  "baseline_reproduction": "saved target holdings replay + original/repeat artifact hashes; no fresh model fitting in sprint"
+}

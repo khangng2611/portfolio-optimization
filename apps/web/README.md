@@ -1,6 +1,6 @@
 # Portfolio Web / BFF
 
-Vietnamese Next.js application and Node.js BFF. Browser cookies contain only opaque random identifiers; access/refresh tokens remain in AES-256-GCM encrypted Redis records. This milestone creates demo portfolios and asynchronous MVO recommendations with prepared numerical inputs. It does not implement live ML inference, risk onboarding, or trading.
+Vietnamese Next.js application and Node.js BFF. Browser cookies contain only opaque random identifiers; access/refresh tokens remain in AES-256-GCM encrypted Redis records. The current flow includes a three-step risk wizard, backend versioned policy, asynchronous EW/MVO/BL_ML proposals, target acceptance and dashboard. Quant can infer from approved native XGBoost artifacts and Market snapshot features published by a separate CLI. See [onboarding and targets](../../docs/software/WEEKS_6_7.md) and the [Market–Quant bridge](../../docs/software/MARKET_QUANT_BRIDGE.md).
 
 ## Run
 
@@ -45,12 +45,13 @@ Keycloak must allow exactly `${APP_ORIGIN}/auth/callback`, require PKCE S256, en
 - `GET /auth/session`: returns `{authenticated:true,user:{sub,name,roles},csrfToken}` only. Responses disable caching.
 - `POST /auth/logout`: requires exact Origin and `X-CSRF-Token`; deletes Redis session before provider revocation. Clears cookies; reports `providerRevoked:false` if Keycloak cannot confirm revocation. This closes the application session; the separate Identity browser SSO cookie may remain.
 - `/api/v1/portfolios` GET/POST, `/api/v1/portfolios/{uuid}` GET/PATCH, `/api/v1/portfolios/{uuid}/recommendations` GET/POST, `/api/v1/recommendations/{uuid}` GET, `/api/v1/jobs/portfolio/{uuid}` GET: fixed allowlist to Portfolio. No internal/admin or arbitrary upstream URL routes.
+- G2 adds `/api/v1/onboarding/portfolios` POST, `/api/v1/portfolios/{uuid}/dashboard` GET, `/api/v1/portfolios/{uuid}/targets` GET and `/api/v1/recommendations/{uuid}/accept` POST. Accept preserves `If-Match`, checks CSRF and only saves a target.
 - List routes allow integer `limit`/`offset` query parameters only. Mutations require JSON, exact Origin, session CSRF token and at most 64 KiB body; recommendation creation additionally requires `Idempotency-Key` (8–128 URL-safe characters). Version preconditions (`If-Match`) and backend version tags (`ETag`) pass through for owner-scoped PATCH. Cookies, caller Authorization, identity headers, upstream redirects and Set-Cookie are never forwarded.
 - `GET /health/live` is process liveness, not a claim that dependencies are healthy.
 
 HTTPS cookies are `__Host-portfolio_session` and `__Host-portfolio_login`, with Secure, HttpOnly, SameSite=Lax and Path=/. Local HTTP has explicitly unprefixed, non-Secure cookies. Tokens refresh under Redis NX locks; Lua checks the current lock owner and session existence before storing rotated tokens, preventing expired lock holders or concurrent logout from resurrecting sessions. Redis failures fail closed without queuing requests. Established clients reconnect with a capped delay (at most 2.1 seconds); initial connection setup has a four-second deadline. If Redis restarts without saved sessions, old cookies remain invalid and users must sign in again. Protect Redis with authentication/TLS and no eviction; only trusted BFF instances should access it. Provider revocation failure does not restore a deleted session.
 
-The first UI flow uses universe `DEMO`, risk aversion 1.5, maximum position 0.6 and capital entered by the user. Each recommendation submission gets an idempotency UUID, then polls the owner-scoped job and reads the persisted recommendation. Results include backend provenance without claiming parity with legacy ML workflows.
+The wizard loads ready universes from `/api/v1/universes`, prefers a verified real-price universe and labels demo data separately. It uses backend policy v1 (risk aversion 6/3/1.5, max position 0.5) and user-entered capital. Each recommendation gets an idempotency UUID, polls the owner-scoped job and displays weights, planned capital and provenance. Target acceptance never changes holdings. The UI ignores superseded portfolio/proposal responses. Same-step serving/core parity does not establish equivalence to the legacy research pipeline.
 
 ## Verification
 
@@ -64,6 +65,21 @@ npm test
 npm run typecheck
 npm run build
 ```
+
+For the real browser gate, run from the repository root with the local stack on
+port 3000, disposable test accounts enabled, and a fresh `VN_EQUITY_REAL` bundle
+published as described in the Market–Quant guide. It requires Chrome and an
+installed Playwright package; set `PORTFOLIO_PLAYWRIGHT_MODULE` to its absolute
+module entry when it is not resolvable from the repository.
+
+```sh
+node scripts/verify_ui_live.mjs
+node scripts/verify_ui_live.mjs --verify-receipt
+```
+
+The first command creates a local test portfolio/proposal/target. The second
+checks the same saved target, including after a stack restart. Receipts stay in
+`infra/local/.generated/`; screenshots and browser logs stay in ignored `output/`.
 
 Tests cover encrypted records/tampering, secure cookies, one-time login state, CSRF/origin, proxy allowlists/header isolation/redirect rejection, concurrent refresh, expiry, unavailable Redis and logout races. OIDC tests use the real openid-client/Jose libraries against a deterministic issuer transport with actual RSA-signed tokens, including forged signatures, nonce/state, issuer, audience and expiry rejection. When `redis-server` is on PATH (or set `REDIS_TEST_BINARY`), the suite also runs an isolated nonpersistent Redis process, stops/restarts it, and checks failure during outage, invalidation of lost sessions and successful reauthentication on the same BFF. This test is skipped if the binary is unavailable. A complete Keycloak/Redis/browser stack is a separate integration gate; see the local stack verification record.
 

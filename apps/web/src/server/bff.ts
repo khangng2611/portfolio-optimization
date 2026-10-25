@@ -11,6 +11,11 @@ const equal = (a: string, b: string) => { const left = Buffer.from(a); const rig
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 const routes = [
+  { path: /^\/api\/v1\/universes$/, template: '/api/v1/universes', methods: ['GET'], query: [] },
+  { path: /^\/api\/v1\/onboarding\/portfolios$/, template: '/api/v1/onboarding/portfolios', methods: ['POST'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/dashboard$`), template: '/api/v1/portfolios/{portfolio_id}/dashboard', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/targets$`), template: '/api/v1/portfolios/{portfolio_id}/targets', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/recommendations/${uuid}/accept$`), template: '/api/v1/recommendations/{recommendation_id}/accept', methods: ['POST'], query: [] },
   { path: /^\/api\/v1\/portfolios$/, template: '/api/v1/portfolios', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}$`), template: '/api/v1/portfolios/{portfolio_id}', methods: ['GET', 'PATCH'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/recommendations$`), template: '/api/v1/portfolios/{portfolio_id}/recommendations', methods: ['GET', 'POST'], query: ['limit', 'offset'] },

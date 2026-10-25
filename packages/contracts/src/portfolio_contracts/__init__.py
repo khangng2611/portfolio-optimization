@@ -9,6 +9,10 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 
+class ModelUnavailable(ValueError):
+    """No compatible approved model; distinct from corrupt/expired market inputs."""
+
+
 def canonical_hash(value: dict) -> str:
     return hashlib.sha256(
         json.dumps(
@@ -46,6 +50,7 @@ class ReadyInput(StrictModel):
     as_of_date: str
     valid_until: datetime
     demo: bool = False
+    provenance: dict | None = None
 
     @field_validator("valid_until")
     @classmethod
@@ -53,6 +58,13 @@ class ReadyInput(StrictModel):
         if value.tzinfo is None:
             raise ValueError("Timezone required")
         return value
+
+
+class DecisionContext(StrictModel):
+    policy_version_id: str = Field(min_length=1, max_length=100)
+    risk_profile: dict | None = None
+    requested_strategy: Literal["EW", "MVO", "BL_ML"]
+    fallback_reason: str | None = None
 
 
 class OptimizeCommand(StrictModel):
@@ -65,11 +77,18 @@ class OptimizeCommand(StrictModel):
     capital_vnd: str
     inputs: ReadyInput
     constraints: Constraints
+    decision_context: DecisionContext | None = None
     deadline: datetime
     input_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
     def compute_hash(self):
-        return canonical_hash(self.model_dump(mode="json", exclude={"input_hash"}))
+        # Legacy queued commands predate decision_context; keep their hashes replayable.
+        excluded = {"input_hash": True}
+        if self.decision_context is None:
+            excluded["decision_context"] = True
+        if self.inputs.provenance is None:
+            excluded["inputs"] = {"provenance"}
+        return canonical_hash(self.model_dump(mode="json", exclude=excluded))
 
 
 class OptimizeResult(StrictModel):
@@ -85,7 +104,11 @@ class OptimizeResult(StrictModel):
 class Envelope(StrictModel):
     event_id: str = Field(default_factory=lambda: str(uuid4()))
     schema_version: Literal[1] = 1
-    type: Literal["quant.optimize.requested", "quant.optimization.completed", "market.ingestion.requested"]
+    type: Literal[
+        "quant.optimize.requested",
+        "quant.optimization.completed",
+        "market.ingestion.requested",
+    ]
     producer: Literal["portfolio", "quant-serving", "market-data"]
     correlation_id: UUID
     occurred_at: datetime = Field(default_factory=utcnow)

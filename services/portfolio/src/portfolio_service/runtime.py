@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from service_observability import inject_headers, span
+from portfolio_contracts import ModelUnavailable
 
 
 def sessions_from_env():
@@ -21,6 +22,15 @@ class QuantResolver:
         self.token, self.expires = None, 0
 
     def ready(self, universe_id, strategy):
+        return self._read(
+            "/internal/v1/inputs/ready",
+            {"universe_id": universe_id, "strategy": strategy},
+        )
+
+    def universes(self):
+        return self._read("/internal/v1/inputs/universes", {})
+
+    def _read(self, path, params):
         with self.lock:
             if self.expires <= time.monotonic():
                 response = httpx.post(
@@ -40,12 +50,20 @@ class QuantResolver:
                     time.monotonic() + max(0, data["expires_in"] - 30),
                 )
             token = self.token
-        with span("quant.inputs.resolve", attributes={"strategy": strategy}):
+        with span(
+            "quant.inputs.resolve",
+            attributes={"strategy": params.get("strategy", "catalog")},
+        ):
             response = httpx.get(
-                os.environ["QUANT_API_URL"] + "/internal/v1/inputs/ready",
-                params={"universe_id": universe_id, "strategy": strategy},
+                os.environ["QUANT_API_URL"] + path,
+                params=params,
                 headers=inject_headers({"Authorization": f"Bearer {token}"}),
                 timeout=3,
             )
+            if (
+                response.status_code == 409
+                and response.json().get("detail", {}).get("code") == "MODEL_UNAVAILABLE"
+            ):
+                raise ModelUnavailable("No compatible approved model")
             response.raise_for_status()
             return response.json()

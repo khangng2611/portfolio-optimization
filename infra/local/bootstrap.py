@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -40,7 +41,8 @@ MARKET_SECRET_NAMES = [
     "MARKET_PUBLISHER_PASSWORD",
     "MARKET_CONSUMER_PASSWORD",
 ]
-SECRET_NAMES = LEGACY_SECRET_NAMES + MARKET_SECRET_NAMES
+PUBLISHER_SECRET_NAMES = ["MARKET_READER_CLIENT_SECRET"]
+SECRET_NAMES = LEGACY_SECRET_NAMES + MARKET_SECRET_NAMES + PUBLISHER_SECRET_NAMES
 
 
 def write_private(path: Path, value: str) -> None:
@@ -62,7 +64,7 @@ def create_secrets() -> dict[str, str]:
             raise SystemExit(
                 "Existing secrets are incomplete; restore secrets.json rather than silently rotating credentials."
             )
-        additions = set(MARKET_SECRET_NAMES) - values.keys()
+        additions = set(MARKET_SECRET_NAMES + PUBLISHER_SECRET_NAMES) - values.keys()
         if additions:
             values.update({name: secrets.token_hex(32) for name in sorted(additions)})
             write_private(path, json_text(values))
@@ -241,6 +243,7 @@ def make_realm(
             "quant:resolve",
             "market:read",
             "market:write",
+            "market:snapshot:read",
         ]
     ]
     web = {
@@ -294,6 +297,23 @@ def make_realm(
         }
         for name in ["portfolio-api", "quant-api", "market-api"]
     ]
+    if values.get("MARKET_READER_CLIENT_SECRET"):
+        clients.append(
+            {
+                "clientId": "quant-publisher",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "secret": values["MARKET_READER_CLIENT_SECRET"],
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": True,
+                "defaultClientScopes": ["basic", "market:snapshot:read"],
+                "optionalClientScopes": [],
+                "protocolMappers": [audience_mapper("market-api")],
+            }
+        )
     if test_client:
         clients.append(
             {
@@ -543,25 +563,29 @@ def create_bundle(refresh: bool) -> None:
         raise SystemExit("Immutable bundle already exists. Refusing to overwrite it.")
     artifact.write_text(content)
     artifact.chmod(0o444)
-    previous = json.loads(catalog.read_text())["bundles"] if catalog.exists() else []
-    pending_catalog = directory / (".catalog-" + secrets.token_hex(8) + ".tmp")
-    pending_catalog.write_text(
-        json_text(
-            {
-                "bundles": [
-                    {
-                        "file": artifact.name,
-                        "sha256": hashlib.sha256(content.encode()).hexdigest(),
-                    }
-                ]
-                + previous
-            }
+    with (directory / ".catalog.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        previous = (
+            json.loads(catalog.read_text())["bundles"] if catalog.exists() else []
         )
-    )
-    # Keep old, still-valid identities available to jobs already accepted and
-    # switch readers atomically to the newest-first catalog.
-    pending_catalog.chmod(0o644)
-    pending_catalog.replace(catalog)
+        pending_catalog = directory / (".catalog-" + secrets.token_hex(8) + ".tmp")
+        pending_catalog.write_text(
+            json_text(
+                {
+                    "bundles": [
+                        {
+                            "file": artifact.name,
+                            "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                        }
+                    ]
+                    + previous
+                }
+            )
+        )
+        # Keep old, still-valid identities available to jobs already accepted and
+        # switch readers atomically to the newest-first catalog.
+        pending_catalog.chmod(0o644)
+        pending_catalog.replace(catalog)
 
 
 def create_market_dataset(refresh: bool) -> None:

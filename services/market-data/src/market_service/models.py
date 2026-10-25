@@ -59,6 +59,12 @@ class PriceRevision(Base):
     available_at: Mapped[object] = mapped_column(DateTime(timezone=True))
     ingested_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
     source_hash: Mapped[str | None] = mapped_column(String(64))
+    data_origin: Mapped[str] = mapped_column(
+        String(16), default="unverified", server_default="unverified"
+    )
+    price_basis: Mapped[str] = mapped_column(
+        String(32), default="unverified", server_default="unverified"
+    )
 
 
 class IngestionJob(Base):
@@ -69,7 +75,9 @@ class IngestionJob(Base):
     idempotency_key: Mapped[str] = mapped_column(String(128))
     request_hash: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(24), default="QUEUED")
-    trace_context: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    trace_context: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
     input: Mapped[dict] = mapped_column(JSON)
     inserted_count: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[dict | None] = mapped_column(JSON)
@@ -89,7 +97,9 @@ class Snapshot(Base):
 class Outbox(Base):
     __tablename__ = "outbox_event"
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    trace_context: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    trace_context: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
     payload: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
     published_at: Mapped[object | None] = mapped_column(

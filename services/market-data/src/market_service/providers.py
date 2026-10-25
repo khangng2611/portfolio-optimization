@@ -46,6 +46,8 @@ class CsvProvider:
                     price=row[spec.get("price_column", "price")],
                     source_unit=spec["source_unit"],
                     provider=spec["provider"],
+                    data_origin=spec.get("data_origin", "unverified"),
+                    price_basis=spec.get("price_basis", "unverified"),
                     published_at=row.get("published_at") or None,
                     price_type=spec.get(
                         "price_type", "nav" if spec["kind"] == "fund" else "close"

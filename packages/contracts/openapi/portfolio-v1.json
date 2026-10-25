@@ -58,6 +58,27 @@
         ]
       }
     },
+    "/api/v1/universes": {
+      "get": {
+        "summary": "Universes",
+        "operationId": "universes_api_v1_universes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/portfolios": {
       "get": {
         "summary": "List Portfolios",
@@ -116,6 +137,202 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/onboarding/portfolios": {
+      "post": {
+        "summary": "Onboarding",
+        "operationId": "onboarding_api_v1_onboarding_portfolios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingPortfolio"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/targets": {
+      "get": {
+        "summary": "List Targets",
+        "operationId": "list_targets_api_v1_portfolios__portfolio_id__targets_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/dashboard": {
+      "get": {
+        "summary": "Dashboard",
+        "operationId": "dashboard_api_v1_portfolios__portfolio_id__dashboard_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recommendations/{recommendation_id}/accept": {
+      "post": {
+        "summary": "Accept Target",
+        "operationId": "accept_target_api_v1_recommendations__recommendation_id__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Recommendation Id"
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrictModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/portfolios/{portfolio_id}": {
@@ -502,11 +719,64 @@
             ],
             "title": "Strategy",
             "default": "MVO"
+          },
+          "fallback_strategy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "EW"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Strategy"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "NewRecommendation"
+      },
+      "OnboardingPortfolio": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name"
+          },
+          "capital_vnd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1e+19,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Capital Vnd"
+          },
+          "universe_id": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_-]{1,64}$",
+            "title": "Universe Id",
+            "default": "DEMO"
+          },
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "capital_vnd",
+          "answers"
+        ],
+        "title": "OnboardingPortfolio"
       },
       "PortfolioUpdate": {
         "properties": {
@@ -570,6 +840,63 @@
         "additionalProperties": false,
         "type": "object",
         "title": "PortfolioUpdate"
+      },
+      "RiskAnswers": {
+        "properties": {
+          "questionnaire_version": {
+            "type": "string",
+            "const": "risk-v1",
+            "title": "Questionnaire Version"
+          },
+          "horizon_months": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Horizon Months"
+          },
+          "liquidity_need": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Liquidity Need"
+          },
+          "loss_tolerance": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Loss Tolerance"
+          },
+          "experience": {
+            "type": "string",
+            "enum": [
+              "beginner",
+              "experienced"
+            ],
+            "title": "Experience"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "questionnaire_version",
+          "horizon_months",
+          "liquidity_need",
+          "loss_tolerance",
+          "experience"
+        ],
+        "title": "RiskAnswers"
+      },
+      "StrictModel": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StrictModel"
       },
       "ValidationError": {
         "properties": {

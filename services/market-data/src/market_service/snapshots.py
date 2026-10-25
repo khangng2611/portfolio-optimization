@@ -24,6 +24,8 @@ def observation_json(row):
         "ingested_at": aware(row.ingested_at).isoformat(),
         "availability_basis": "ingestion",
         "source_hash": row.source_hash,
+        "data_origin": row.data_origin,
+        "price_basis": row.price_basis,
     }
 
 
@@ -82,6 +84,11 @@ def build_snapshot(session, request):
         "observation_hash": canonical_hash({"observations": observations}),
         "availability_basis": "ingestion",
         "currency": "VND",
+        "data_origin": "real"
+        if all(o["data_origin"] == "real" for o in observations)
+        else "synthetic"
+        if any(o["data_origin"] == "synthetic" for o in observations)
+        else "unverified",
     }
     content_hash = canonical_hash(manifest)
     existing = session.scalar(

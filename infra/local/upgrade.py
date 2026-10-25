@@ -61,7 +61,12 @@ def reconcile_identity(
     scopes = {scope["name"]: scope for scope in get("/client-scopes")}
     for scope in desired["clientScopes"]:
         if (
-            scope["name"] in ("basic", "market:read", "market:write")
+            scope["name"]
+            in ("basic", "market:read", "market:write", "market:snapshot:read")
+            and (
+                scope["name"] != "market:snapshot:read"
+                or values.get("MARKET_READER_CLIENT_SECRET")
+            )
             and scope["name"] not in scopes
         ):
             post("/client-scopes", scope)
@@ -73,6 +78,7 @@ def reconcile_identity(
             "portfolio-test",
             "portfolio-web",
             "portfolio-service",
+            "quant-publisher",
         ):
             continue
         existing = get("/clients", params={"clientId": name})
@@ -89,6 +95,8 @@ def reconcile_identity(
         required_scopes = (
             ("basic", "market:read", "market:write")
             if name == "portfolio-test"
+            else ("basic", "market:snapshot:read")
+            if name == "quant-publisher"
             else ("basic",)
         )
         for scope_name in required_scopes:
@@ -97,7 +105,7 @@ def reconcile_identity(
                     f"{REALM}/clients/{identity}/default-client-scopes/{scopes[scope_name]['id']}"
                 )
                 response.raise_for_status()
-        if name != "portfolio-test":
+        if name not in ("portfolio-test", "quant-publisher"):
             continue
         mappers = get(f"/clients/{identity}/protocol-mappers/models")
         if not any(

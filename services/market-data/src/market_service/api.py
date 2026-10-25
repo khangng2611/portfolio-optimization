@@ -12,7 +12,12 @@ from portfolio_contracts import Envelope, aware, canonical_hash, utcnow
 from portfolio_contracts.market import IngestCommand, IngestionRequest, SnapshotRequest
 from service_auth import AuthError
 from service_observability import (
-    capture_context, install_http_tracing, link_job, log_event, span, trace_fields,
+    capture_context,
+    install_http_tracing,
+    link_job,
+    log_event,
+    span,
+    trace_fields,
 )
 from .models import Actor, Asset, IngestionJob, Outbox, PriceRevision, Snapshot
 from .snapshots import build_snapshot, observation_json, snapshot_json
@@ -145,7 +150,12 @@ def create_app(*, sessions, verifier, provider):
             raise HTTPException(
                 400, "Idempotency-Key requires 1–128 visible ASCII characters"
             )
-        request_hash = canonical_hash(body.model_dump(mode="json"))
+        normalized = body.model_dump(mode="json")
+        for row in normalized.get("observations") or []:
+            for key in ("data_origin", "price_basis"):
+                if row.get(key) == "unverified":
+                    row.pop(key)
+        request_hash = canonical_hash(normalized)
         with sessions.begin() as session:
             session.scalar(select(Actor).where(Actor.id == actor_id).with_for_update())
             existing = session.scalar(
@@ -191,13 +201,19 @@ def create_app(*, sessions, verifier, provider):
                 request=body,
                 dataset_spec=spec,
             )
+            serialized_command = command.model_dump(mode="json") | {
+                "request": normalized
+            }
             event = Envelope(
                 type="market.ingestion.requested",
                 producer="market-data",
                 correlation_id=job_id,
-                payload=command.model_dump(mode="json"),
+                payload=serialized_command,
             )
-            with span("market.job.persist", attributes={"job.id": job_id, "event.id": event.event_id}):
+            with span(
+                "market.job.persist",
+                attributes={"job.id": job_id, "event.id": event.event_id},
+            ):
                 context = capture_context()
                 session.add_all(
                     [
@@ -206,17 +222,27 @@ def create_app(*, sessions, verifier, provider):
                             actor_id=actor_id,
                             idempotency_key=idempotency_key,
                             request_hash=request_hash,
-                            input=command.model_dump(mode="json"),
+                            input=serialized_command,
                             deadline=utcnow() + timedelta(minutes=15),
                             trace_context=context,
                         ),
-                        Outbox(event_id=event.event_id, payload=event.model_dump(mode="json"), trace_context=context),
+                        Outbox(
+                            event_id=event.event_id,
+                            payload=event.model_dump(mode="json"),
+                            trace_context=context,
+                        ),
                     ]
                 )
                 session.flush()
-                log_event("market.job.persist", job_id=job_id, event_id=event.event_id, status="QUEUED")
+                log_event(
+                    "market.job.persist",
+                    job_id=job_id,
+                    event_id=event.event_id,
+                    status="QUEUED",
+                )
             return {
-                "job_id": job_id, "status_url": f"/api/v1/jobs/market/{job_id}",
+                "job_id": job_id,
+                "status_url": f"/api/v1/jobs/market/{job_id}",
                 **trace_fields(context),
             }
 
@@ -305,6 +331,35 @@ def create_app(*, sessions, verifier, provider):
 
     @app.get("/api/v1/market/snapshots/{snapshot_id}/observations")
     def snapshot_observations(snapshot_id: UUID, identity=Depends(principal)):
+        with sessions() as session:
+            value = session.get(Snapshot, str(snapshot_id))
+            if value is None:
+                raise HTTPException(404, "Snapshot not found")
+            return value.observations
+
+    def snapshot_reader(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    ):
+        try:
+            if credentials is None:
+                raise AuthError()
+            identity = verifier.verify(credentials.credentials)
+        except AuthError:
+            raise HTTPException(401, "Valid service identity required") from None
+        if "market:snapshot:read" not in identity.scopes:
+            raise HTTPException(403, "Missing market:snapshot:read scope")
+        return identity
+
+    @app.get("/internal/v1/market/snapshots/{snapshot_id}")
+    def internal_snapshot(snapshot_id: UUID, identity=Depends(snapshot_reader)):
+        with sessions() as session:
+            value = session.get(Snapshot, str(snapshot_id))
+            if value is None:
+                raise HTTPException(404, "Snapshot not found")
+            return snapshot_json(value)
+
+    @app.get("/internal/v1/market/snapshots/{snapshot_id}/observations")
+    def internal_observations(snapshot_id: UUID, identity=Depends(snapshot_reader)):
         with sessions() as session:
             value = session.get(Snapshot, str(snapshot_id))
             if value is None:

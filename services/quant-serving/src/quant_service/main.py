@@ -6,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 
 from service_auth import AuthError, TokenVerifier
+from portfolio_contracts import ModelUnavailable
 from service_observability import configure, install_http_tracing
 from .runtime import catalog_from_env, sessions_from_env
 
@@ -28,6 +29,26 @@ def create_app(*, sessions, verifier, catalog):
             raise HTTPException(503, "Database unavailable") from None
         return {"status": "ready"}
 
+    def resolver_identity(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    ):
+        try:
+            if credentials is None:
+                raise AuthError()
+            identity = verifier.verify(credentials.credentials)
+        except AuthError:
+            raise HTTPException(401, "Service identity required") from None
+        if "quant:resolve" not in identity.scopes:
+            raise HTTPException(403, "Missing quant:resolve scope")
+        return identity
+
+    @app.get("/internal/v1/inputs/universes")
+    def universes(identity=Depends(resolver_identity)):
+        try:
+            return catalog.universes()
+        except ValueError:
+            raise HTTPException(503, "Verified catalog unavailable") from None
+
     @app.get("/internal/v1/inputs/ready")
     def ready(
         universe_id: str,
@@ -44,6 +65,8 @@ def create_app(*, sessions, verifier, catalog):
             raise HTTPException(403, "Missing quant:resolve scope")
         try:
             return catalog.ready(universe_id, strategy).model_dump(mode="json")
+        except ModelUnavailable:
+            raise HTTPException(409, {"code": "MODEL_UNAVAILABLE"}) from None
         except ValueError:
             raise HTTPException(503, "Compatible verified input unavailable") from None
 

@@ -37,6 +37,27 @@
         }
       }
     },
+    "/internal/v1/inputs/universes": {
+      "get": {
+        "summary": "Universes",
+        "operationId": "universes_internal_v1_inputs_universes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/internal/v1/inputs/ready": {
       "get": {
         "summary": "Ready",

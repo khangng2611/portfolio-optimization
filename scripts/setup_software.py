@@ -138,7 +138,10 @@ def python_environment_ready() -> bool:
     # Ensure editable packages belong to this checkout, not an unrelated install.
     script = (
         "import importlib.metadata as m,json,pathlib,sys,urllib.parse; "
+        "from packaging.markers import Marker; "
         "expected=json.loads(sys.argv[1]); "
+        "expected={k:v.split(';',1)[0].strip() for k,v in expected.items() "
+        "if ';' not in v or Marker(v.split(';',1)[1].strip()).evaluate()}; "
         "assert sys.version_info[:2]==(3,12); "
         "assert all(m.version(k)==v for k,v in expected.items()); "
         "packages=json.loads(sys.argv[2]); "
@@ -247,6 +250,10 @@ def verify(live: bool, tracing: bool = False) -> None:
             "tests/software",
             "scripts/setup_software.py",
             "scripts/smoke_software.py",
+            "scripts/smoke_g2.py",
+            "scripts/smoke_ml_serving.py",
+            "scripts/smoke_market_quant.py",
+            "scripts/fetch_serving_prices.py",
             "scripts/smoke_tracing.py",
             "scripts/export_software_contracts.py",
             "scripts/lock_software_dependencies.py",
@@ -260,6 +267,7 @@ def verify(live: bool, tracing: bool = False) -> None:
         run(compose + ["config", "--quiet"], quiet=True)
         run([str(PYTHON), "infra/local/verify_boundaries.py"])
         run([str(PYTHON), "scripts/smoke_software.py"])
+        run([str(PYTHON), "scripts/smoke_g2.py"])
         if tracing:
             run([str(PYTHON), "scripts/smoke_tracing.py"])
     print("PASS: các kiểm tra được yêu cầu đã hoàn tất.")

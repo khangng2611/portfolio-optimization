@@ -360,6 +360,92 @@
           }
         }
       }
+    },
+    "/internal/v1/market/snapshots/{snapshot_id}": {
+      "get": {
+        "summary": "Internal Snapshot",
+        "operationId": "internal_snapshot_internal_v1_market_snapshots__snapshot_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v1/market/snapshots/{snapshot_id}/observations": {
+      "get": {
+        "summary": "Internal Observations",
+        "operationId": "internal_observations_internal_v1_market_snapshots__snapshot_id__observations_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -479,6 +565,27 @@
             ],
             "title": "Price Type",
             "default": "close"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "synthetic",
+              "unverified"
+            ],
+            "title": "Data Origin",
+            "default": "unverified"
+          },
+          "price_basis": {
+            "type": "string",
+            "enum": [
+              "provider_adjusted",
+              "raw_close",
+              "nav",
+              "unverified"
+            ],
+            "title": "Price Basis",
+            "default": "unverified"
           }
         },
         "additionalProperties": false,

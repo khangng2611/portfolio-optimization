@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
@@ -14,8 +14,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from portfolio_contracts import (
     Constraints,
+    DecisionContext,
     Envelope,
     OptimizeCommand,
+    ModelUnavailable,
     ReadyInput,
     StrictModel,
     aware,
@@ -24,9 +26,16 @@ from portfolio_contracts import (
 )
 from service_auth import AuthError
 from service_observability import (
-    capture_context, install_http_tracing, link_job, log_event, span, trace_fields,
+    capture_context,
+    install_http_tracing,
+    link_job,
+    log_event,
+    span,
+    trace_fields,
 )
-from .models import Job, Outbox, Portfolio, Recommendation, User
+from .models import AcceptedTarget, Job, Outbox, Portfolio, Recommendation, User
+from .policy import RiskAnswers, risk_policy
+from .workflow import validate_result
 
 HUMAN_ROLES = {
     "investor",
@@ -49,6 +58,16 @@ class NewPortfolio(StrictModel):
 
 class NewRecommendation(StrictModel):
     strategy: Literal["EW", "MVO", "BL_ML"] = "MVO"
+    fallback_strategy: Literal["EW"] | None = None
+
+
+class OnboardingPortfolio(StrictModel):
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    capital_vnd: Decimal = Field(
+        gt=0, le=Decimal("10000000000000000000"), max_digits=24, decimal_places=4
+    )
+    universe_id: str = Field(default="DEMO", pattern=r"^[A-Z0-9_-]{1,64}$")
+    answers: RiskAnswers
 
 
 class PortfolioUpdate(StrictModel):
@@ -64,6 +83,25 @@ class PortfolioUpdate(StrictModel):
     max_position_weight: float | None = Field(default=None, gt=0, le=1)
 
 
+def policy_id(value):
+    return (
+        f"risk-policy-v1:{value.risk_profile['profile']}"
+        if value.risk_profile
+        else "manual-constraints-v1"
+    )
+
+
+def target_json(value):
+    return {
+        "id": value.id,
+        "portfolio_id": value.portfolio_id,
+        "recommendation_id": value.recommendation_id,
+        "portfolio_version": value.portfolio_version,
+        "accepted_at": aware(value.accepted_at).isoformat(),
+        "allocation": value.allocation,
+    }
+
+
 def portfolio_json(value):
     return {
         "id": value.id,
@@ -72,7 +110,8 @@ def portfolio_json(value):
         "universe_id": value.universe_id,
         "constraints": value.constraints,
         "version": value.version,
-        "policy_version_id": "manual-constraints-v1",
+        "policy_version_id": policy_id(value),
+        "risk_profile": value.risk_profile,
     }
 
 
@@ -126,7 +165,10 @@ def create_app(*, sessions, verifier, resolver):
             request, 503, "DATABASE_UNAVAILABLE", "Dữ liệu tạm thời không khả dụng."
         )
 
-    def principal(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
+    def principal(
+        request: Request,
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    ):
         if credentials is None:
             raise HTTPException(
                 401, "Cần đăng nhập.", headers={"WWW-Authenticate": "Bearer"}
@@ -180,6 +222,15 @@ def create_app(*, sessions, verifier, resolver):
     def me(identity=Depends(principal), user_id=Depends(owner)):
         return {"id": user_id, "roles": sorted(identity.roles & HUMAN_ROLES)}
 
+    @app.get("/api/v1/universes")
+    def universes(identity=Depends(principal)):
+        try:
+            return resolver.universes()
+        except (httpx.HTTPError, ValueError, KeyError):
+            raise HTTPException(
+                503, "Danh sách dữ liệu phục vụ chưa sẵn sàng."
+            ) from None
+
     @app.post("/api/v1/portfolios", status_code=201)
     def create_portfolio(body: NewPortfolio, user_id=Depends(owner)):
         with sessions.begin() as session:
@@ -209,6 +260,144 @@ def create_app(*, sessions, verifier, resolver):
                     .limit(100)
                 )
             ]
+
+    @app.post("/api/v1/onboarding/portfolios", status_code=201)
+    def onboarding(body: OnboardingPortfolio, user_id=Depends(owner)):
+        profile, constraints = risk_policy(body.answers)
+        with sessions.begin() as session:
+            value = Portfolio(
+                owner_user_id=user_id,
+                name=body.name.strip(),
+                capital_vnd=body.capital_vnd,
+                universe_id=body.universe_id,
+                constraints=constraints.model_dump(),
+                risk_profile=profile,
+            )
+            session.add(value)
+            session.flush()
+            return portfolio_json(value)
+
+    def owned_portfolio(session, portfolio_id, user_id, *, lock=False):
+        query = select(Portfolio).where(
+            Portfolio.id == str(portfolio_id), Portfolio.owner_user_id == user_id
+        )
+        value = session.scalar(query.with_for_update() if lock else query)
+        if value is None:
+            raise HTTPException(404, "Không tìm thấy danh mục.")
+        return value
+
+    def targets(session, portfolio_id, user_id):
+        return [
+            target_json(value)
+            for value in session.scalars(
+                select(AcceptedTarget)
+                .where(
+                    AcceptedTarget.portfolio_id == str(portfolio_id),
+                    AcceptedTarget.owner_user_id == user_id,
+                )
+                .order_by(AcceptedTarget.portfolio_version.desc())
+                .limit(100)
+            )
+        ]
+
+    @app.get("/api/v1/portfolios/{portfolio_id}/targets")
+    def list_targets(portfolio_id: UUID, user_id=Depends(owner)):
+        with sessions() as session:
+            owned_portfolio(session, portfolio_id, user_id)
+            return targets(session, portfolio_id, user_id)
+
+    @app.get("/api/v1/portfolios/{portfolio_id}/dashboard")
+    def dashboard(portfolio_id: UUID, user_id=Depends(owner)):
+        with sessions.begin() as session:
+            value = owned_portfolio(session, portfolio_id, user_id, lock=True)
+            history = targets(session, portfolio_id, user_id)
+            return {
+                "portfolio": portfolio_json(value),
+                "accepted_target": history[0] if history else None,
+                "target_matches_portfolio": bool(
+                    history and history[0]["portfolio_version"] == value.version
+                ),
+                "proposal_count": session.scalar(
+                    select(func.count())
+                    .select_from(Recommendation)
+                    .where(
+                        Recommendation.portfolio_id == value.id,
+                        Recommendation.owner_user_id == user_id,
+                    )
+                ),
+                "holdings_status": "NOT_TRACKED",
+            }
+
+    @app.post("/api/v1/recommendations/{recommendation_id}/accept")
+    def accept_target(
+        recommendation_id: UUID,
+        body: StrictModel,
+        response: Response,
+        user_id=Depends(owner),
+        if_match: str | None = Header(default=None),
+    ):
+        with sessions.begin() as session:
+            proposal = session.scalar(
+                select(Recommendation).where(
+                    Recommendation.id == str(recommendation_id),
+                    Recommendation.owner_user_id == user_id,
+                )
+            )
+            if proposal is None:
+                raise HTTPException(404, "Không tìm thấy đề xuất.")
+            value = owned_portfolio(session, proposal.portfolio_id, user_id, lock=True)
+            if if_match is None:
+                raise HTTPException(428, "Cần If-Match từ phiên bản danh mục hiện tại.")
+            existing = session.scalar(
+                select(AcceptedTarget).where(
+                    AcceptedTarget.recommendation_id == proposal.id,
+                    AcceptedTarget.owner_user_id == user_id,
+                )
+            )
+            if existing:
+                response.headers["ETag"] = f'"{value.version}"'
+                return target_json(existing)
+            if if_match != f'"{value.version}"':
+                raise HTTPException(412, "Danh mục đã thay đổi, hãy tải lại.")
+            job = session.scalar(
+                select(Job).where(
+                    Job.id == proposal.job_id, Job.owner_user_id == user_id
+                )
+            )
+            if (
+                not job
+                or job.status != "SUCCEEDED"
+                or job.input["portfolio_version"] != value.version
+            ):
+                raise HTTPException(
+                    409, "Đề xuất không còn phù hợp với phiên bản danh mục."
+                )
+            try:
+                if (
+                    aware(datetime.fromisoformat(job.input["inputs"]["valid_until"]))
+                    <= utcnow()
+                ):
+                    raise ValueError("expired")
+                numerical = proposal.result | {
+                    "weights": [float(w) for w in proposal.result["weights"]]
+                }
+                validate_result(numerical, job.input)
+            except (ValueError, TypeError, KeyError):
+                raise HTTPException(
+                    409, "Đề xuất hết hạn hoặc không hợp lệ; hãy tạo đề xuất mới."
+                ) from None
+            value.version += 1
+            target = AcceptedTarget(
+                recommendation_id=proposal.id,
+                portfolio_id=value.id,
+                owner_user_id=user_id,
+                portfolio_version=value.version,
+                allocation=proposal.result,
+            )
+            session.add(target)
+            session.flush()
+            response.headers["ETag"] = f'"{value.version}"'
+            return target_json(target)
 
     @app.get("/api/v1/portfolios/{portfolio_id}")
     def get_portfolio(portfolio_id: UUID, response: Response, user_id=Depends(owner)):
@@ -259,6 +448,8 @@ def create_app(*, sessions, verifier, resolver):
                 for key in ("risk_aversion", "max_position_weight")
                 if key in updates
             }
+            if {"risk_aversion", "max_position_weight"}.intersection(updates):
+                value.risk_profile = None
             value.version += 1
             response.headers["ETag"] = f'"{value.version}"'
             return portfolio_json(value)
@@ -291,14 +482,17 @@ def create_app(*, sessions, verifier, resolver):
 
     def accepted(job):
         return {
-            "job_id": job.id, "status_url": f"/api/v1/jobs/portfolio/{job.id}",
+            "job_id": job.id,
+            "status_url": f"/api/v1/jobs/portfolio/{job.id}",
             **trace_fields(job.trace_context),
         }
 
     def recommendation_json(value, job):
         link_job(job.trace_context, job.id)
         return value.result | {
-            "id": value.id, "portfolio_id": value.portfolio_id, "run_id": value.run_id,
+            "id": value.id,
+            "portfolio_id": value.portfolio_id,
+            "run_id": value.run_id,
             **trace_fields(job.trace_context),
         }
 
@@ -315,7 +509,7 @@ def create_app(*, sessions, verifier, resolver):
             or any(ord(c) < 33 or ord(c) > 126 for c in idempotency_key)
         ):
             raise HTTPException(400, "Cần Idempotency-Key hợp lệ (1–128 ký tự ASCII).")
-        body_hash = canonical_hash(body.model_dump())
+        body_hash = canonical_hash(body.model_dump(exclude_none=True))
         with sessions.begin() as session:
             # NO KEY UPDATE serializes the owner's quota without blocking FK
             # KEY SHARE checks when a result inserts its Recommendation.
@@ -344,7 +538,9 @@ def create_app(*, sessions, verifier, resolver):
                     raise HTTPException(
                         409, "Idempotency-Key đã dùng cho nội dung khác."
                     )
-                log_event("portfolio.job.accept", job_id=existing.id, outcome="duplicate")
+                log_event(
+                    "portfolio.job.accept", job_id=existing.id, outcome="duplicate"
+                )
                 return accepted(existing)
             pending = session.scalar(
                 select(func.count())
@@ -359,11 +555,19 @@ def create_app(*, sessions, verifier, resolver):
                 raise HTTPException(
                     429, "Tối đa 5 yêu cầu đang chờ cho mỗi người dùng."
                 )
+            effective_strategy, fallback_reason = body.strategy, None
             try:
-                with span("portfolio.inputs.resolve", attributes={"strategy": body.strategy}):
-                    inputs = ReadyInput.model_validate(
-                        resolver.ready(portfolio.universe_id, body.strategy)
-                    )
+                with span(
+                    "portfolio.inputs.resolve", attributes={"strategy": body.strategy}
+                ):
+                    try:
+                        resolved = resolver.ready(portfolio.universe_id, body.strategy)
+                    except ModelUnavailable:
+                        if body.strategy != "BL_ML" or body.fallback_strategy != "EW":
+                            raise
+                        resolved = resolver.ready(portfolio.universe_id, "EW")
+                        effective_strategy, fallback_reason = "EW", "MODEL_UNAVAILABLE"
+                    inputs = ReadyInput.model_validate(resolved)
             except (httpx.HTTPError, ValueError, KeyError):
                 raise HTTPException(
                     503, "Chưa có dữ liệu/model phù hợp sẵn sàng."
@@ -383,10 +587,16 @@ def create_app(*, sessions, verifier, resolver):
                 owner_user_id=user_id,
                 portfolio_id=portfolio.id,
                 portfolio_version=portfolio.version,
-                strategy=body.strategy,
+                strategy=effective_strategy,
                 capital_vnd=str(portfolio.capital_vnd),
                 inputs=inputs,
                 constraints=portfolio.constraints,
+                decision_context=DecisionContext(
+                    policy_version_id=policy_id(portfolio),
+                    risk_profile=portfolio.risk_profile,
+                    requested_strategy=body.strategy,
+                    fallback_reason=fallback_reason,
+                ),
                 deadline=utcnow() + timedelta(seconds=60),
                 input_hash="0" * 64,
             )
@@ -397,7 +607,10 @@ def create_app(*, sessions, verifier, resolver):
                 correlation_id=job_id,
                 payload=command.model_dump(mode="json"),
             )
-            with span("portfolio.job.persist", attributes={"job.id": job_id, "event.id": event.event_id}):
+            with span(
+                "portfolio.job.persist",
+                attributes={"job.id": job_id, "event.id": event.event_id},
+            ):
                 context = capture_context()
                 job = Job(
                     id=job_id,
@@ -411,10 +624,22 @@ def create_app(*, sessions, verifier, resolver):
                     trace_context=context,
                 )
                 session.add_all(
-                    [job, Outbox(event_id=event.event_id, payload=event.model_dump(mode="json"), trace_context=context)]
+                    [
+                        job,
+                        Outbox(
+                            event_id=event.event_id,
+                            payload=event.model_dump(mode="json"),
+                            trace_context=context,
+                        ),
+                    ]
                 )
                 session.flush()
-                log_event("portfolio.job.persist", job_id=job_id, event_id=event.event_id, status="QUEUED")
+                log_event(
+                    "portfolio.job.persist",
+                    job_id=job_id,
+                    event_id=event.event_id,
+                    status="QUEUED",
+                )
             return accepted(job)
 
     @app.get("/api/v1/jobs/portfolio/{job_id}")
@@ -455,7 +680,9 @@ def create_app(*, sessions, verifier, resolver):
             )
             if not value:
                 raise HTTPException(404, "Không tìm thấy đề xuất.")
-            job = session.scalar(select(Job).where(Job.id == value.job_id, Job.owner_user_id == user_id))
+            job = session.scalar(
+                select(Job).where(Job.id == value.job_id, Job.owner_user_id == user_id)
+            )
             if job is None:
                 raise HTTPException(404, "Không tìm thấy tác vụ.")
             return recommendation_json(value, job)

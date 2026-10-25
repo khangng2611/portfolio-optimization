@@ -42,6 +42,19 @@ for service, distribution in {
             if name not in LOCAL
         }
     )
+    if service == "quant-serving":
+        # Linux serving uses the CPU wheel, avoiding the optional CUDA/NCCL runtime.
+        lines = sorted(
+            [
+                line
+                for line in lines
+                if not line.startswith(("xgboost==", "xgboost-cpu=="))
+            ]
+            + [
+                "xgboost-cpu==3.2.0; sys_platform == 'linux'",
+                "xgboost==3.2.0; sys_platform != 'linux'",
+            ]
+        )
     (ROOT / "services" / service / "requirements.lock").write_text(
         "# Runtime constraints resolved with Python 3.12. Use pip -c alongside service packages.\n"
         + "\n".join(lines)

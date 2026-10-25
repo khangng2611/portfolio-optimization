@@ -106,6 +106,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
                 "TEST_CLIENT_SECRET": "unused-current-secret",
                 "OIDC_CLIENT_SECRET": "unused-web-secret",
                 "QUANT_CLIENT_SECRET": "unused-quant-secret",
+                "MARKET_READER_CLIENT_SECRET": "publisher-secret",
             },
             test_client=True,
         )
@@ -116,6 +117,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
                 "TEST_CLIENT_SECRET": "unused-current-secret",
                 "OIDC_CLIENT_SECRET": "unused-web-secret",
                 "QUANT_CLIENT_SECRET": "unused-quant-secret",
+                "MARKET_READER_CLIENT_SECRET": "publisher-secret",
             },
             test_client=True,
         )
@@ -142,6 +144,18 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         for mapper in state["mappers"]["test-id"]
     } == {"portfolio-api", "market-api"}
     assert state["clients"]["market-api"]["bearerOnly"] is True
+    publisher = state["clients"]["quant-publisher"]
+    assert publisher["secret"] == "publisher-secret"
+    assert publisher["serviceAccountsEnabled"] is True
+    assert publisher["directAccessGrantsEnabled"] is False
+    assert {s["name"] for s in state["defaults"]["quant-publisher"]} == {
+        "basic",
+        "market:snapshot:read",
+    }
+    assert {
+        m["config"]["included.client.audience"]
+        for m in state["mappers"]["quant-publisher"]
+    } == {"market-api"}
 
 
 def test_broker_upgrade_payload_does_not_replace_an_existing_owners_users():

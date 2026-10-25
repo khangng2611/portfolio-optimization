@@ -23,6 +23,10 @@ class Observation(StrictModel):
     provider: str = Field(min_length=1, max_length=100)
     published_at: datetime | None = None
     price_type: Literal["close", "nav", "bid", "ask", "midpoint"] = "close"
+    data_origin: Literal["real", "synthetic", "unverified"] = "unverified"
+    price_basis: Literal["provider_adjusted", "raw_close", "nav", "unverified"] = (
+        "unverified"
+    )
 
     @model_validator(mode="after")
     def valid_observation(self):

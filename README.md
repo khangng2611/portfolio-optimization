@@ -6,6 +6,8 @@ Phần ứng dụng giai đoạn 2 nằm trong `apps/`, `services/`, `packages/`
 
 Setup phần mềm và thử API: [hướng dẫn tiếng Việt, Swagger và Postman](docs/software/SETUP_AND_API_TESTING.md). Chạy nhanh từ repo root: `python3 scripts/setup_software.py up --enable-test-client`.
 
+Luồng ứng dụng: [risk onboarding, accepted target và approved ML serving](docs/software/WEEKS_6_7.md), [Market snapshot → Quant từ giá thật](docs/software/MARKET_QUANT_BRIDGE.md).
+
 ## Mục lục
 
 1. [Tổng quan](#tổng-quan)

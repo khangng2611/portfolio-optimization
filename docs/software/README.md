@@ -1,5 +1,11 @@
 # Software foundation — Identity/BFF và Portfolio/Quant
 
+Luồng hiện tại gồm [wizard rủi ro, policy version, accepted target, dashboard và
+approved XGBoost inference](WEEKS_6_7.md). [Market–Quant bridge](MARKET_QUANT_BRIDGE.md)
+publish features/numerical bundle từ snapshot giá thật qua CLI riêng. UI hỗ trợ
+universe discovery, review câu trả lời, biểu đồ phân bổ và lưu target.
+Các mốc phía dưới giữ nguyên làm lịch sử.
+
 Hướng dẫn hiện hành: [Setup môi trường, Swagger và Postman](SETUP_AND_API_TESTING.md).
 Đối chiếu các mốc và bằng chứng ngày 09/10/2026 tại
 [trạng thái hiện thực](IMPLEMENTATION_STATUS.md). Phần cập nhật thêm Market Data,

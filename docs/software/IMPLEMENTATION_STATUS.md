@@ -1,4 +1,36 @@
-# Tiến độ software app — 10/10/2026
+# Tiến độ software app
+
+## UI — cập nhật 25/10/2026
+
+UI trên cổng 3000 hỗ trợ onboarding có review, universe thật/minh họa, danh sách
+danh mục, biểu đồ/bảng phân bổ, accepted target và dashboard. Luồng browser thật
+đã kiểm chứng OIDC/PKCE → tạo danh mục → MVO → lưu target → reload/restart.
+Kiểm tra offline: **248 Python tests / 52 web tests**, lint, typecheck và build.
+Giữ các smoke scripts để chạy lại; ảnh chụp và receipts local không lưu trong Git.
+
+## Market → Quant — cập nhật 24/10/2026
+
+Đã nối snapshot giá thật FPT/VCB/HPG đến features, numerical bundle, approved
+XGBoost, BL_ML và accepted target trên stack local. Dữ liệu đến **23/10/2026**;
+serving/core cùng bước sai số weights < `1e-10`. UI chọn universe từ catalog và
+phân biệt real/demo. **248 Python / 51 web tests** cùng lint/typecheck/build,
+contracts/migrations, live boundary probes, restart receipts và browser thật đạt.
+[Chi tiết, cách chạy và giới hạn](MARKET_QUANT_BRIDGE.md).
+
+Các cập nhật 23/10 bên dưới là lịch sử trước khi nối bridge.
+
+
+## Tuần 6–7 — cập nhật 23/10/2026
+
+G2 local đã kiểm chứng qua browser thật: OIDC → wizard → portfolio/policy →
+MVO proposal → accept target → dashboard. Native XGBoost approved manifest → BL_ML
+qua RabbitMQ đã đạt same-step parity, max |Δweight| = 0 trên synthetic inputs.
+MVO/Market/target/ML receipts giữ nguyên sau restart. **219 Python tests / 49 web
+tests**, typecheck/build/lint/contracts/migrations và live boundary probes đạt.
+
+Hợp đồng và cách dùng: [WEEKS_6_7.md](WEEKS_6_7.md).
+Chưa hoàn tất full ML Platform, Market→features, representative selection, ledger,
+Chat/RAG hoặc nghiên cứu selection/ablation. Các mốc bên dưới là lịch sử.
 
 ## OpenTelemetry + Jaeger — kiểm chứng local ngày 10/10/2026
 

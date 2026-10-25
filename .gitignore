@@ -226,6 +226,8 @@ csonet-paper/
 
 # Local research outputs and document rendering scratch files
 /outputs/
+/output/
+/.playwright-cli/
 /tmp/
 
 # Local credentials, editor metadata and OS files

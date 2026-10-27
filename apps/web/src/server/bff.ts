@@ -10,7 +10,18 @@ const opaque = () => randomBytes(32).toString('base64url');
 const equal = (a: string, b: string) => { const left = Buffer.from(a); const right = Buffer.from(b); return left.length === right.length && timingSafeEqual(left, right); };
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+const operatorRoutes = [
+  { path: /^\/api\/v1\/market\/(dataset-inventory|datasets)$/, template: '/api/v1/market/datasets', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
+  { path: /^\/api\/v1\/market\/ingestions$/, template: '/api/v1/market/ingestions', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
+  { path: new RegExp(`^/api/v1/market/ingestions/${uuid}/quality$`), template: '/api/v1/market/ingestions/{job_id}/quality', methods: ['GET'], query: [], service: 'market' },
+  { path: new RegExp(`^/api/v1/jobs/market/${uuid}$`), template: '/api/v1/jobs/market/{job_id}', methods: ['GET'], query: [], service: 'market' },
+  { path: /^\/api\/v1\/market\/snapshots$/, template: '/api/v1/market/snapshots', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
+  { path: new RegExp(`^/api/v1/market/snapshots/${uuid}$`), template: '/api/v1/market/snapshots/{snapshot_id}', methods: ['GET'], query: [], service: 'market' },
+  { path: /^\/api\/v1\/market\/publications$/, template: '/api/v1/market/publications', methods: ['GET', 'POST'], query: ['limit', 'offset', 'status', 'snapshot_id'], service: 'quant' },
+  { path: new RegExp(`^/api/v1/market/publications/${uuid}$`), template: '/api/v1/market/publications/{job_id}', methods: ['GET'], query: [], service: 'quant' },
+] as const;
 const routes = [
+  ...operatorRoutes,
   { path: /^\/api\/v1\/universes\/readiness$/, template: '/api/v1/universes/readiness', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/readiness$`), template: '/api/v1/portfolios/{portfolio_id}/readiness', methods: ['GET'], query: [] },
   { path: /^\/api\/v1\/universes$/, template: '/api/v1/universes', methods: ['GET'], query: [] },
@@ -94,7 +105,7 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
   }
   function traced(handler: (request: Request) => Promise<Response>) {
     return (request: Request) => {
-      const route = routes.find(route => route.path.test(new URL(request.url).pathname) && route.methods.includes(request.method));
+      const route = routes.find(route => route.path.test(new URL(request.url).pathname) && (route.methods as readonly string[]).includes(request.method));
       return route ? traceProxy(request, route.template, () => handler(request)) : handler(request);
     };
   }
@@ -146,17 +157,22 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
     }),
     proxy: traced(guarded(async request => {
       const url = new URL(request.url);
-      const route = routes.find(route => route.path.test(url.pathname) && route.methods.includes(request.method));
-      if (!route || [...url.searchParams.keys()].some(key => !route.query.includes(key))) throw new HttpError(404, 'Route not found');
+      const route = routes.find(route => route.path.test(url.pathname) && (route.methods as readonly string[]).includes(request.method));
+      if (url.pathname === '/api/v1/market/dataset-inventory' && request.method !== 'GET') throw new HttpError(404, 'Route not found');
+      if (!route || [...url.searchParams.keys()].some(key => !(route.query as readonly string[]).includes(key))) throw new HttpError(404, 'Route not found');
       for (const [key, value] of url.searchParams) {
         if (url.searchParams.getAll(key).length !== 1) throw new HttpError(400, 'Duplicate query parameter');
         if (key === 'limit' && (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 100)) throw new HttpError(400, 'Invalid pagination');
         if (key === 'offset' && (!/^\d{1,7}$/.test(value) || Number(value) > 1_000_000)) throw new HttpError(400, 'Invalid pagination');
         if (key === 'q' && (value.trim().length > 120 || /[\x00-\x1f\x7f]/.test(value))) throw new HttpError(400, 'Invalid search');
         if (key === 'risk_profile' && !['all', 'manual', 'conservative', 'balanced', 'growth'].includes(value)) throw new HttpError(400, 'Invalid risk profile');
+        if (key === 'status' && !['QUEUED', 'RUNNING', 'RETRY', 'SUCCEEDED', 'FAILED'].includes(value)) throw new HttpError(400, 'Invalid status');
+        if (key === 'snapshot_id' && !new RegExp(`^${uuid}$`).test(value)) throw new HttpError(400, 'Invalid snapshot');
         if (key === 'sort' && !['created_desc', 'name_asc', 'capital_desc'].includes(value)) throw new HttpError(400, 'Invalid sort');
       }
       const { id, session } = await load(request);
+      const isOperator = 'service' in route;
+      if (isOperator && !session.user.roles.includes('data-operator')) throw new HttpError(403, 'Data operator role required');
       const mutates = !['GET', 'HEAD'].includes(request.method);
       if (mutates) mutation(request, session);
       const headers = new Headers({ accept: 'application/json' });
@@ -169,15 +185,17 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
         const precondition = request.headers.get('if-match');
         if (precondition) headers.set('if-match', precondition);
         const idempotency = request.headers.get('idempotency-key');
-        if (url.pathname.endsWith('/recommendations') && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
+        if ((url.pathname.endsWith('/recommendations') || ['/api/v1/market/ingestions', '/api/v1/market/datasets', '/api/v1/market/publications'].includes(url.pathname)) && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
         if (idempotency) { if (!/^[A-Za-z0-9_-]{8,128}$/.test(idempotency)) throw new HttpError(400, 'Invalid Idempotency-Key'); headers.set('idempotency-key', idempotency); }
       }
       const active = await fresh(id, session);
       headers.set('authorization', `Bearer ${active.accessToken}`);
       injectTraceHeaders(headers);
+      const serviceUrl = 'service' in route ? route.service === 'market' ? config.marketUrl : config.quantUrl : config.portfolioUrl;
+      if (!serviceUrl) throw new HttpError(503, 'Operator service unavailable');
       let upstream: Response;
-      try { upstream = await fetcher(config.portfolioUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10_000) }); }
-      catch { throw new HttpError(502, 'Portfolio service unavailable'); }
+      try { upstream = await fetcher(serviceUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10_000) }); }
+      catch { throw new HttpError(502, 'Backend service unavailable'); }
       if (upstream.status >= 300 && upstream.status < 400) throw new HttpError(502, 'Unexpected backend redirect');
       if (upstream.status === 204) return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
       if (!upstream.headers.get('content-type')?.includes('application/json')) throw new HttpError(502, 'Unexpected backend response');

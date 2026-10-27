@@ -12,14 +12,15 @@ export default class SafeReporter implements Reporter {
   }
   onTestEnd(test: TestCase, result: TestResult) {
     const phase = result.annotations.find(item => item.type === 'safe-phase')?.description;
-    const line = result.errors.map(error => error.stack?.match(/lifecycle\.e2e\.ts:(\d+):\d+/)?.[1]).find(Boolean);
+    const line = result.errors.map(error => error.stack?.match(/(?:lifecycle|market-operations)\.e2e\.ts:(\d+):\d+/)?.[1]).find(Boolean);
     this.tests.push({ title: test.title, status: result.status, duration_ms: result.duration, ...(phase ? { phase } : {}), ...(line ? { assertion_line: Number(line) } : {}) });
     console.log(`${result.status.toUpperCase()}: ${test.title}${phase ? ` [${phase}]` : ''}${line ? ` (assertion line ${line})` : ''}`);
   }
   onEnd(result: FullResult) {
     const directory = resolve('../../output/playwright/sanitized');
     mkdirSync(directory, { recursive: true });
-    const mode = process.env.BROWSER_VERIFY_RECEIPT === '1' ? 'persistence' : 'lifecycle';
+    const market = process.env.MARKET_OPS_VERIFY_RECEIPT !== undefined || this.tests.some(t => t.title.includes('market') || t.title.includes('operator source'));
+    const mode = process.env.MARKET_OPS_RETRY_OUTAGE === '1' ? 'market-outage' : market ? process.env.MARKET_OPS_VERIFY_RECEIPT === '1' ? 'market-persistence' : 'market-lifecycle' : process.env.BROWSER_VERIFY_RECEIPT === '1' ? 'persistence' : 'lifecycle';
     writeFileSync(resolve(directory, `${mode}.json`), JSON.stringify({ status: result.status, tests: this.tests }, null, 2) + '\n');
   }
 }

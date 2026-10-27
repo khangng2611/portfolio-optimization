@@ -12,8 +12,10 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:browser": "playwright test",
-    "test:browser:persistence": "BROWSER_VERIFY_RECEIPT=1 playwright test"
+    "test:browser": "playwright test lifecycle.e2e.ts",
+    "test:browser:persistence": "BROWSER_VERIFY_RECEIPT=1 playwright test lifecycle.e2e.ts",
+    "test:browser:market": "playwright test market-operations.e2e.ts",
+    "test:browser:market:persistence": "MARKET_OPS_VERIFY_RECEIPT=1 playwright test market-operations.e2e.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

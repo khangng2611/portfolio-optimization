@@ -98,3 +98,10 @@ class SnapshotRequest(StrictModel):
         if (self.end_date - self.start_date).days > 3650:
             raise ValueError("Snapshot window cannot exceed ten years")
         return self
+
+
+class DatasetRegistration(StrictModel):
+    """Only select server-owned inventory; paths and provider interpretation stay private."""
+
+    dataset_id: str = Field(pattern=r"^[A-Z0-9_-]{1,64}$")
+    expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")

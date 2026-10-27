@@ -241,6 +241,7 @@ def make_realm(
             "portfolio:read",
             "portfolio:write",
             "quant:resolve",
+            "quant:publish",
             "market:read",
             "market:write",
             "market:snapshot:read",
@@ -271,8 +272,8 @@ def make_realm(
             "portfolio:read",
             "portfolio:write",
         ],
-        "optionalClientScopes": [],
-        "protocolMappers": [audience_mapper("portfolio-api")],
+        "optionalClientScopes": ["market:read", "market:write", "quant:publish"],
+        "protocolMappers": [audience_mapper(a) for a in ("portfolio-api", "market-api", "quant-api")],
     }
     service = {
         "clientId": "portfolio-service",

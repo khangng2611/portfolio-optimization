@@ -1,5 +1,30 @@
 # Tiến độ software app
 
+## Market Data Operations — cập nhật 27/10/2026
+
+Đã bổ sung registry SQL bất biến từ trusted CSV inventory, đăng ký có
+Idempotency-Key, lịch sử ingestion phân trang và báo cáo chất lượng
+PASS/QUARANTINED/NOT_CHECKED. Lô dữ liệu được kiểm tra trước khi ghi giá;
+snapshot ghim revision/hash và kiểm tra chất lượng các revision được chọn.
+
+Data operator có thể enqueue/list/get publication của mình với snapshot ID/hash
+và universe cố định. API chỉ ghi SQL queue; worker riêng phát hành bundle và retry
+lỗi tạm thời. Frontend `/#market` nối đầy đủ nguồn → ingestion → chất lượng →
+snapshot → phát hành, với role gate, CSRF, phân trang và deep links.
+
+Kiểm chứng: **385 Python/core tests / 64 web tests**, Ruff, TypeScript,
+production build, 9 contracts và DB/broker/Identity boundaries. Một PostgreSQL
+concurrency test opt-in được chạy riêng và đạt; gate mặc định skip test này.
+Năm browser gates trên backend thật đạt: Market lifecycle, outage/retry,
+Market restart persistence, P0 lifecycle và P0 restart persistence. Luồng giá thật
+FPT/HPG/VCB đi đến accepted target; retry giữ đúng job/hash và lịch sử giữ nguyên
+sau restart. CI GitHub chưa chạy.
+
+Giới hạn: trusted CSV/import; lịch phiên chỉ kiểm đủ khi nguồn có
+`expected_sessions`. Metadata thiếu basis/known-at có cảnh báo, chưa được coi là
+đã xác minh. UI bám Figma I01; I02–I06 chưa đối chiếu chi tiết do hạn mức đọc MCP.
+Xem [hướng dẫn UI](../../apps/web/README.md) và [vận hành local](../../infra/local/README.md).
+
 ## P0 — cập nhật 25/10/2026
 
 Đã bổ sung readiness dữ liệu/model có mã nguyên nhân và thời hạn; publication

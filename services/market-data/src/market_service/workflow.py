@@ -5,7 +5,14 @@ from sqlalchemy import select
 from portfolio_contracts import aware, canonical_hash, utcnow
 from portfolio_contracts.market import IngestCommand, IngestionRequest, UNITS
 from service_observability import link_job, log_event, span
-from .models import Asset, Inbox, IngestionJob, PriceRevision
+from .models import Asset, Inbox, IngestionJob, PriceRevision, QualityReport
+from .quality import (
+    QualityFailure,
+    finding,
+    validate_batch,
+    report_json,
+    terminal_quality,
+)
 
 
 def execute(sessions, provider, event):
@@ -50,19 +57,44 @@ def execute(sessions, provider, event):
                 "FAILED",
                 {"code": "DEADLINE_EXCEEDED", "message": "Ingestion deadline exceeded"},
             )
+            terminal_quality(session, job)
             return
         try:
             with span("market.ingestion.normalize", attributes=attributes):
                 observations = command.request.observations or provider.fetch(
                     command.dataset_spec
                 )
-                # Revalidate downloaded observations and batch duplicates before writing.
+                findings = validate_batch(observations, command.dataset_spec)
                 observations = IngestionRequest(observations=observations).observations
+                for asset_id in {row.asset_id for row in observations}:
+                    asset = session.get(Asset, asset_id)
+                    if asset and any(
+                        row.kind != asset.kind
+                        for row in observations
+                        if row.asset_id == asset_id
+                    ):
+                        raise QualityFailure(
+                            [finding("ASSET_MISMATCH")], len(observations)
+                        )
             with span("market.ingestion.persist", attributes=attributes) as current:
                 with session.begin_nested():
                     inserted = persist_observations(
-                        session, observations, command.dataset_spec
+                        session, observations, command.dataset_spec, job.id
                     )
+                session.add(
+                    QualityReport(
+                        job_id=job.id,
+                        status="PASS",
+                        report=report_json(
+                            job.id,
+                            "PASS",
+                            len(observations),
+                            findings,
+                            observations,
+                            command.dataset_spec,
+                        ),
+                    )
+                )
                 job.status, job.inserted_count = "SUCCEEDED", inserted
                 session.flush()
                 current.set_attribute("status", "SUCCEEDED")
@@ -73,6 +105,25 @@ def execute(sessions, provider, event):
                     status="SUCCEEDED",
                 )
         except (ValueError, KeyError, OSError, TypeError) as exc:
+            findings = (
+                exc.findings
+                if isinstance(exc, QualityFailure)
+                else [finding("INVALID_SOURCE")]
+            )
+            count = exc.row_count if isinstance(exc, QualityFailure) else 0
+            session.add(
+                QualityReport(
+                    job_id=job.id,
+                    status="QUARANTINED",
+                    report=report_json(
+                        job.id,
+                        "QUARANTINED",
+                        count,
+                        findings,
+                        spec=command.dataset_spec,
+                    ),
+                )
+            )
             job.status, job.error = (
                 "FAILED",
                 {
@@ -91,7 +142,7 @@ def execute(sessions, provider, event):
             )
 
 
-def persist_observations(session, observations, spec=None):
+def persist_observations(session, observations, spec=None, job_id=None):
     count = 0
     # Asset locks serialize revisions consistently, even for concurrent datasets.
     for asset_id in sorted({row.asset_id for row in observations}):
@@ -140,6 +191,7 @@ def persist_observations(session, observations, spec=None):
         now = utcnow()
         session.add(
             PriceRevision(
+                ingestion_job_id=job_id,
                 asset_id=row.asset_id,
                 observation_date=row.observation_date,
                 price_vnd=price,

@@ -8,6 +8,7 @@ from sqlalchemy import text
 from service_auth import AuthError, TokenVerifier
 from portfolio_contracts import ModelUnavailable
 from service_observability import configure, install_http_tracing
+from .publication_api import install_publication_api
 from .runtime import catalog_from_env, sessions_from_env
 
 
@@ -15,6 +16,7 @@ def create_app(*, sessions, verifier, catalog):
     app = FastAPI(title="Quant Serving", version="0.1.0")
     install_http_tracing(app)
     bearer = HTTPBearer(auto_error=False)
+    install_publication_api(app, sessions=sessions, verifier=verifier, bearer=bearer)
 
     @app.get("/health/live")
     def live():

@@ -97,3 +97,38 @@ Tests cover encrypted records/tampering, secure cookies, one-time login state, C
 This is a runnable foundation, not production certification: deployment still needs TLS ingress, secret rotation, dependency/image scanning, centralized rate limits, operational observability, administrative MFA policy and staging load/security checks. Next's static page CSP permits inline hydration; private mutations remain CSRF protected and the application never renders untrusted HTML.
 
 Library references: [openid-client](https://github.com/panva/openid-client), [Next.js security advisories](https://github.com/vercel/next.js/security/advisories), [Keycloak OIDC](https://www.keycloak.org/securing-apps/oidc-layers).
+
+Market Data Operations chạy tại `/#market` với tài khoản có role `data-operator`.
+BFF chuyển các endpoint đã allowlist tới `MARKET_API_URL` và `QUANT_API_URL`;
+access token chỉ ở server. Client Identity cần audience `portfolio-api`, `market-api`,
+`quant-api` và optional scopes `market:read market:write quant:publish` được request
+qua `OIDC_SCOPE`; API vẫn bắt buộc role/scope tương ứng. Local `upgrade.py` thêm
+cấu hình này mà không thay users hoặc secrets; đăng nhập lại để lấy claims mới.
+
+Luồng: đăng ký hash nguồn tin cậy → tạo ingestion → xem chất lượng → tạo snapshot
+→ xác nhận phát hành EW/MVO. Báo cáo lỗi lưu trên backend, lô không đạt bị cách ly.
+UI có phân trang, deep link báo cáo/job, trạng thái xử lý nền và checksum của nguồn.
+
+Browser gate riêng cần stack disposable đã có ba nguồn CSV giá thật được ghim
+SHA-256 (ví dụ nguồn pack `REAL_FPT_*`, `REAL_HPG_*`, `REAL_VCB_*`):
+
+```sh
+E2E_DISPOSABLE_STACK=1 npm run test:browser:market
+# Sau khi restart các API/worker/web thật:
+E2E_DISPOSABLE_STACK=1 npm run test:browser:market:persistence
+```
+
+`test:browser` tiếp tục chỉ chạy lifecycle DEMO độc lập với nguồn giá thật.
+Fixture Market tạo alias của bytes nguồn hiện có và một nguồn lỗi có nhãn
+synthetic; không sửa CSV thật, research data hoặc thông tin đăng nhập.
+
+Gate outage tùy chọn dừng riêng `market-api` local, quan sát worker RETRY rồi
+khởi động lại trong `finally`, chờ cùng job thành công và xác minh hash artifact:
+
+```sh
+E2E_DISPOSABLE_STACK=1 MARKET_OPS_RETRY_OUTAGE=1 npm run test:browser:market
+```
+
+Chạy gate này sau lifecycle Market thành công, trước khi kiểm tra restart receipt.
+Các gate giữ token/credentials trong memory, chỉ lưu bằng chứng đã lọc vào `output/`.
+Chi tiết phạm vi Figma và giới hạn hiện tại ở [Implementation status](../../docs/software/IMPLEMENTATION_STATUS.md).

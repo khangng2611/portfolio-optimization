@@ -62,7 +62,13 @@ def reconcile_identity(
     for scope in desired["clientScopes"]:
         if (
             scope["name"]
-            in ("basic", "market:read", "market:write", "market:snapshot:read")
+            in (
+                "basic",
+                "market:read",
+                "market:write",
+                "market:snapshot:read",
+                "quant:publish",
+            )
             and (
                 scope["name"] != "market:snapshot:read"
                 or values.get("MARKET_READER_CLIENT_SECRET")
@@ -105,19 +111,27 @@ def reconcile_identity(
                     f"{REALM}/clients/{identity}/default-client-scopes/{scopes[scope_name]['id']}"
                 )
                 response.raise_for_status()
-        if name not in ("portfolio-test", "quant-publisher"):
+        if name == "portfolio-web":
+            attached_optional = {
+                scope["name"]
+                for scope in get(f"/clients/{identity}/optional-client-scopes")
+            }
+            for scope_name in ("market:read", "market:write", "quant:publish"):
+                if scope_name not in attached_optional:
+                    response = client.put(
+                        f"{REALM}/clients/{identity}/optional-client-scopes/{scopes[scope_name]['id']}"
+                    )
+                    response.raise_for_status()
+        if name not in ("portfolio-test", "quant-publisher", "portfolio-web"):
             continue
         mappers = get(f"/clients/{identity}/protocol-mappers/models")
-        if not any(
-            mapper.get("config", {}).get("included.client.audience") == "market-api"
-            for mapper in mappers
-        ):
-            mapper = next(
-                mapper
-                for mapper in wanted["protocolMappers"]
-                if mapper["name"] == "audience-market-api"
-            )
-            post(f"/clients/{identity}/protocol-mappers/models", mapper)
+        for mapper in wanted["protocolMappers"]:
+            audience = mapper.get("config", {}).get("included.client.audience")
+            if audience and not any(
+                m.get("config", {}).get("included.client.audience") == audience
+                for m in mappers
+            ):
+                post(f"/clients/{identity}/protocol-mappers/models", mapper)
 
 
 def upgrade_databases() -> None:

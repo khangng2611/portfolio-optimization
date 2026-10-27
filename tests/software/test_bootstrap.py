@@ -69,7 +69,7 @@ def test_missing_existing_password_requires_restore_instead_of_rotation(tmp_path
     assert (tmp_path / "secrets.json").read_bytes() == before
 
 
-def test_market_audience_and_scopes_are_available_only_to_disposable_test_client(
+def test_market_scopes_optional_for_web_with_operator_backend_role_gate(
     tmp_path,
 ):
     bootstrap = load_bootstrap()
@@ -92,7 +92,12 @@ def test_market_audience_and_scopes_are_available_only_to_disposable_test_client
     assert [
         mapper["config"]["included.client.audience"]
         for mapper in web["protocolMappers"]
-    ] == ["portfolio-api"]
+    ] == ["portfolio-api", "market-api", "quant-api"]
+    assert set(web["optionalClientScopes"]) == {
+        "market:read",
+        "market:write",
+        "quant:publish",
+    }
     assert "portfolio-test" not in {
         client["clientId"]
         for client in bootstrap.make_realm(values, [], test_client=False)["clients"]

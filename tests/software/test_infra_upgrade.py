@@ -38,6 +38,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
                 "directAccessGrantsEnabled": True,
             },
         },
+        "optional": {},
         "defaults": {"test-id": [{"id": "portfolio-read", "name": "portfolio:read"}]},
         "mappers": {
             "test-id": [
@@ -78,6 +79,14 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         parts = path.strip("/").split("/")
         if len(parts) >= 3 and parts[0] == "clients":
             identity = parts[1]
+            if parts[2] == "optional-client-scopes":
+                if method == "GET":
+                    return httpx.Response(200, json=state["optional"].get(identity, []))
+                scope = next(
+                    scope for scope in state["scopes"] if scope["id"] == parts[3]
+                )
+                state["optional"].setdefault(identity, []).append(scope)
+                return httpx.Response(204)
             if parts[2] == "default-client-scopes":
                 if method == "GET":
                     return httpx.Response(200, json=state["defaults"].get(identity, []))
@@ -143,6 +152,14 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         mapper["config"]["included.client.audience"]
         for mapper in state["mappers"]["test-id"]
     } == {"portfolio-api", "market-api"}
+    assert {s["name"] for s in state["optional"]["web-id"]} == {
+        "market:read",
+        "market:write",
+        "quant:publish",
+    }
+    assert {
+        m["config"]["included.client.audience"] for m in state["mappers"]["web-id"]
+    } == {"portfolio-api", "market-api", "quant-api"}
     assert state["clients"]["market-api"]["bearerOnly"] is True
     publisher = state["clients"]["quant-publisher"]
     assert publisher["secret"] == "publisher-secret"
@@ -200,8 +217,8 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             if request.method == "GET":
                 return httpx.Response(200, json=scopes)
             value = json.loads(request.content)
-            assert value["name"] == "basic"
-            scopes.append(dict(value, id="basic"))
+            assert value["name"] in {"basic", "quant:publish"}
+            scopes.append(dict(value, id=value["name"]))
             return httpx.Response(201)
         if path == "/clients":
             if request.method == "GET":
@@ -224,6 +241,16 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             return httpx.Response(201)
         if path.endswith("/default-client-scopes") and request.method == "GET":
             return httpx.Response(200, json=[])
+        if path.endswith("/optional-client-scopes") and request.method == "GET":
+            return httpx.Response(200, json=[])
+        if "/optional-client-scopes/" in path and request.method == "PUT":
+            return httpx.Response(204)
+        if path.endswith("/protocol-mappers/models"):
+            return (
+                httpx.Response(200, json=[])
+                if request.method == "GET"
+                else httpx.Response(201)
+            )
         if path.endswith("/default-client-scopes/basic") and request.method == "PUT":
             return httpx.Response(204)
         raise AssertionError(

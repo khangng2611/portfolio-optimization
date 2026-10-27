@@ -34,3 +34,11 @@ it('keeps an editor draft in place when a background proposal finishes', () => {
   expect(proposalCompletionRoute({ view: 'proposal', portfolioId: pid, proposalId: rid }, pid, pid)).toBeNull();
   expect(proposalCompletionRoute({ view: 'proposal', portfolioId: pid }, pid, rid)).toEqual({ view: 'proposal', portfolioId: pid, proposalId: rid });
 });
+it('roundtrips operator report and immutable snapshot destinations after login or reload', () => {
+  const jobId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const snapshotId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  expect(parseWorkspaceHash(workspaceHash({ view: 'market-publications', jobId, snapshotId }))).toEqual({ view: 'market-publications', jobId, snapshotId });
+  expect(parseWorkspaceHash('#market-quality?job=' + jobId)).toEqual({ view: 'market-quality', jobId });
+  expect(parseWorkspaceHash('#market-quality?job=bad').invalid).toBe(true);
+  expect(parseWorkspaceHash('#market-quality?job=' + jobId + '&job=' + snapshotId).invalid).toBe(true);
+});

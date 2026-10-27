@@ -248,3 +248,30 @@ fails freshness validation. Changing request pins inside an already enqueued slo
 is a conflict: use a new schedule ID (and anchor) for a changed publication policy.
 `run --once` performs schedule enqueue and attempts one due job for manual recovery
 or an external supervisor. Avoid logging expanded Compose config; use `config --quiet`.
+
+### Market Data Operations (27/10/2026)
+
+Sau build service mới, chạy `market-migrate` tới head `a7b92401fd52`, rồi
+`python infra/local/upgrade.py` và recreate web để nhận các URL/scopes mới.
+Không cần reset volume, realm hoặc thay secret. Đăng nhập `data-operator` ở
+`http://localhost:3000/#market` (credentials local trong `.generated/accounts.json`).
+
+Kho nguồn tin cậy vẫn là `.generated/datasets/catalog.json` + CSV hash-pinned
+được mount read-only vào Market. `GET /api/v1/market/dataset-inventory` trả metadata
+an toàn; `POST /api/v1/market/datasets` nhận `{dataset_id, expected_sha256}` với
+Idempotency-Key để ghim spec vào SQL registry. Không nhận arbitrary URL/path.
+Khi đổi bytes/spec, tạo dataset ID mới; không sửa nguồn đã ghim.
+
+Ingestion qua outbox/broker, kiểm tra toàn lô trước khi ghi revision; báo cáo PASS,
+QUARANTINED hoặc NOT_CHECKED được lưu trong DB. Metadata missing basis/known-at
+có cảnh báo; lịch phiên chỉ được kiểm đủ khi nguồn có `expected_sessions`.
+Legacy revision được kiểm tra lại khi tạo snapshot; report cũ không được bịa/backfill.
+
+Snapshot mới ghim revision IDs/hash. Quant `POST /api/v1/market/publications` nhận
+snapshot ID/hash, universe ID, `max_age_days` từ 1–30 (mặc định 7), lookback mặc định 252,
+min_returns mặc định 60; role data-operator + scope quant:publish. API chỉ enqueue SQL;
+worker `quant-publication` là nơi ghi bundle/catalog. List/get chỉ thấy job do chính
+operator tạo. Human API chưa nhận model file hoặc tự train/approve BL+ML.
+
+Kiểm thử thật và restart receipt: xem `apps/web/README.md`. Gate phát hành dùng
+nguồn giá thật đã có trên máy; workflow CI DEMO không phụ thuộc upstream bên ngoài.

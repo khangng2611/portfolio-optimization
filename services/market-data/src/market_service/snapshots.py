@@ -3,7 +3,8 @@ from datetime import datetime, time, timezone
 from sqlalchemy import select
 
 from portfolio_contracts import aware, canonical_hash, utcnow
-from .models import PriceRevision, Snapshot
+from .models import Asset, PriceRevision, Snapshot, QualityReport
+from portfolio_contracts.market import UNITS
 
 
 def observation_json(row):
@@ -74,10 +75,36 @@ def build_snapshot(session, request):
             selected[0].observation_date - request.start_date
         ).days > request.max_age_days:
             raise ValueError(f"Missing start coverage for {asset_id}")
+        asset = session.get(Asset, asset_id)
+        for row in selected:
+            if (
+                not row.price_vnd.is_finite()
+                or row.price_vnd <= 0
+                or asset is None
+                or row.unit != UNITS[asset.kind]
+            ):
+                raise ValueError(f"Invalid selected price quality for {asset_id}")
+            if row.published_at and (
+                aware(row.published_at) > cutoff
+                or aware(row.published_at).date() < row.observation_date
+            ):
+                raise ValueError(f"Invalid selected availability for {asset_id}")
+            if row.ingestion_job_id:
+                report = session.get(QualityReport, row.ingestion_job_id)
+                if report is None or report.status != "PASS":
+                    raise ValueError(
+                        f"Selected observations have not passed quality for {asset_id}"
+                    )
+        if len({(row.unit, row.price_basis, row.data_origin) for row in selected}) != 1:
+            raise ValueError(
+                f"Inconsistent selected units, basis or origin for {asset_id}"
+            )
         observations.extend(observation_json(row) for row in selected)
     manifest = request.model_dump(mode="json") | {
         "schema_version": 1,
         "status": "READY",
+        "quality_status": "PASS",
+        "quality_basis": "validated-selected-revisions",
         "calendar": "observed-sessions-only",
         "observation_count": len(observations),
         "revision_ids": [row["revision_id"] for row in observations],

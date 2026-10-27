@@ -59,6 +59,9 @@ class PriceRevision(Base):
     available_at: Mapped[object] = mapped_column(DateTime(timezone=True))
     ingested_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
     source_hash: Mapped[str | None] = mapped_column(String(64))
+    ingestion_job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ingestion_job.id"), nullable=True, index=True
+    )
     data_origin: Mapped[str] = mapped_column(
         String(16), default="unverified", server_default="unverified"
     )
@@ -111,3 +114,36 @@ class Inbox(Base):
     __tablename__ = "inbox_event"
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     received_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RegisteredDataset(Base):
+    __tablename__ = "registered_dataset"
+    dataset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    spec: Mapped[dict] = mapped_column(JSON)
+    start_date: Mapped[object | None] = mapped_column(Date)
+    end_date: Mapped[object | None] = mapped_column(Date)
+    registered_by: Mapped[str] = mapped_column(ForeignKey("market_actor.id"))
+    registered_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class DatasetRegistrationReceipt(Base):
+    __tablename__ = "dataset_registration_receipt"
+    __table_args__ = (UniqueConstraint("actor_id", "idempotency_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("market_actor.id"))
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response: Mapped[dict] = mapped_column(JSON)
+
+
+class QualityReport(Base):
+    __tablename__ = "ingestion_quality_report"
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("ingestion_job.id"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(24))
+    report: Mapped[dict] = mapped_column(JSON)
+    checked_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)

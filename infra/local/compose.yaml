@@ -291,10 +291,12 @@ services:
       OIDC_CLIENT_ID: portfolio-web
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Run bootstrap.py}
       OIDC_AUDIENCE: portfolio-api
-      OIDC_SCOPE: openid profile email portfolio:read portfolio:write
+      OIDC_SCOPE: openid profile email portfolio:read portfolio:write market:read market:write quant:publish
       REDIS_URL: redis://:${REDIS_PASSWORD:?Run bootstrap.py}@redis:6379/0
       SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Run bootstrap.py}
       PORTFOLIO_API_URL: http://portfolio-api:8000
+      MARKET_API_URL: http://market-api:8000
+      QUANT_API_URL: http://quant-api:8000
       ALLOW_INSECURE_HTTP: "true"
     ports: ["127.0.0.1:3000:3000"]
     depends_on:

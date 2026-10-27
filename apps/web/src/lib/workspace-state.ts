@@ -1,13 +1,13 @@
-export type WorkspaceView = 'overview' | 'portfolios' | 'create' | 'proposal' | 'profile' | 'history' | 'edit' | 'compare';
-export type WorkspaceRoute = { view: WorkspaceView; portfolioId?: string; proposalId?: string; compareIds?: [string, string]; invalid?: boolean };
+export type WorkspaceView = 'overview' | 'portfolios' | 'create' | 'proposal' | 'profile' | 'history' | 'edit' | 'compare' | 'market' | 'market-ingestion' | 'market-quality' | 'market-snapshots' | 'market-publications';
+export type WorkspaceRoute = { view: WorkspaceView; portfolioId?: string; proposalId?: string; compareIds?: [string, string]; invalid?: boolean; jobId?: string; snapshotId?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const views: WorkspaceView[] = ['overview', 'portfolios', 'create', 'proposal', 'profile', 'history', 'edit', 'compare'];
+const views: WorkspaceView[] = ['overview', 'portfolios', 'create', 'proposal', 'profile', 'history', 'edit', 'compare', 'market', 'market-ingestion', 'market-quality', 'market-snapshots', 'market-publications'];
 export function parseWorkspaceHash(hash: string): WorkspaceRoute {
   const [name, query] = hash.replace(/^#/, '').split('?');
   const view = views.includes(name as WorkspaceView) ? name as WorkspaceView : 'overview';
   const params = new URLSearchParams(query);
   const route: WorkspaceRoute = { view };
-  for (const [key, field] of [['portfolio', 'portfolioId'], ['proposal', 'proposalId']] as const) {
+  for (const [key, field] of [['portfolio', 'portfolioId'], ['proposal', 'proposalId'], ['job', 'jobId'], ['snapshot', 'snapshotId']] as const) {
     const value = params.get(key);
     if (value && uuid.test(value) && params.getAll(key).length === 1) route[field] = value;
     else if (value) route.invalid = true;
@@ -24,6 +24,8 @@ export function workspaceHash(route: WorkspaceRoute): string {
   const params = new URLSearchParams();
   if (route.portfolioId) params.set('portfolio', route.portfolioId);
   if (route.proposalId) params.set('proposal', route.proposalId);
+  if (route.jobId) params.set('job', route.jobId);
+  if (route.snapshotId) params.set('snapshot', route.snapshotId);
   if (route.compareIds) { params.set('a', route.compareIds[0]); params.set('b', route.compareIds[1]); }
   return '#' + route.view + (params.size ? '?' + params.toString() : '');
 }

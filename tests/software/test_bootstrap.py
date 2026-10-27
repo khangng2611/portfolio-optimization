@@ -92,11 +92,14 @@ def test_market_scopes_optional_for_web_with_operator_backend_role_gate(
     assert [
         mapper["config"]["included.client.audience"]
         for mapper in web["protocolMappers"]
-    ] == ["portfolio-api", "market-api", "quant-api"]
+    ] == ["portfolio-api", "market-api", "quant-api", "ml-api"]
     assert set(web["optionalClientScopes"]) == {
         "market:read",
         "market:write",
         "quant:publish",
+        "ml:read",
+        "ml:train",
+        "ml:review",
     }
     assert "portfolio-test" not in {
         client["clientId"]

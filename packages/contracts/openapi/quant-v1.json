@@ -378,6 +378,18 @@
       },
       "PublicationRequest": {
         "properties": {
+          "approved_model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Model Id"
+          },
           "snapshot_id": {
             "type": "string",
             "format": "uuid",

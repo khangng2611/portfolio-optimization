@@ -222,3 +222,63 @@ def test_worker_rejects_wrong_hash_and_keeps_error_safe(api):
     assert result["status"] == "FAILED"
     assert result["safe_error"] == "PUBLICATION_INVALID"
     assert not (directory / "bundles/catalog.json").exists()
+
+
+def test_approved_model_id_is_resolved_server_side_and_persisted_without_client_paths(
+    api,
+):
+    client, sessions, pins, *_ = api
+    identity = str(uuid4())
+
+    class Resolver:
+        def resolve(self, model_id):
+            assert model_id == identity
+            return {
+                "file": "ml-models/" + str(uuid4()) + "/approved.json",
+                "sha256": "a" * 64,
+            }
+
+    model_client = TestClient(
+        create_app(
+            sessions=sessions,
+            verifier=Identities(),
+            catalog=None,
+            model_resolver=Resolver(),
+        )
+    )
+    response = model_client.post(
+        PATH, json=pins | {"approved_model_id": identity}, headers=headers()
+    )
+    assert response.status_code == 202, response.text
+    value = response.json()
+    assert value["request"]["approved_model_id"] == identity
+    assert "file" not in response.text and "ml-models" not in response.text
+    # Retry succeeds using durable receipt even if the ML service is now unavailable.
+    restarted = TestClient(
+        create_app(sessions=sessions, verifier=Identities(), catalog=None)
+    )
+    assert (
+        restarted.post(
+            PATH, json=pins | {"approved_model_id": identity}, headers=headers()
+        ).json()
+        == value
+    )
+    assert (
+        restarted.post(
+            PATH, json=pins | {"approved_model_id": str(uuid4())}, headers=headers()
+        ).status_code
+        == 409
+    )
+    with sessions() as session:
+        job = session.get(PublicationJob, value["job_id"])
+        assert job.request["model"]["sha256"] == "a" * 64
+
+
+def test_missing_model_resolver_fails_closed_without_enqueuing(api):
+    client, sessions, pins, *_ = api
+    response = client.post(
+        PATH, json=pins | {"approved_model_id": str(uuid4())}, headers=headers()
+    )
+    assert response.status_code == 503
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(PublicationJob)) == 0

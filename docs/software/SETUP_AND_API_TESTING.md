@@ -47,7 +47,8 @@ Mở [web](http://localhost:3000), đăng nhập với tài khoản local. Crede
 trong hai file ignored:
 
 - `infra/local/.generated/accounts.json`: `users[]` có `username`, `password`,
-  `roles`; dùng `alice`/`bob` cho kiểm thử owner và `data-operator` cho Market write.
+  `roles`; dùng `alice`/`bob` cho kiểm thử owner, `data-operator` cho Market/ML
+  training và `model-reviewer` cho duyệt/từ chối model.
 - `infra/local/.generated/.env`: `OIDC_TEST_CLIENT_SECRET` và
   `QUANT_CLIENT_SECRET` cho các request auth bên dưới.
 
@@ -59,7 +60,7 @@ thay password trong file không tự đổi password đã cài vào database/ide
 `--enable-test-client` cần được bật **trước lần realm import đầu tiên**. Client
 `portfolio-test` cho password grant chỉ phục vụ disposable local realm.
 Với stack cũ đã import, chạy lại lệnh `up --enable-test-client`: bước upgrade
-bổ sung client thiếu và Market scopes/audience qua admin API mà không reset
+bổ sung client thiếu và Portfolio/Market/Quant/ML scopes/audience qua admin API mà không reset
 realm. `portfolio-web` của trình duyệt luôn dùng authorization code + S256
 PKCE; password grant và implicit grant bị tắt.
 
@@ -72,6 +73,7 @@ PKCE; password grant và implicit grant bị tắt.
 | Portfolio Swagger | [localhost:8001/docs](http://localhost:8001/docs) |
 | Quant Swagger | [localhost:8002/docs](http://localhost:8002/docs) |
 | Market Data Swagger | [localhost:8003/docs](http://localhost:8003/docs) |
+| ML Platform Swagger | [localhost:8004/docs](http://localhost:8004/docs) |
 | OpenAPI JSON | `/openapi.json` trên mỗi API port |
 | Health | `/health/live`, `/health/ready` trên mỗi API port; không cần JWT |
 
@@ -90,6 +92,10 @@ Realm local cũ cần chạy bước upgrade để bổ sung; lấy token mới 
 | Market đọc | Human role hợp lệ + `market:read`, audience `market-api` |
 | Market ingestion/snapshot | Role `data-operator` + `market:write` |
 | Quant ready-input | Service token có `quant:resolve`, audience `quant-api` |
+| Quant publication | `data-operator` + `quant:publish`, audience `quant-api` |
+| ML đọc models/jobs | `data-operator` hoặc `model-reviewer` + `ml:read`, audience `ml-api`; training jobs giới hạn người tạo |
+| ML training | `data-operator` + `ml:train` |
+| ML review | `model-reviewer` + `ml:review` |
 
 Portfolio và Market ingestion job dùng issuer/subject từ JWT để giới hạn owner.
 Đổi token sang `bob` khi đọc portfolio/job/recommendation của `alice` phải nhận
@@ -111,12 +117,13 @@ client_id=portfolio-test
 client_secret=<OIDC_TEST_CLIENT_SECRET từ file ignored .env>
 username=<alice hoặc data-operator>
 password=<password tương ứng từ accounts.json>
-scope=openid portfolio:read portfolio:write market:read market:write
+scope=openid portfolio:read portfolio:write market:read market:write quant:publish ml:read ml:train ml:review
 ```
 
 Token của `alice` đọc được Market nhưng không được Market write vì thiếu role
 `data-operator`. Lấy token của `data-operator` cho ingestion/snapshot. Token test
-client có audiences Portfolio/Market; không dùng để gọi Quant internal API.
+client được upgrade các audiences Portfolio/Market/Quant/ML; quyền human không
+mở các endpoint internal service-to-service.
 Với Quant, dùng `grant_type=client_credentials`, `client_id=portfolio-service`,
 `client_secret=<QUANT_CLIENT_SECRET>`, `scope=quant:resolve`.
 
@@ -126,8 +133,9 @@ scheme rồi nhấn **Authorize** và **Close**. Chỉ dán token, không thêm 
 → **Execute**. Swagger gửi `Authorization: Bearer <token>` tự động. Nhận 401
 thì lấy access token mới; 403 thì kiểm tra role/scope/audience.
 
-Health endpoints dùng được trước khi authorize. Quant Swagger dành cho contract
-service-to-service; web không gọi Quant trực tiếp.
+Health endpoints dùng được trước khi authorize. Quant Swagger có cả contract
+service-to-service và operator publication; trình duyệt gọi allowlist qua BFF,
+không giữ Bearer token hay gọi trực tiếp service origin.
 
 ## 4. Postman: import và chạy theo thứ tự
 
@@ -267,10 +275,99 @@ trả 409 và không tạo snapshot READY. Đọc
 bằng token `market:read`. Ingest revision mới không sửa snapshot đã lưu; cùng
 nội dung snapshot tạo cùng content hash.
 
-Market ingestion/provider registry hiện là nền cho CSV stock/fund/gold.
-Chưa xác nhận có crawler live upstream. Market snapshot chưa tự xây prepared
-numerical bundle cho Quant; recommendation hiện dùng prepared bundles có
-provenance theo catalog riêng.
+CSV stock/fund/gold tiếp tục là một nguồn nhập tin cậy. P1 bổ sung adapter KBS
+stock trực tiếp, refresh jobs/snapshots và publication worker xây numerical
+bundle từ snapshot; investor recommendation dùng bundle đã publish với pins.
+Không nhận arbitrary provider URL/path từ client.
+
+## 6b. P1: refresh, training/review và đánh giá lại rủi ro
+
+Chạy lại setup `up` sau cập nhật source để bổ sung `ml_db`, các role DB riêng,
+`ml-migrate`, `ml-api`, `ml-worker`, `market-refresh` và scopes/clients còn thiếu.
+Giữ generated credentials và volumes; đăng nhập lại để nhận claims mới. API/worker
+runtime dùng credential của owner; migrator mới có quyền schema. Refresh worker
+chỉ ghi thư mục refresh, ML worker chỉ ghi model artifacts; API/readers và Quant
+optimizer giữ mount read-only. `quant-publication` riêng ghi bundle/catalog. ML
+đang dùng lại Quant training/feature helpers theo cách chuyển tiếp, không đổi
+thuật toán portfolio-core hay risk-policy mapping.
+
+Data operator mở `/#market-refresh`, xem lại rồi tạo schedule với
+`name`, `asset_ids`, `initial_start_date`, `interval_minutes`, `overlap_days`,
+`max_age_days`, `enabled`. API:
+
+- `GET/POST /api/v1/market/refresh-schedules`; `GET/PATCH /{id}`.
+- `GET/POST /api/v1/market/refresh-jobs`; `GET /{id}`. POST body chỉ có
+  `{"schedule_id":"SCHEDULE_UUID"}`.
+
+Mutations cần Idempotency-Key; PATCH cần If-Match lấy từ ETag hiện tại. Schedule
+mới enabled được đặt due ngay; bật lại schedule hiện có đặt lần sau theo interval.
+Manual run và timer dùng chung durable worker, lease/retry và schedule-version pin.
+Tắt schedule thử nghiệm khi hoàn tất. Không sửa DB hoặc đồng hồ để ép lịch chạy.
+
+Nguồn `kbs-direct-v1` fetch bounded stock symbols từ endpoint cố định, cutoff là
+ngày đã hoàn tất trước ngày hiện tại ở Asia/Ho_Chi_Minh. Mỗi run đối chiếu **toàn
+bộ lịch sử adjusted trong khoảng cấu hình**, vì corporate actions có thể sửa giá
+cũ; chỉ lưu thêm revision mới/thay đổi. `overlap_days` không biến network fetch
+thành incremental-only. Raw JSON, normalized CSV và manifest được ghim hash;
+quality phải PASS cho toàn bộ tài sản mới tạo snapshot. Giá là provider-adjusted
+close, chưa phải certified total return hay historical adjustment vintages.
+VNINDEX cung cấp calendar quan sát (`calendar_verified=false`), không phải lịch
+sàn đã chứng nhận; known-at theo ingestion không chứng minh historical PIT.
+
+Ở `/#model-training`, chọn snapshot UUID/hash và cutoff **trước ngày quan sát
+serving mới nhất**, rồi xem lại và gửi. `POST /api/v1/ml/training-jobs` nhận
+`snapshot_id`, `snapshot_hash`, `training_cutoff`, `lookback`, `min_returns`,
+`max_age_days` và Idempotency-Key; HTTP chỉ enqueue, không train trong handler.
+GET list/detail jobs trả trạng thái và model UUID khi thành công. Model bắt đầu
+CANDIDATE. Reviewer độc lập mở `/#model-review?model=UUID`:
+
+```text
+POST /api/v1/ml/models/{id}/reviews
+If-Match: "CURRENT_MODEL_VERSION"
+Idempotency-Key: REVIEW_INTENT_UUID
+
+{"decision":"APPROVED","reason":"Đã xem provenance và validation"}
+```
+
+`REJECTED` cũng cần reason; review không tự động và không được ghi đè quyết định
+đã lưu. Chờ `artifact_ready=true` sau APPROVED. Data operator chọn model UUID khi
+`POST /api/v1/market/publications` cùng snapshot/hash/universe và policy freshness;
+field `approved_model_id` được server resolve thành manifest hash pin, không dùng
+file/path/URL client cung cấp. API publish chỉ enqueue worker; bỏ model UUID thì
+publish EW/MVO. Model không tương thích/hết hạn hoặc nguồn không hợp lệ phải được
+xử lý theo status/error, không tăng ngưỡng chỉ để che lỗi.
+
+Investor mở `/#risk-assessment?portfolio=UUID`. POST
+`/api/v1/portfolios/{id}/risk-assessments/preview` với body
+`{"answers":{"questionnaire_version":"risk-v1","horizon_months":120,"liquidity_need":"low","loss_tolerance":"high","experience":"experienced"}}`
+trả before/after profile/constraints và portfolio version, không lưu assessment.
+POST cùng body tới `/risk-assessments`, thêm quoted If-Match từ version đã xem
+lại và Idempotency-Key, mới xác nhận revision UUID bất biến. Retry cùng key/body
+trả receipt cũ; khác body trả 409; phiên bản stale trả 412. GET `/risk-assessments`
+là array phân trang với count/limit/offset headers và `is_active`.
+
+Confirmation tăng version danh mục; accept pending proposal cũ trả 409 khi dùng
+version hiện tại. Tạo proposal mới để pin profile UUID/policy mới. Accepted target
+cũ và queued input hashes giữ nguyên; sửa manual constraints làm profile cũ hết
+active, không sửa lịch sử. Portfolio legacy không được bịa lịch sử assessment.
+
+Gate browser thật chạy từ `apps/web`:
+
+```sh
+E2E_DISPOSABLE_STACK=1 npm run test:browser:p1
+# Sau actual API/worker/web restart và health checks:
+E2E_DISPOSABLE_STACK=1 npm run test:browser:p1:persistence
+```
+
+Gate nguồn KBS này độc lập DEMO và không dùng HTTP mocks/SQL fake. Nó bao gồm
+manual + actual timer refresh, train/reviewer/publish, risk conflicts và BL_ML
+accepted target. Receipt không token: `.generated/p1-browser-receipt.json` bên
+trong `infra/local`; safe reporter ghi `output/playwright/sanitized/p1-lifecycle.json`
+và `p1-persistence.json`, không lưu credentials/auth URLs/raw call logs.
+Xem [restart commands](../../apps/web/tests/browser/README.md#p1-real-provider-model-and-risk-gate).
+Ngày 27/10/2026, lifecycle P1 nguồn thật và đối chiếu chính receipt sau restart
+đều đạt; P0/Market lifecycle và persistence cũng đạt. Xem bằng chứng/phạm vi
+ở [Implementation status](IMPLEMENTATION_STATUS.md).
 
 ## 7. Kiểm chứng persistence và chẩn đoán
 

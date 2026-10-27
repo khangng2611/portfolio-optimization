@@ -156,10 +156,13 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         "market:read",
         "market:write",
         "quant:publish",
+        "ml:read",
+        "ml:train",
+        "ml:review",
     }
     assert {
         m["config"]["included.client.audience"] for m in state["mappers"]["web-id"]
-    } == {"portfolio-api", "market-api", "quant-api"}
+    } == {"portfolio-api", "market-api", "quant-api", "ml-api"}
     assert state["clients"]["market-api"]["bearerOnly"] is True
     publisher = state["clients"]["quant-publisher"]
     assert publisher["secret"] == "publisher-secret"
@@ -217,7 +220,14 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             if request.method == "GET":
                 return httpx.Response(200, json=scopes)
             value = json.loads(request.content)
-            assert value["name"] in {"basic", "quant:publish"}
+            assert value["name"] in {
+                "basic",
+                "quant:publish",
+                "ml:read",
+                "ml:train",
+                "ml:review",
+                "ml:model:read",
+            }
             scopes.append(dict(value, id=value["name"]))
             return httpx.Response(201)
         if path == "/clients":
@@ -233,6 +243,7 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             value = json.loads(request.content)
             assert value["clientId"] in {
                 "market-api",
+                "ml-api",
                 "portfolio-web",
                 "portfolio-service",
             }
@@ -267,6 +278,7 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
         )
     assert {c["clientId"] for c in clients} == {
         "market-api",
+        "ml-api",
         "portfolio-web",
         "portfolio-service",
     }

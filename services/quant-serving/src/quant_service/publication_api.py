@@ -28,6 +28,7 @@ Status = Literal["QUEUED", "RUNNING", "RETRY", "SUCCEEDED", "FAILED"]
 class PublicationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    approved_model_id: UUID | None = None
     snapshot_id: UUID
     snapshot_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     universe_id: str = Field(pattern=r"^[A-Z0-9_-]{1,64}$")
@@ -62,7 +63,11 @@ def job_json(job):
         "job_id": job.id,
         "status_url": f"{PATH}/{job.id}",
         "status": job.status,
-        "request": {key: job.request[key] for key in PublicationRequest.model_fields},
+        "request": {
+            key: job.request[key]
+            for key in PublicationRequest.model_fields
+            if key in job.request
+        },
         "attempts": job.attempts,
         "max_attempts": job.max_attempts,
         "next_attempt_at": aware(job.next_attempt_at).isoformat(),
@@ -79,7 +84,7 @@ def job_json(job):
     }
 
 
-def install_publication_api(app, *, sessions, verifier, bearer):
+def install_publication_api(app, *, sessions, verifier, bearer, model_resolver=None):
     queue = PublicationQueue(sessions)
 
     @app.middleware("http")
@@ -114,6 +119,7 @@ def install_publication_api(app, *, sessions, verifier, bearer):
                 403: "FORBIDDEN",
                 404: "NOT_FOUND",
                 409: "CONFLICT",
+                503: "UNAVAILABLE",
             }.get(exc.status_code, "INVALID_REQUEST"),
             str(exc.detail),
             exc.headers,
@@ -168,7 +174,35 @@ def install_publication_api(app, *, sessions, verifier, bearer):
             )
         key = actor_prefix(identity) + canonical_hash({"key": idempotency_key})
         try:
-            job = queue.enqueue(key, body.model_dump(mode="json"))
+            raw = body.model_dump(mode="json", exclude_none=True)
+            # A durable existing receipt requires no remote resolution on retries.
+            with sessions() as session:
+                existing = session.scalar(
+                    select(PublicationJob).where(PublicationJob.idempotency_key == key)
+                )
+                if existing is not None:
+                    original = {
+                        field: existing.request[field]
+                        for field in PublicationRequest.model_fields
+                        if field in existing.request
+                    }
+                    if original != raw:
+                        raise IdempotencyConflict()
+                    return job_json(existing)
+            if body.approved_model_id is not None:
+                if model_resolver is None:
+                    raise HTTPException(503, "Approved model resolver unavailable")
+                try:
+                    raw["model"] = model_resolver.resolve(str(body.approved_model_id))
+                except ModelResolutionUnavailable:
+                    raise HTTPException(
+                        409, "Approved model unavailable or incompatible"
+                    ) from None
+                except Exception:
+                    raise HTTPException(
+                        503, "Approved model resolver temporarily unavailable"
+                    ) from None
+            job = queue.enqueue(key, raw)
         except IdempotencyConflict:
             raise HTTPException(
                 409, "Idempotency-Key already used with another input"
@@ -217,3 +251,56 @@ def install_publication_api(app, *, sessions, verifier, bearer):
         if job is None or not job.idempotency_key.startswith(actor_prefix(identity)):
             raise HTTPException(404, "Publication job not found")
         return job_json(job)
+
+
+class ModelResolutionUnavailable(ValueError):
+    pass
+
+
+class CredentialModelResolver:
+    """Resolve a human UUID with a scoped service identity, never a client path."""
+
+    def resolve(self, model_id):
+        import os
+        from pathlib import PurePosixPath
+        import httpx
+        from .ml import ArtifactRef
+
+        identity = str(UUID(model_id))
+        with httpx.Client(timeout=15, follow_redirects=False) as client:
+            token = client.post(
+                os.environ["OIDC_TOKEN_URL"],
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": "quant-ml-reader",
+                    "client_secret": os.environ["ML_READER_CLIENT_SECRET"],
+                    "scope": "ml:model:read",
+                },
+            )
+            token.raise_for_status()
+            response = client.get(
+                os.environ["ML_API_URL"].rstrip("/")
+                + "/internal/v1/ml/models/"
+                + identity
+                + "/manifest",
+                headers={"Authorization": "Bearer " + token.json()["access_token"]},
+            )
+            if response.status_code in {404, 409}:
+                raise ModelResolutionUnavailable()
+            response.raise_for_status()
+            if len(response.content) > 4096:
+                raise ModelResolutionUnavailable()
+            value = response.json()
+            ref = ArtifactRef.model_validate(value["manifest"])
+            path = PurePosixPath(ref.file)
+            if (
+                value["model_id"] != identity
+                or path.is_absolute()
+                or len(path.parts) != 3
+                or path.parts[0] != "ml-models"
+                or ".." in path.parts
+                or path.suffix != ".json"
+            ):
+                raise ModelResolutionUnavailable()
+            UUID(path.parts[1])
+            return ref.model_dump()

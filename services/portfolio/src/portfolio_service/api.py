@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field, StringConstraints
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from portfolio_contracts import (
@@ -33,7 +33,15 @@ from service_observability import (
     span,
     trace_fields,
 )
-from .models import AcceptedTarget, Job, Outbox, Portfolio, Recommendation, User
+from .models import (
+    AcceptedTarget,
+    Job,
+    Outbox,
+    Portfolio,
+    Recommendation,
+    RiskAssessment,
+    User,
+)
 from .policy import RiskAnswers, risk_policy
 from .workflow import validate_result
 
@@ -70,6 +78,40 @@ class OnboardingPortfolio(StrictModel):
     answers: RiskAnswers
 
 
+class RiskAssessmentRequest(StrictModel):
+    answers: RiskAnswers
+
+
+class RiskPolicyState(StrictModel):
+    risk_profile: dict | None
+    constraints: Constraints
+    policy_version_id: str
+
+
+class RiskAssessmentPreview(StrictModel):
+    portfolio_id: UUID
+    portfolio_version: int
+    before: RiskPolicyState
+    after: RiskPolicyState
+
+
+class RiskAssessmentRevision(StrictModel):
+    id: UUID
+    portfolio_id: UUID
+    portfolio_version: int
+    reason: Literal["onboarding", "reassessment"]
+    created_at: datetime
+    answers: RiskAnswers
+    constraints: Constraints
+    risk_profile: dict
+    mapping_version: str
+    policy_version_id: str
+
+
+class RiskAssessmentHistoryEntry(RiskAssessmentRevision):
+    is_active: bool
+
+
 class PortfolioUpdate(StrictModel):
     name: str | None = Field(default=None, min_length=1, max_length=120, pattern=r"\S")
     capital_vnd: Decimal | None = Field(
@@ -97,6 +139,12 @@ class StrategyReadiness(StrictModel):
 
 
 class InputReadiness(StrictModel):
+    # Additive diagnostics only: immutable ReadyInput execution pins are unchanged.
+    bundle_id: str | None = None
+    bundle_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    snapshot_id: str | None = None
+    approved_model_id: UUID | None = None
+    model_manifest_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     universe_id: str = Field(pattern=r"^[A-Z0-9_-]{1,64}$")
     asset_ids: list[str]
     as_of_date: date | None
@@ -110,11 +158,50 @@ class InputReadiness(StrictModel):
     checked_at: datetime
 
 
+def profile_policy_id(profile):
+    if not profile:
+        return "manual-constraints-v1"
+    legacy = f"risk-policy-v1:{profile['profile']}"
+    return f"{legacy}:{profile['version_id']}" if profile.get("version_id") else legacy
+
+
 def policy_id(value):
-    return (
-        f"risk-policy-v1:{value.risk_profile['profile']}"
-        if value.risk_profile
-        else "manual-constraints-v1"
+    return profile_policy_id(value.risk_profile)
+
+
+def assessment_json(value):
+    return {
+        "id": value.id,
+        "portfolio_id": value.portfolio_id,
+        "portfolio_version": value.portfolio_version,
+        "reason": value.reason,
+        "created_at": aware(value.created_at).isoformat(),
+        "answers": value.answers,
+        "constraints": value.constraints,
+        "risk_profile": value.risk_profile,
+        "mapping_version": value.mapping_version,
+        "policy_version_id": value.policy_version_id,
+    }
+
+
+def assessment_revision(
+    portfolio, profile, constraints, *, reason, key=None, body_hash=None
+):
+    revision_id = str(uuid4())
+    profile = profile | {"version_id": revision_id}
+    return RiskAssessment(
+        id=revision_id,
+        portfolio_id=portfolio.id,
+        owner_user_id=portfolio.owner_user_id,
+        portfolio_version=portfolio.version,
+        reason=reason,
+        answers=profile["answers"],
+        constraints=constraints,
+        risk_profile=profile,
+        mapping_version=profile["mapping_version"],
+        policy_version_id=profile_policy_id(profile),
+        idempotency_key=key,
+        body_hash=body_hash,
     )
 
 
@@ -356,6 +443,12 @@ def create_app(*, sessions, verifier, resolver):
             )
             session.add(value)
             session.flush()
+            revision = assessment_revision(
+                value, profile, constraints.model_dump(), reason="onboarding"
+            )
+            value.risk_profile = revision.risk_profile
+            session.add(revision)
+            session.flush()
             return portfolio_json(value)
 
     def owned_portfolio(session, portfolio_id, user_id, *, lock=False):
@@ -366,6 +459,138 @@ def create_app(*, sessions, verifier, resolver):
         if value is None:
             raise HTTPException(404, "Không tìm thấy danh mục.")
         return value
+
+    @app.post(
+        "/api/v1/portfolios/{portfolio_id}/risk-assessments/preview",
+        response_model=RiskAssessmentPreview,
+    )
+    def preview_risk_assessment(
+        portfolio_id: UUID,
+        body: RiskAssessmentRequest,
+        response: Response,
+        user_id=Depends(owner),
+    ):
+        profile, constraints = risk_policy(body.answers)
+        with sessions() as session:
+            value = owned_portfolio(session, portfolio_id, user_id)
+            response.headers["ETag"] = f'"{value.version}"'
+            return {
+                "portfolio_id": value.id,
+                "portfolio_version": value.version,
+                "before": {
+                    "risk_profile": value.risk_profile,
+                    "constraints": value.constraints,
+                    "policy_version_id": policy_id(value),
+                },
+                "after": {
+                    "risk_profile": profile,
+                    "constraints": constraints.model_dump(),
+                    "policy_version_id": profile_policy_id(profile),
+                },
+            }
+
+    @app.get(
+        "/api/v1/portfolios/{portfolio_id}/risk-assessments",
+        response_model=list[RiskAssessmentHistoryEntry],
+    )
+    def list_risk_assessments(
+        portfolio_id: UUID,
+        response: Response,
+        limit: int = Query(default=100, ge=1, le=100),
+        offset: int = Query(default=0, ge=0, le=1_000_000),
+        user_id=Depends(owner),
+    ):
+        with sessions() as session:
+            value = owned_portfolio(session, portfolio_id, user_id)
+            query = select(RiskAssessment).where(
+                RiskAssessment.portfolio_id == value.id,
+                RiskAssessment.owner_user_id == user_id,
+            )
+            page_headers(response, session, query, limit, offset)
+            response.headers["ETag"] = f'"{value.version}"'
+            active_id = (value.risk_profile or {}).get("version_id")
+            return [
+                assessment_json(revision) | {"is_active": revision.id == active_id}
+                for revision in session.scalars(
+                    query.order_by(
+                        RiskAssessment.portfolio_version.desc(), RiskAssessment.id.asc()
+                    )
+                    .limit(limit)
+                    .offset(offset)
+                )
+            ]
+
+    @app.post(
+        "/api/v1/portfolios/{portfolio_id}/risk-assessments",
+        status_code=201,
+        response_model=RiskAssessmentRevision,
+    )
+    def confirm_risk_assessment(
+        portfolio_id: UUID,
+        body: RiskAssessmentRequest,
+        response: Response,
+        user_id=Depends(owner),
+        if_match: str | None = Header(default=None),
+        idempotency_key: str | None = Header(default=None),
+    ):
+        profile, constraints = risk_policy(body.answers)
+        body_hash = canonical_hash(body.model_dump())
+        with sessions.begin() as session:
+            value = owned_portfolio(session, portfolio_id, user_id, lock=True)
+            if if_match is None:
+                raise HTTPException(428, "Cần If-Match từ phiên bản danh mục hiện tại.")
+            if (
+                not idempotency_key
+                or not 1 <= len(idempotency_key) <= 128
+                or any(ord(c) < 33 or ord(c) > 126 for c in idempotency_key)
+            ):
+                raise HTTPException(
+                    400, "Cần Idempotency-Key hợp lệ (1–128 ký tự ASCII)."
+                )
+            existing = session.scalar(
+                select(RiskAssessment).where(
+                    RiskAssessment.portfolio_id == value.id,
+                    RiskAssessment.owner_user_id == user_id,
+                    RiskAssessment.idempotency_key == idempotency_key,
+                )
+            )
+            if existing:
+                if existing.body_hash != body_hash:
+                    raise HTTPException(
+                        409, "Idempotency-Key đã dùng cho nội dung khác."
+                    )
+                response.headers["ETag"] = f'"{existing.portfolio_version}"'
+                return assessment_json(existing)
+            if if_match != f'"{value.version}"':
+                raise HTTPException(412, "Danh mục đã thay đổi, hãy tải lại.")
+            # The row lock serializes confirmations on PostgreSQL; the version
+            # predicate also protects engines without row-level FOR UPDATE.
+            version = value.version
+            revision = assessment_revision(
+                value,
+                profile,
+                constraints.model_dump(),
+                reason="reassessment",
+                key=idempotency_key,
+                body_hash=body_hash,
+            )
+            revision.portfolio_version = version + 1
+            changed = session.execute(
+                update(Portfolio)
+                .where(Portfolio.id == value.id, Portfolio.version == version)
+                .values(
+                    version=version + 1,
+                    constraints=revision.constraints,
+                    risk_profile=revision.risk_profile,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if changed.rowcount != 1:
+                raise HTTPException(412, "Danh mục đã thay đổi, hãy tải lại.")
+            session.add(revision)
+            session.flush()
+            response.headers["ETag"] = f'"{revision.portfolio_version}"'
+            return assessment_json(revision)
 
     @app.get(
         "/api/v1/portfolios/{portfolio_id}/readiness", response_model=InputReadiness

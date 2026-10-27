@@ -1,9 +1,11 @@
 # Local software stack
 
 This Compose project is **local development only**: it explicitly permits HTTP,
-uses disposable generated accounts and mounts a synthetic numerical bundle. It
-does not configure production identity, live upstream market crawling, trained ML models or TLS.
-Market CSV ingestion uses a synthetic, server-registered dataset.
+uses disposable generated accounts and retains a synthetic DEMO bundle. Operator
+flows also support trusted KBS stock refresh, snapshot-based manual XGBoost
+training, reviewer approval and publication. These flows use real upstream I/O
+when requested; DEMO remains separately labelled. Production identity and TLS
+are not configured.
 All published ports bind to `127.0.0.1`.
 
 From the repository root, use the setup entry point for either a new or existing
@@ -44,6 +46,7 @@ enabling the flag; bootstrap alone changes only generated configuration.
 | Portfolio API | <http://localhost:8001> |
 | Quant API | <http://localhost:8002> |
 | Market Data API / Swagger | <http://localhost:8003> / <http://localhost:8003/docs> |
+| ML API / Swagger | <http://localhost:8004> / <http://localhost:8004/docs> |
 | PostgreSQL | `localhost:5433` |
 | RabbitMQ AMQP / management | `localhost:5673` / <http://localhost:15673> |
 | Redis | `localhost:6380` |
@@ -57,8 +60,10 @@ owner, and a runtime role with DML and sequence use only. `PUBLIC` database and
 schema privileges are revoked. There are no cross-database application grants.
 Keycloak's one-shot `identity-migrate` service imports the realm and migrates its
 schema; normal Keycloak startup validates it with a restricted runtime role.
-Alembic migrations for Portfolio, Quant and Market run in separate init containers.
-Market owns `market_db`, its revisions, jobs and immutable snapshots.
+Alembic migrations for Portfolio, Quant, Market and ML run in separate init containers.
+Market owns `market_db`, its revisions, jobs and immutable snapshots. ML Platform
+owns `ml_db`, training jobs, candidate registry and immutable review decisions.
+`ml-migrate`, `ml-api` and `ml-worker` have separate migration/runtime duties.
 
 RabbitMQ's `portfolio` vhost has predeclared direct exchanges
 `portfolio.commands`, `portfolio.events`, `market.commands` and `portfolio.dead`.
@@ -86,10 +91,12 @@ unchanged. Both adapters reread catalogs for each request, so a catalog refresh
 needs no process restart. Market jobs record the accepted dataset hash and reject
 changed registrations rather than silently ingesting different input.
 
-The test client receives Market read/write scopes and `market-api` audience in
-addition to Portfolio access. The normal BFF client keeps only its Portfolio
-scopes/audience. Market ingestion also checks role `data-operator`; granting a
-scope alone does not authorize an investor to ingest data.
+The test and normal BFF clients support the configured Portfolio, Market, Quant
+and ML audiences/scopes. The BFF requests `market:read market:write quant:publish
+ml:read ml:train ml:review` alongside Portfolio scopes. Each service still checks
+its required role and scope: an investor cannot refresh data, train, approve or
+publish merely because a scope is present. Reauthenticate after an additive
+realm upgrade to receive the current claims.
 
 ## Optional local tracing
 
@@ -118,7 +125,7 @@ limits of local collection. Only new instrumented jobs have a real timeline.
 ## Upgrade an existing local stack
 
 Keep the existing ignored `.generated` directory and its matching volumes.
-Bootstrap appends only the four newly introduced Market credentials and never
+Bootstrap appends missing Market/ML service credentials and never
 replaces an existing password/session key. A missing previously required credential
 still fails and asks you to restore the matching `secrets.json`. Do not delete
 volumes or rotate a config file to get past this failure.
@@ -137,9 +144,9 @@ docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yam
 `upgrade.py` uses fixed localhost endpoints and the named local Compose project.
 It applies conditional PostgreSQL role/database creation and privileges to an
 already initialized volume, imports only Market broker accounts/topology and
-extends the dead-letter policy, then adds missing Market scopes/audience to the
-imported Keycloak realm. When `--enable-test-client` is recorded in settings, it
-creates a missing local test client or adds its Market scope/audience. It preserves
+extends the dead-letter policy, then adds missing Market/ML/Quant scopes,
+audiences and service clients to the imported Keycloak realm. When `--enable-test-client` is recorded in settings, it
+creates a missing local test client or adds its required scopes/audiences. It preserves
 existing realm users, passwords, BFF configuration and existing client secrets.
 The process can be repeated; a component failure stops with a redacted error and
 can be retried after the dependencies recover. It never clears database records,
@@ -271,7 +278,75 @@ Snapshot mới ghim revision IDs/hash. Quant `POST /api/v1/market/publications` 
 snapshot ID/hash, universe ID, `max_age_days` từ 1–30 (mặc định 7), lookback mặc định 252,
 min_returns mặc định 60; role data-operator + scope quant:publish. API chỉ enqueue SQL;
 worker `quant-publication` là nơi ghi bundle/catalog. List/get chỉ thấy job do chính
-operator tạo. Human API chưa nhận model file hoặc tự train/approve BL+ML.
+operator tạo. Human API nhận thêm `approved_model_id` để resolve model đã duyệt từ ML Platform;
+không nhận model file/path tùy ý, không tự train/approve BL+ML.
 
 Kiểm thử thật và restart receipt: xem `apps/web/README.md`. Gate phát hành dùng
 nguồn giá thật đã có trên máy; workflow CI DEMO không phụ thuộc upstream bên ngoài.
+
+
+## P1: refresh, model operations and risk reassessment
+
+Run the normal additive setup after updating source; keep `.generated`, secrets
+and matching volumes. It provisions `ml_db` roles and runs all four application
+migrations. New processes are `market-refresh`, `ml-api` (loopback port 8004) and
+`ml-worker`; `quant-publication` resolves approved model IDs through ML API.
+
+Data operators use `/#market-refresh` or `/api/v1/market/refresh-schedules`
+(GET/POST, individual GET/PATCH) and `/api/v1/market/refresh-jobs` (GET/POST and
+individual GET). Create/update/manual-run mutations require Idempotency-Key;
+schedule PATCH also requires If-Match. Enabled schedules enqueue real timer jobs;
+manual runs use the same durable worker. New schedules start due immediately;
+subsequent ticks coalesce missed intervals and do not create an unbounded backlog.
+Disable a test schedule when finished. Accepted jobs retain their schedule version.
+
+`kbs-direct-v1` uses fixed server-owned KBS endpoints for bounded stock symbols
+and the previous completed Asia/Ho_Chi_Minh day. Each run reconciles the full
+configured provider-adjusted history, preserving immutable raw/normalized hashes
+and inserting only new/changed price revisions. It is not an overlap-only network
+fetch: older adjusted prices can change after corporate actions. The source is
+provider-adjusted close, not certified total return or historical adjustment
+vintages. VNINDEX bars supply an **observed** session calendar
+(`calendar_verified=false`); ingestion availability is not historical point-in-time
+knowledge. All assets must pass quality before the immutable snapshot is created.
+The existing trusted CSV workflow remains available independently.
+
+The refresh worker alone mounts `.generated/datasets/refresh` read/write; Market
+API/ingestion readers mount it read-only. ML worker alone writes
+`.generated/ml-models`; ML API, Quant API/optimizer and publication worker read
+model artifacts read-only. Only `quant-publication` writes the serving bundle
+catalog. Runtime database roles cannot migrate schemas or access another owner DB.
+
+At `/#model-training`, an operator explicitly submits snapshot ID/hash, training
+cutoff, lookback and freshness policy to `POST /api/v1/ml/training-jobs`. HTTP only
+enqueues SQL work. The worker trains a candidate; it never approves it. A separate
+`model-reviewer` uses `/#model-review?model=UUID` and
+`POST /api/v1/ml/models/{id}/reviews` with reason, If-Match and Idempotency-Key to
+approve or reject. Approval artifact materialization is asynchronous; publication
+requires `artifact_ready=true`. `POST /api/v1/market/publications` accepts the
+approved UUID as `approved_model_id`, resolved server-side to immutable manifest
+pins. Legacy trusted CLI manifest pins remain supported. ML currently imports
+Quant's existing versioned training/feature helpers as a transitional package
+coupling; it owns its database/artifacts and does not change the core algorithm.
+
+Investors use `/#risk-assessment?portfolio=UUID`. Portfolio's owner-scoped
+`POST /api/v1/portfolios/{id}/risk-assessments/preview` maps answers without saving.
+GET `/risk-assessments` returns paginated immutable revisions; POST confirms with
+If-Match and Idempotency-Key, increments portfolio version and returns a durable
+revision receipt. Stale confirmations return 412; pending proposals from the old
+portfolio version cannot be accepted (409). New proposals pin the risk UUID/policy;
+existing queued hashes and accepted allocations remain unchanged. Manual constraint
+edits deactivate the active questionnaire profile without rewriting its history.
+Legacy portfolios receive no invented assessment backfill.
+
+P1 browser commands and token-free restart receipts are documented in
+[the browser gate](../../apps/web/tests/browser/README.md#p1-real-provider-model-and-risk-gate).
+On 27 October 2026, the real KBS P1 lifecycle and same-receipt verification
+after restarting 14 application processes passed. P0 and Market lifecycle/restart
+regressions also passed; see the implementation status for exact scope.
+
+Refresh histories stay fixed at the configured start and are bounded to 3,650
+days. If a schedule ages beyond that window, the timer disables it without
+moving its start or creating another job; the API/UI marks the history expired.
+Manual refresh rejects an expired window before enqueueing. Operators can still
+disable it, or update its start/create a new schedule; old snapshots stay intact.

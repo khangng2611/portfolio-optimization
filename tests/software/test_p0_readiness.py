@@ -44,6 +44,11 @@ def test_catalog_readiness_explains_missing_model_without_disabling_market_strat
         "BL_ML": (False, "MODEL_UNAVAILABLE"),
     }
     assert set(value) == {
+        "bundle_id",
+        "bundle_hash",
+        "snapshot_id",
+        "approved_model_id",
+        "model_manifest_hash",
         "universe_id",
         "asset_ids",
         "as_of_date",
@@ -278,3 +283,164 @@ def test_resolver_handles_non_json_dependency_errors(
     monkeypatch.setattr(httpx, "get", unavailable)
     with pytest.raises(httpx.HTTPStatusError):
         resolver.readiness("DEMO")
+
+
+def test_readiness_exposes_selected_approved_model_pins_with_one_inference(
+    ml_catalog, monkeypatch
+):
+    import quant_service.artifacts as artifacts
+    from portfolio_service.api import InputReadiness
+
+    store, path, bundle, _ = ml_catalog
+    native = artifacts.infer
+    calls = []
+
+    def count_inference(*args, **kwargs):
+        calls.append(True)
+        return native(*args, **kwargs)
+
+    monkeypatch.setattr(artifacts, "infer", count_inference)
+    manifest = json.loads(
+        (path / bundle["ml_inference"]["manifest"]["file"]).read_text()
+    )
+    old_pins = store.ready("DEMO", "EW").model_dump()
+    result = store.readiness("DEMO")
+    assert result["approved_model_id"] == manifest["model_id"]
+    assert result["model_manifest_hash"] == bundle["model_bundle_id"]
+    assert result["bundle_id"] == old_pins["bundle_id"]
+    assert result["bundle_hash"] == old_pins["bundle_hash"]
+    assert result["snapshot_id"] == old_pins["snapshot_id"]
+    assert strategy_codes(result)["BL_ML"] == (True, "READY")
+    assert len(calls) == 1
+    assert store.ready("DEMO", "EW").model_dump() == old_pins
+    assert (
+        str(InputReadiness.model_validate(result).approved_model_id)
+        == manifest["model_id"]
+    )
+
+
+def test_expired_selected_model_remains_identifiable_without_inference_or_fallback(
+    ml_catalog, monkeypatch
+):
+    import quant_service.artifacts as artifacts
+
+    store, path, bundle, _ = ml_catalog
+    manifest = json.loads(
+        (path / bundle["ml_inference"]["manifest"]["file"]).read_text()
+    )
+    expired = copy.deepcopy(bundle)
+    expired["bundle_id"] = "expired-selected-model"
+    expired["valid_until"] = (utcnow() - timedelta(seconds=1)).isoformat()
+    write_bundle(path, expired)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Expired readiness must not perform inference")
+
+    monkeypatch.setattr(artifacts, "infer", forbidden)
+    result = store.readiness("DEMO")
+    assert result["bundle_id"] == "expired-selected-model"
+    assert result["approved_model_id"] == manifest["model_id"]
+    assert result["model_manifest_hash"] == bundle["model_bundle_id"]
+    assert result["status"] == "EXPIRED"
+    assert strategy_codes(result)["BL_ML"] == (False, "INPUT_EXPIRED")
+
+
+@pytest.mark.parametrize("mutation", ["missing", "corrupt", "candidate", "wrong_hash"])
+def test_readiness_never_advertises_unverified_or_unapproved_model_identity(
+    ml_catalog, mutation
+):
+    store, path, original, candidate = ml_catalog
+    bundle = copy.deepcopy(original)
+    if mutation == "missing":
+        (path / bundle["ml_inference"]["manifest"]["file"]).unlink()
+    elif mutation == "corrupt":
+        (path / bundle["ml_inference"]["manifest"]["file"]).write_text(
+            "private=/operator/path"
+        )
+    elif mutation == "candidate":
+        bundle["ml_inference"]["manifest"] = candidate
+        bundle["model_bundle_id"] = candidate["sha256"]
+    else:
+        bundle["model_bundle_id"] = "0" * 64
+    write_bundle(path, bundle)
+    result = store.readiness("DEMO")
+    assert result["approved_model_id"] is None
+    assert result["model_manifest_hash"] is None
+    assert not next(s for s in result["strategies"] if s["strategy"] == "BL_ML")[
+        "available"
+    ]
+    assert "private" not in json.dumps(result)
+
+
+def test_legacy_or_unknown_readiness_defaults_new_optional_model_fields(catalog):
+    from portfolio_service.api import InputReadiness
+
+    store, _ = catalog
+    for result in (store.readiness("DEMO"), store.readiness("UNKNOWN")):
+        assert (
+            result["approved_model_id"] is None
+            and result["model_manifest_hash"] is None
+        )
+        legacy = {
+            key: value
+            for key, value in result.items()
+            if key
+            not in {
+                "bundle_id",
+                "bundle_hash",
+                "snapshot_id",
+                "approved_model_id",
+                "model_manifest_hash",
+            }
+        }
+        parsed = InputReadiness.model_validate(legacy)
+        assert parsed.approved_model_id is None and parsed.bundle_id is None
+
+
+def test_portfolio_readiness_passes_through_verified_serving_model_pins(
+    stack, ml_catalog
+):
+    client, sessions = stack
+    pid = portfolio(client)
+    store, path, bundle, _ = ml_catalog
+    manifest = json.loads(
+        (path / bundle["ml_inference"]["manifest"]["file"]).read_text()
+    )
+    with TestClient(
+        create_app(sessions=sessions, verifier=Verifier(), resolver=store)
+    ) as api:
+        for route in (
+            "/api/v1/universes/readiness",
+            f"/api/v1/portfolios/{pid}/readiness",
+        ):
+            response = api.get(route, headers=headers())
+            assert response.status_code == 200, response.text
+            value = response.json()
+            value = value[0] if isinstance(value, list) else value
+            assert value["approved_model_id"] == manifest["model_id"]
+            assert value["model_manifest_hash"] == bundle["model_bundle_id"]
+            assert value["bundle_id"] == bundle["bundle_id"]
+
+
+@pytest.mark.parametrize("mutation", ["future_features", "missing_native"])
+def test_readiness_retains_verified_model_selection_when_serving_is_incompatible(
+    ml_catalog, mutation
+):
+    store, path, original, _ = ml_catalog
+    bundle = copy.deepcopy(original)
+    manifest = json.loads(
+        (path / bundle["ml_inference"]["manifest"]["file"]).read_text()
+    )
+    if mutation == "future_features":
+        bundle["ml_inference"]["feature_date"] = (
+            utcnow().date() + timedelta(days=1)
+        ).isoformat()
+    else:
+        (path / manifest["model"]["file"]).unlink()
+    write_bundle(path, bundle)
+    value = store.readiness("DEMO")
+    assert value["approved_model_id"] == manifest["model_id"]
+    assert value["model_manifest_hash"] == bundle["model_bundle_id"]
+    assert not next(s for s in value["strategies"] if s["strategy"] == "BL_ML")[
+        "available"
+    ]

@@ -147,8 +147,16 @@ def infer(directory, value, *, allow_demo=False):
     rows = (rows - manifest.scaler_mean) / manifest.scaler_scale
     if not np.isfinite(rows).all():
         raise ValueError("Invalid scaled features")
+    # Model-native references belong to the hash-pinned manifest directory.
+    # Root-level legacy CLI manifests keep exactly their previous resolution.
+    native_directory = (
+        (Path(directory).resolve() / batch.manifest.file).resolve().parent
+    )
     native = read_artifact(
-        directory, manifest.model, suffixes=(".json", ".ubj"), max_bytes=20_000_000
+        native_directory,
+        manifest.model,
+        suffixes=(".json", ".ubj"),
+        max_bytes=20_000_000,
     )
     try:
         booster = xgb.Booster(params={"nthread": 1, "device": "cpu"})

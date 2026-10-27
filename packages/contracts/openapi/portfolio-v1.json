@@ -286,6 +286,219 @@
         ]
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/risk-assessments/preview": {
+      "post": {
+        "summary": "Preview Risk Assessment",
+        "operationId": "preview_risk_assessment_api_v1_portfolios__portfolio_id__risk_assessments_preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskAssessmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAssessmentPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/risk-assessments": {
+      "get": {
+        "summary": "List Risk Assessments",
+        "operationId": "list_risk_assessments_api_v1_portfolios__portfolio_id__risk_assessments_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RiskAssessmentHistoryEntry"
+                  },
+                  "title": "Response List Risk Assessments Api V1 Portfolios  Portfolio Id  Risk Assessments Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Confirm Risk Assessment",
+        "operationId": "confirm_risk_assessment_api_v1_portfolios__portfolio_id__risk_assessments_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskAssessmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAssessmentRevision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/portfolios/{portfolio_id}/readiness": {
       "get": {
         "summary": "Portfolio Readiness",
@@ -843,6 +1056,49 @@
   },
   "components": {
     "schemas": {
+      "Constraints": {
+        "properties": {
+          "risk_aversion": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Risk Aversion",
+            "default": 1.5
+          },
+          "max_position_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Position Weight",
+            "default": 0.5
+          },
+          "defensive_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Defensive Asset Ids"
+          },
+          "min_defensive_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Defensive Weight",
+            "default": 0
+          },
+          "max_non_defensive_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Max Non Defensive Weight",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Constraints"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -858,6 +1114,64 @@
       },
       "InputReadiness": {
         "properties": {
+          "bundle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Id"
+          },
+          "bundle_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Hash"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "approved_model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Model Id"
+          },
+          "model_manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Manifest Hash"
+          },
           "universe_id": {
             "type": "string",
             "pattern": "^[A-Z0-9_-]{1,64}$",
@@ -1199,6 +1513,213 @@
           "experience"
         ],
         "title": "RiskAnswers"
+      },
+      "RiskAssessmentHistoryEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Portfolio Id"
+          },
+          "portfolio_version": {
+            "type": "integer",
+            "title": "Portfolio Version"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "onboarding",
+              "reassessment"
+            ],
+            "title": "Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "risk_profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Risk Profile"
+          },
+          "mapping_version": {
+            "type": "string",
+            "title": "Mapping Version"
+          },
+          "policy_version_id": {
+            "type": "string",
+            "title": "Policy Version Id"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "portfolio_version",
+          "reason",
+          "created_at",
+          "answers",
+          "constraints",
+          "risk_profile",
+          "mapping_version",
+          "policy_version_id",
+          "is_active"
+        ],
+        "title": "RiskAssessmentHistoryEntry"
+      },
+      "RiskAssessmentPreview": {
+        "properties": {
+          "portfolio_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Portfolio Id"
+          },
+          "portfolio_version": {
+            "type": "integer",
+            "title": "Portfolio Version"
+          },
+          "before": {
+            "$ref": "#/components/schemas/RiskPolicyState"
+          },
+          "after": {
+            "$ref": "#/components/schemas/RiskPolicyState"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "portfolio_version",
+          "before",
+          "after"
+        ],
+        "title": "RiskAssessmentPreview"
+      },
+      "RiskAssessmentRequest": {
+        "properties": {
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answers"
+        ],
+        "title": "RiskAssessmentRequest"
+      },
+      "RiskAssessmentRevision": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Portfolio Id"
+          },
+          "portfolio_version": {
+            "type": "integer",
+            "title": "Portfolio Version"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "onboarding",
+              "reassessment"
+            ],
+            "title": "Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "risk_profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Risk Profile"
+          },
+          "mapping_version": {
+            "type": "string",
+            "title": "Mapping Version"
+          },
+          "policy_version_id": {
+            "type": "string",
+            "title": "Policy Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "portfolio_version",
+          "reason",
+          "created_at",
+          "answers",
+          "constraints",
+          "risk_profile",
+          "mapping_version",
+          "policy_version_id"
+        ],
+        "title": "RiskAssessmentRevision"
+      },
+      "RiskPolicyState": {
+        "properties": {
+          "risk_profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Profile"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "policy_version_id": {
+            "type": "string",
+            "title": "Policy Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "risk_profile",
+          "constraints",
+          "policy_version_id"
+        ],
+        "title": "RiskPolicyState"
       },
       "StrategyReadiness": {
         "properties": {

@@ -5,10 +5,11 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from uuid import UUID
 
 from portfolio_contracts import ModelUnavailable, ReadyInput, utcnow
 from portfolio_core import validate_numerical_inputs
-from .ml import infer
+from .ml import ArtifactRef, ModelManifest, infer, read_artifact
 
 
 class ArtifactCatalog:
@@ -172,6 +173,11 @@ class ArtifactCatalog:
             origin = "unverified"
         return {
             "universe_id": universe_id,
+            "bundle_id": ready.bundle_id if ready is not None else None,
+            "bundle_hash": ready.bundle_hash if ready is not None else None,
+            "snapshot_id": ready.snapshot_id if ready is not None else None,
+            "approved_model_id": None,
+            "model_manifest_hash": None,
             "asset_ids": ready.asset_ids if ready is not None else [],
             "as_of_date": ready.as_of_date if ready is not None else None,
             "valid_until": ready.valid_until.isoformat() if ready is not None else None,
@@ -188,6 +194,30 @@ class ArtifactCatalog:
             ),
             "checked_at": checked_at.isoformat(),
         }
+
+    def _selected_model_pins(self, value, ready):
+        """Identify the selected approved manifest without another inference.
+
+        These are immutable selection pins, including for an expired bundle.
+        strategies[].available remains the authority for serving compatibility.
+        Missing, unapproved or unverified metadata never advertises a model ID.
+        """
+        empty = {"approved_model_id": None, "model_manifest_hash": None}
+        try:
+            reference = ArtifactRef.model_validate(value["ml_inference"]["manifest"])
+            if reference.sha256 != ready.model_bundle_id:
+                return empty
+            manifest = ModelManifest.model_validate_json(
+                read_artifact(self.directory, reference)
+            )
+            if manifest.status != "APPROVED":
+                return empty
+            return {
+                "approved_model_id": str(UUID(manifest.model_id)),
+                "model_manifest_hash": reference.sha256,
+            }
+        except (ModelUnavailable, ValueError, KeyError, TypeError):
+            return empty
 
     def _entry_readiness(self, entry, universe_id, checked_at):
         try:
@@ -210,6 +240,7 @@ class ArtifactCatalog:
             return self._readiness_result(universe_id, checked_at, reason)
         reason = "INPUT_EXPIRED" if ready.valid_until <= checked_at else "READY"
         result = self._readiness_result(universe_id, checked_at, reason, ready=ready)
+        result.update(self._selected_model_pins(value, ready))
         if reason != "READY":
             return result
         for strategy in result["strategies"]:

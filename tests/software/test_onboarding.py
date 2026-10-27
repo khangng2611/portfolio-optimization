@@ -95,7 +95,9 @@ def test_backend_assigns_policy_from_most_conservative_answer(
     assert value["risk_profile"]["profile"] == profile
     assert value["risk_profile"]["answers"] == answers(**changes)
     assert value["constraints"]["risk_aversion"] == risk
-    assert value["policy_version_id"] == f"risk-policy-v1:{profile}"
+    assert value["policy_version_id"] == (
+        f"risk-policy-v1:{profile}:{value['risk_profile']['version_id']}"
+    )
     assert (
         client.get(
             f"/api/v1/portfolios/{value['id']}", headers=headers("bob")
@@ -207,5 +209,5 @@ def test_manual_constraint_edit_removes_risk_label_and_freezes_old_policy(stack)
     with sessions() as session:
         assert (
             session.get(Job, jid).input["decision_context"]["policy_version_id"]
-            == "risk-policy-v1:balanced"
+            == response.json()["policy_version_id"]
         )

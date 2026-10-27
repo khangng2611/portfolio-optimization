@@ -1,5 +1,56 @@
 # Tiến độ software app
 
+## P1 — kiểm chứng local 27/10/2026
+
+Đã bổ sung ba luồng và UI nối API thật:
+
+- Data Refresh: schedule/job bền vững, chạy tay hoặc timer, KBS stock adapter cố
+  định và raw/normalized SHA-256, kiểm tra toàn lô trước snapshot. Mỗi lần fetch
+  đối chiếu toàn bộ khoảng lịch sử adjusted đã cấu hình; chỉ revision mới/thay
+  đổi được thêm vào storage. Không ghép các adjustment vintage bằng fetch riêng
+  cửa sổ overlap. Calendar là phiên VNINDEX quan sát được, chưa được xác nhận độc
+  lập; ingestion availability không chứng minh historical point-in-time data.
+- ML Operations MVP: `ml_db`, migrator/API/worker riêng (Swagger port 8004),
+  snapshot/hash-pinned training được kích hoạt thủ công, candidate và review
+  APPROVED/REJECTED có reason/If-Match/idempotency. HTTP chỉ enqueue; worker không
+  tự duyệt. Publication nhận `approved_model_id`, resolve manifest tin cậy ở server
+  và chờ artifact đã materialize. ML tạm dùng lại Quant training/feature helpers;
+  chưa hoàn tất việc tách thư viện dùng chung, không thay core/risk mapping.
+- Risk reassessment: preview thuần đọc, confirmation có If-Match/key, revision UUID
+  bất biến và lịch sử phân trang. Profile mới tăng version danh mục; proposal cũ
+  không được accept. Target đã chấp nhận giữ allocation/policy cũ; queued input/hash
+  legacy không bị sửa và lịch sử chưa biết không bị bịa/backfill.
+
+BFF giữ session/CSRF và allowlist upstream theo Portfolio/Market/Quant/ML;
+operator/reviewer/investor có role gates riêng. Chỉ refresh/ML/publication workers
+được ghi artifact thuộc owner; các API và optimizer đọc read-only. Local upgrade
+bổ sung DB/scopes/clients/migrations, giữ secrets và volumes hiện có.
+
+Đã thêm gate P1 nguồn thật và receipt sau restart, gồm manual refresh + actual
+scheduler tick, training/reviewer/publication và risk → BL_ML → accepted target.
+**Kiểm chứng mới: 451 Python/core tests, 84 web tests**, Ruff, TypeScript,
+production build và 10 contracts ổn định. Một PostgreSQL concurrency test opt-in
+skip trong gate mặc định; probe fencing trên PostgreSQL thật và DB/broker/Identity
+boundaries chạy riêng đạt. Sáu browser gates đạt: P1, P0 và Market lifecycle cùng
+đối chiếu chính receipt sau restart. P1 dùng KBS FPT/MWG/VCB đến 26/10/2026;
+không mock HTTP hoặc tạo giả kết quả SQL. Đã restart 14 tiến trình ứng dụng, giữ
+nguyên model/snapshot/input hash, quyết định review, risk UUID và cả allocation
+cũ/mới. Lịch tự động thử nghiệm đã tắt, replay không bật lại hoặc tạo thêm job.
+
+Model UI hiển thị model được chọn theo từng universe từ Quant readiness, checksum
+và tương thích BL_ML; trạng thái hết hạn tự cập nhật trên trang đang mở. UI dùng
+ui-ux-pro-max và các khung Figma I01/I02/I07–I10/I34/I35; hồ sơ rủi ro tái sử dụng
+wizard/review hiện có. Kiểm tra desktop và 390px đạt; không coi các trạng thái
+prototype VALIDATED/PRODUCTION là lifecycle đã hiện thực trong MVP. GitHub CI
+chưa chạy trên bản thay đổi này. Báo cáo đã lọc ở
+`output/playwright/sanitized/p1-lifecycle.json` và `p1-persistence.json`, receipt
+không token ở `infra/local/.generated/p1-browser-receipt.json`.
+Xem [cách chạy](../../apps/web/tests/browser/README.md#p1-real-provider-model-and-risk-gate)
+và [setup/API](SETUP_AND_API_TESTING.md). Chưa tuyên bố CI GitHub, production
+certification hoặc đầy đủ mọi lifecycle/screen tương lai trong Figma.
+
+Các mục bên dưới giữ nguyên bằng chứng và giới hạn tại từng mốc lịch sử.
+
 ## Market Data Operations — cập nhật 27/10/2026
 
 Đã bổ sung registry SQL bất biến từ trusted CSV inventory, đăng ký có

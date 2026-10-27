@@ -595,4 +595,6 @@ def create_app(*, sessions, verifier, provider):
                 raise HTTPException(404, "Snapshot not found")
             return value.observations
 
+    from .refresh_api import install_refresh_routes
+    install_refresh_routes(app, sessions=sessions, operator=operator, actor=actor, valid_key=valid_key, page_headers=page_headers)
     return app

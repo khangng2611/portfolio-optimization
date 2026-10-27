@@ -24,6 +24,9 @@ x-quant-environment: &quant-environment
   OIDC_AUDIENCE: quant-api
   BUNDLE_DIRECTORY: /bundles
   ALLOW_DEMO_INPUTS: "true"
+  OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+  ML_API_URL: http://ml-api:8000
+  ML_READER_CLIENT_SECRET: ${ML_READER_CLIENT_SECRET:?Run bootstrap.py}
 
 x-market-environment: &market-environment
   DATABASE_URL: postgresql+psycopg://market_runtime:${MARKET_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/market_db
@@ -31,6 +34,13 @@ x-market-environment: &market-environment
   OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
   OIDC_AUDIENCE: market-api
   DATASET_DIRECTORY: /datasets
+
+x-ml-environment: &ml-environment
+  DATABASE_URL: postgresql+psycopg://ml_runtime:${ML_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/ml_db
+  OIDC_ISSUER: http://localhost:8080/realms/portfolio
+  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_AUDIENCE: ml-api
+  ML_ARTIFACT_DIRECTORY: /ml-models
 
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
@@ -154,11 +164,54 @@ services:
       postgres: {condition: service_healthy}
     restart: "no"
 
+  ml-migrate:
+    build: {context: ../.., dockerfile: services/ml-platform/Dockerfile}
+    image: portfolio-software-ml:local
+    command: ["alembic", "-c", "/app/services/ml-platform/alembic.ini", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://ml_migrator:${ML_MIGRATOR_PASSWORD:?Run bootstrap.py}@postgres:5432/ml_db
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  ml-api:
+    image: portfolio-software-ml:local
+    environment: *ml-environment
+    ports: ["127.0.0.1:8004:8000"]
+    volumes: ["./.generated/ml-models:/ml-models:ro"]
+    depends_on:
+      ml-migrate: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  ml-worker:
+    image: portfolio-software-ml:local
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    command: ["python", "-m", "ml_platform.worker"]
+    environment:
+      <<: *ml-environment
+      OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+      MARKET_API_URL: http://market-api:8000
+      ML_MARKET_READER_CLIENT_SECRET: ${ML_MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
+    volumes: ["./.generated/ml-models:/ml-models:rw"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; import ml_platform.worker; from ml_platform.runtime import sessions_from_env; from sqlalchemy import text; s=sessions_from_env()(); s.execute(text('SELECT id FROM ml_training_job LIMIT 1')); s.close(); assert os.access('/ml-models', os.W_OK)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      ml-migrate: {condition: service_completed_successfully}
+      market-api: {condition: service_healthy}
+      keycloak: {condition: service_healthy}
+    restart: unless-stopped
+
   market-api:
     image: portfolio-software-market:local
     environment: *market-environment
     ports: ["127.0.0.1:8003:8000"]
-    volumes: ["./.generated/datasets:/datasets:ro"]
+    volumes: ["./.generated/datasets:/datasets:ro", "./.generated/datasets/refresh:/datasets/refresh:ro"]
     depends_on:
       market-migrate: {condition: service_completed_successfully}
       keycloak: {condition: service_healthy}
@@ -171,7 +224,7 @@ services:
     environment:
       <<: *market-environment
       BROKER_URL: amqp://market_publisher:${MARKET_PUBLISHER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
-    volumes: ["./.generated/datasets:/datasets:ro"]
+    volumes: ["./.generated/datasets:/datasets:ro", "./.generated/datasets/refresh:/datasets/refresh:ro"]
     depends_on:
       market-migrate: {condition: service_completed_successfully}
       rabbitmq: {condition: service_healthy}
@@ -183,10 +236,28 @@ services:
     environment:
       <<: *market-environment
       BROKER_URL: amqp://market_consumer:${MARKET_CONSUMER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
-    volumes: ["./.generated/datasets:/datasets:ro"]
+    volumes: ["./.generated/datasets:/datasets:ro", "./.generated/datasets/refresh:/datasets/refresh:ro"]
     depends_on:
       market-migrate: {condition: service_completed_successfully}
       rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  market-refresh:
+    image: portfolio-software-market:local
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    command: ["python", "-m", "market_service.refresh_worker"]
+    environment:
+      <<: *market-environment
+      REFRESH_ARTIFACT_DIRECTORY: /datasets/refresh
+    volumes: ["./.generated/datasets:/datasets:ro", "./.generated/datasets/refresh:/datasets/refresh:rw"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; import market_service.refresh_worker; from market_service.runtime import sessions_from_env; from sqlalchemy import text; s=sessions_from_env()(); s.execute(text('SELECT id FROM refresh_job LIMIT 1')); s.close(); assert os.access('/datasets/refresh', os.W_OK) and not os.access('/datasets', os.W_OK)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
     restart: unless-stopped
 
   portfolio-api:
@@ -204,7 +275,7 @@ services:
     image: portfolio-software-quant:local
     environment: *quant-environment
     ports: ["127.0.0.1:8002:8000"]
-    volumes: ["./.generated/bundles:/bundles:ro"]
+    volumes: ["./.generated/bundles:/bundles:ro", "./.generated/ml-models:/bundles/ml-models:ro"]
     depends_on:
       quant-migrate: {condition: service_completed_successfully}
       keycloak: {condition: service_healthy}
@@ -222,7 +293,7 @@ services:
       MARKET_API_URL: http://market-api:8000
       MARKET_READER_CLIENT_SECRET: ${MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
       PUBLICATION_SCHEDULES: "[]"
-    volumes: ["./.generated/bundles:/bundles:rw"]
+    volumes: ["./.generated/bundles:/bundles:rw", "./.generated/ml-models:/bundles/ml-models:ro"]
     healthcheck:
       test: ["CMD", "python", "-c", "import os; import quant_service.publication_worker; from quant_service.runtime import sessions_from_env; from sqlalchemy import text; s=sessions_from_env()(); s.execute(text('SELECT id FROM publication_job LIMIT 1')); s.close(); assert os.access('/bundles', os.W_OK)"]
       interval: 10s
@@ -263,7 +334,7 @@ services:
     environment:
       <<: *quant-environment
       BROKER_URL: amqp://quant_publisher:${QUANT_PUBLISHER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
-    volumes: ["./.generated/bundles:/bundles:ro"]
+    volumes: ["./.generated/bundles:/bundles:ro", "./.generated/ml-models:/bundles/ml-models:ro"]
     depends_on:
       quant-migrate: {condition: service_completed_successfully}
       rabbitmq: {condition: service_healthy}
@@ -275,7 +346,7 @@ services:
     environment:
       <<: *quant-environment
       BROKER_URL: amqp://quant_consumer:${QUANT_CONSUMER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
-    volumes: ["./.generated/bundles:/bundles:ro"]
+    volumes: ["./.generated/bundles:/bundles:ro", "./.generated/ml-models:/bundles/ml-models:ro"]
     depends_on:
       quant-migrate: {condition: service_completed_successfully}
       rabbitmq: {condition: service_healthy}
@@ -291,12 +362,13 @@ services:
       OIDC_CLIENT_ID: portfolio-web
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Run bootstrap.py}
       OIDC_AUDIENCE: portfolio-api
-      OIDC_SCOPE: openid profile email portfolio:read portfolio:write market:read market:write quant:publish
+      OIDC_SCOPE: openid profile email portfolio:read portfolio:write market:read market:write quant:publish ml:read ml:train ml:review
       REDIS_URL: redis://:${REDIS_PASSWORD:?Run bootstrap.py}@redis:6379/0
       SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Run bootstrap.py}
       PORTFOLIO_API_URL: http://portfolio-api:8000
       MARKET_API_URL: http://market-api:8000
       QUANT_API_URL: http://quant-api:8000
+      ML_API_URL: http://ml-api:8000
       ALLOW_INSECURE_HTTP: "true"
     ports: ["127.0.0.1:3000:3000"]
     depends_on:

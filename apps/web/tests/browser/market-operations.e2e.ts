@@ -12,7 +12,7 @@ const origin = 'http://localhost:3000';
 const persistence = process.env.MARKET_OPS_VERIFY_RECEIPT === '1';
 const retryOutage = process.env.MARKET_OPS_RETRY_OUTAGE === '1';
 type Value = Record<string, any>;
-type Source = { dataset_id: string; sha256: string; asset_id: string; row_count?: number };
+type Source = { dataset_id: string; sha256: string; asset_id: string; provider: string; row_count?: number };
 type Fixture = { sources: Source[]; invalid: Source; asset_ids: string[]; start_date: string;
   end_date: string; as_of_date: string; max_age_days: number; universe_id: string };
 type Intent = { path: string; body: Value; key: string; job_id?: string };
@@ -209,6 +209,9 @@ test('real operator source to publication to investor accepted target', async ({
   phase(info, 'market-create-hash-pinned-snapshot');
   await page.goto('/#market-snapshots');
   await page.getByTestId('snapshot-assets').fill(fixture.asset_ids.join(','));
+  const providers = [...new Set(fixture.sources.map(source => source.provider))];
+  expect(providers.length, 'Real snapshot explicitly pins one attested source provider').toBe(1);
+  await page.getByLabel('Nguồn giá (tùy chọn)', { exact: false }).fill(providers[0]);
   await page.getByTestId('snapshot-start').fill(fixture.start_date);
   await page.getByTestId('snapshot-end').fill(fixture.end_date);
   await page.getByTestId('snapshot-asof').fill(fixture.as_of_date);

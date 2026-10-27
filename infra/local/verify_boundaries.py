@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def verify_databases(values: dict[str, str]) -> None:
-    for service in ("portfolio", "quant", "identity", "market"):
+    for service in ("portfolio", "quant", "identity", "market", "ml"):
 
         def connect(kind: str, database: str | None = None):
             return psycopg.connect(
@@ -93,6 +93,7 @@ def verify_databases(values: dict[str, str]) -> None:
                 "quant_db",
                 "identity_db",
                 "market_db",
+                "ml_db",
                 "postgres",
                 "template1",
             ):

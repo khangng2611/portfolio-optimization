@@ -8,6 +8,7 @@ from portfolio_contracts.market import IngestCommand, IngestionRequest, Snapshot
 from market_service.api import create_app as market_app
 from portfolio_service.api import create_app as portfolio_app
 from quant_service.main import create_app as quant_app
+from ml_platform.main import create_app as ml_app
 
 root = Path(__file__).resolve().parents[1] / "packages/contracts"
 schemas = {
@@ -18,6 +19,7 @@ schemas = {
     "openapi/quant-v1.json": quant_app(
         sessions=None, verifier=None, catalog=None
     ).openapi(),
+    "openapi/ml-v1.json": ml_app(sessions=None, verifier=None, directory=None).openapi(),
     "events/envelope-v1.json": Envelope.model_json_schema(),
     "events/optimize-command-v1.json": OptimizeCommand.model_json_schema(),
     "events/optimize-result-v1.json": OptimizeResult.model_json_schema(),

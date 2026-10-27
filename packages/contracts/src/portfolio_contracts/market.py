@@ -79,6 +79,7 @@ class IngestCommand(StrictModel):
 
 
 class SnapshotRequest(StrictModel):
+    provider: str | None = Field(default=None, min_length=1, max_length=100)
     asset_ids: list[str] = Field(min_length=1, max_length=100)
     start_date: date
     end_date: date

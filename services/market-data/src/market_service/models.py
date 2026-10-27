@@ -147,3 +147,51 @@ class QualityReport(Base):
     status: Mapped[str] = mapped_column(String(24))
     report: Mapped[dict] = mapped_column(JSON)
     checked_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RefreshSchedule(Base):
+    __tablename__ = "refresh_schedule"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("market_actor.id"), index=True)
+    config: Mapped[dict] = mapped_column(JSON)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    enabled: Mapped[int] = mapped_column(Integer, default=1)
+    next_run_at: Mapped[object] = mapped_column(DateTime(timezone=True), index=True)
+    last_successful_cutoff: Mapped[object | None] = mapped_column(Date)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RefreshJob(Base):
+    __tablename__ = "refresh_job"
+    __table_args__ = (UniqueConstraint("schedule_id", "tick_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    schedule_id: Mapped[str] = mapped_column(ForeignKey("refresh_schedule.id"), index=True)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("market_actor.id"), index=True)
+    tick_key: Mapped[str] = mapped_column(String(128))
+    config: Mapped[dict] = mapped_column(JSON)
+    schedule_version: Mapped[int] = mapped_column(Integer)
+    start_date: Mapped[object] = mapped_column(Date)
+    cutoff_date: Mapped[object] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(24), default="QUEUED", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    lease_until: Mapped[object | None] = mapped_column(DateTime(timezone=True))
+    available_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deadline: Mapped[object] = mapped_column(DateTime(timezone=True))
+    error: Mapped[dict | None] = mapped_column(JSON)
+    source_manifest: Mapped[dict | None] = mapped_column(JSON)
+    artifacts: Mapped[list] = mapped_column(JSON, default=list)
+    ingestion_job_ids: Mapped[list] = mapped_column(JSON, default=list)
+    snapshot_id: Mapped[str | None] = mapped_column(ForeignKey("market_snapshot.id"))
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
+
+
+class RefreshReceipt(Base):
+    __tablename__ = "refresh_receipt"
+    __table_args__ = (UniqueConstraint("actor_id", "idempotency_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("market_actor.id"))
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response: Mapped[dict] = mapped_column(JSON)

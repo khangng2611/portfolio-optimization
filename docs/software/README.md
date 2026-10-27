@@ -1,5 +1,11 @@
 # Software foundation — Identity/BFF và Portfolio/Quant
 
+**Cập nhật 27/10/2026:** P1 bổ sung Data Refresh từ KBS, ML Platform MVP
+(training/registry/review và publication bằng approved model ID), cùng đánh giá
+lại hồ sơ rủi ro có lịch sử phiên bản. UI và BFF nối API của từng owner.
+Phạm vi và bằng chứng hiện hành nằm trong [trạng thái hiện thực](IMPLEMENTATION_STATUS.md)
+và [hướng dẫn vận hành](../../infra/local/README.md); các mốc dưới đây giữ làm lịch sử.
+
 Luồng hiện tại gồm [wizard rủi ro, policy version, accepted target, dashboard và
 approved XGBoost inference](WEEKS_6_7.md). [Market–Quant bridge](MARKET_QUANT_BRIDGE.md)
 publish features/numerical bundle từ snapshot giá thật qua CLI riêng. UI hỗ trợ
@@ -23,7 +29,8 @@ Không tạo AuthService hoặc AllocationService riêng.
 apps/web/                    Next.js UI và BFF; OIDC, cookie/session, proxy
 services/portfolio/          Portfolio API, DB/migrations, job/result workers
 services/quant-serving/      Ready-input API, DB/migrations, numerical workers
-services/market-data/        CSV/normalized ingestion, revisions, immutable snapshots
+services/market-data/        Refresh/ingestion, quality, revisions, immutable snapshots
+services/ml-platform/        Training worker, candidate registry, reviewer decisions
 packages/portfolio-core/    Numerical package cài bằng pip; không phụ thuộc root
 packages/contracts/         Wire contracts, OpenAPI và event schemas
 packages/service-auth/      Xác thực JWT/JWKS dùng chung; không có business DB

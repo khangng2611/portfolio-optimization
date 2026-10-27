@@ -68,6 +68,10 @@ def reconcile_identity(
                 "market:write",
                 "market:snapshot:read",
                 "quant:publish",
+                "ml:read",
+                "ml:train",
+                "ml:review",
+                "ml:model:read",
             )
             and (
                 scope["name"] != "market:snapshot:read"
@@ -85,6 +89,9 @@ def reconcile_identity(
             "portfolio-web",
             "portfolio-service",
             "quant-publisher",
+            "ml-api",
+            "ml-worker",
+            "quant-ml-reader",
         ):
             continue
         existing = get("/clients", params={"clientId": name})
@@ -93,7 +100,7 @@ def reconcile_identity(
             existing = get("/clients", params={"clientId": name})
         if len(existing) != 1:
             raise RuntimeError("Expected one local identity client")
-        if name == "market-api":
+        if name in ("market-api", "ml-api"):
             continue
         identity = existing[0]["id"]
         defaults = get(f"/clients/{identity}/default-client-scopes")
@@ -102,7 +109,9 @@ def reconcile_identity(
             ("basic", "market:read", "market:write")
             if name == "portfolio-test"
             else ("basic", "market:snapshot:read")
-            if name == "quant-publisher"
+            if name in ("quant-publisher", "ml-worker")
+            else ("basic", "ml:model:read")
+            if name == "quant-ml-reader"
             else ("basic",)
         )
         for scope_name in required_scopes:
@@ -116,13 +125,26 @@ def reconcile_identity(
                 scope["name"]
                 for scope in get(f"/clients/{identity}/optional-client-scopes")
             }
-            for scope_name in ("market:read", "market:write", "quant:publish"):
+            for scope_name in (
+                "market:read",
+                "market:write",
+                "quant:publish",
+                "ml:read",
+                "ml:train",
+                "ml:review",
+            ):
                 if scope_name not in attached_optional:
                     response = client.put(
                         f"{REALM}/clients/{identity}/optional-client-scopes/{scopes[scope_name]['id']}"
                     )
                     response.raise_for_status()
-        if name not in ("portfolio-test", "quant-publisher", "portfolio-web"):
+        if name not in (
+            "portfolio-test",
+            "quant-publisher",
+            "portfolio-web",
+            "ml-worker",
+            "quant-ml-reader",
+        ):
             continue
         mappers = get(f"/clients/{identity}/protocol-mappers/models")
         for mapper in wanted["protocolMappers"]:

@@ -45,6 +45,34 @@ class Portfolio(Base):
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class RiskAssessment(Base):
+    """Append-only policy revisions and durable confirmation receipts.
+
+    Existing portfolios intentionally receive no fabricated historical revisions.
+    Active status is derived from Portfolio.risk_profile.version_id, so manual
+    constraint edits deactivate a revision without mutating its audit record.
+    """
+
+    __tablename__ = "risk_assessment"
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "portfolio_version"),
+        UniqueConstraint("owner_user_id", "portfolio_id", "idempotency_key"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolio.id"), index=True)
+    owner_user_id: Mapped[str] = mapped_column(ForeignKey("app_user.id"), index=True)
+    portfolio_version: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(32))
+    answers: Mapped[dict] = mapped_column(JSON)
+    constraints: Mapped[dict] = mapped_column(JSON)
+    risk_profile: Mapped[dict] = mapped_column(JSON)
+    mapping_version: Mapped[str] = mapped_column(String(64))
+    policy_version_id: Mapped[str] = mapped_column(String(128))
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    body_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Job(Base):
     __tablename__ = "job"
     __table_args__ = (

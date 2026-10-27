@@ -8,15 +8,21 @@ from sqlalchemy import text
 from service_auth import AuthError, TokenVerifier
 from portfolio_contracts import ModelUnavailable
 from service_observability import configure, install_http_tracing
-from .publication_api import install_publication_api
+from .publication_api import install_publication_api, CredentialModelResolver
 from .runtime import catalog_from_env, sessions_from_env
 
 
-def create_app(*, sessions, verifier, catalog):
+def create_app(*, sessions, verifier, catalog, model_resolver=None):
     app = FastAPI(title="Quant Serving", version="0.1.0")
     install_http_tracing(app)
     bearer = HTTPBearer(auto_error=False)
-    install_publication_api(app, sessions=sessions, verifier=verifier, bearer=bearer)
+    install_publication_api(
+        app,
+        sessions=sessions,
+        verifier=verifier,
+        bearer=bearer,
+        model_resolver=model_resolver,
+    )
 
     @app.get("/health/live")
     def live():
@@ -93,4 +99,7 @@ def app_factory():
             os.environ["OIDC_ISSUER"], "quant-api", os.environ["OIDC_JWKS_URL"]
         ),
         catalog=catalog_from_env(),
+        model_resolver=CredentialModelResolver()
+        if os.environ.get("ML_API_URL")
+        else None,
     )

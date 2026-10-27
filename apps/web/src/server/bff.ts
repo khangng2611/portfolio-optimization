@@ -11,6 +11,10 @@ const equal = (a: string, b: string) => { const left = Buffer.from(a); const rig
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 const operatorRoutes = [
+  { path: /^\/api\/v1\/market\/refresh-schedules$/, template: '/api/v1/market/refresh-schedules', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market', idempotent: true },
+  { path: new RegExp(`^/api/v1/market/refresh-schedules/${uuid}$`), template: '/api/v1/market/refresh-schedules/{schedule_id}', methods: ['GET', 'PATCH'], query: [], service: 'market', idempotent: true },
+  { path: /^\/api\/v1\/market\/refresh-jobs$/, template: '/api/v1/market/refresh-jobs', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market', idempotent: true },
+  { path: new RegExp(`^/api/v1/market/refresh-jobs/${uuid}$`), template: '/api/v1/market/refresh-jobs/{job_id}', methods: ['GET'], query: [], service: 'market' },
   { path: /^\/api\/v1\/market\/(dataset-inventory|datasets)$/, template: '/api/v1/market/datasets', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
   { path: /^\/api\/v1\/market\/ingestions$/, template: '/api/v1/market/ingestions', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
   { path: new RegExp(`^/api/v1/market/ingestions/${uuid}/quality$`), template: '/api/v1/market/ingestions/{job_id}/quality', methods: ['GET'], query: [], service: 'market' },
@@ -20,8 +24,19 @@ const operatorRoutes = [
   { path: /^\/api\/v1\/market\/publications$/, template: '/api/v1/market/publications', methods: ['GET', 'POST'], query: ['limit', 'offset', 'status', 'snapshot_id'], service: 'quant' },
   { path: new RegExp(`^/api/v1/market/publications/${uuid}$`), template: '/api/v1/market/publications/{job_id}', methods: ['GET'], query: [], service: 'quant' },
 ] as const;
+const mlRoutes = [
+  { path: /^\/api\/v1\/ml\/training-jobs$/, template: '/api/v1/ml/training-jobs', methods: ['GET'], query: ['limit', 'offset', 'status', 'snapshot_id'], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: /^\/api\/v1\/ml\/training-jobs$/, template: '/api/v1/ml/training-jobs', methods: ['POST'], query: [], service: 'ml', roles: ['data-operator'], idempotent: true },
+  { path: new RegExp(`^/api/v1/ml/training-jobs/${uuid}$`), template: '/api/v1/ml/training-jobs/{job_id}', methods: ['GET'], query: [], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: /^\/api\/v1\/ml\/models$/, template: '/api/v1/ml/models', methods: ['GET'], query: ['limit', 'offset', 'status'], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: new RegExp(`^/api/v1/ml/models/${uuid}$`), template: '/api/v1/ml/models/{model_id}', methods: ['GET'], query: [], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: new RegExp(`^/api/v1/ml/models/${uuid}/reviews$`), template: '/api/v1/ml/models/{model_id}/reviews', methods: ['POST'], query: [], service: 'ml', roles: ['model-reviewer'], idempotent: true },
+] as const;
 const routes = [
   ...operatorRoutes,
+  ...mlRoutes,
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/risk-assessments/preview$`), template: '/api/v1/portfolios/{portfolio_id}/risk-assessments/preview', methods: ['POST'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/risk-assessments$`), template: '/api/v1/portfolios/{portfolio_id}/risk-assessments', methods: ['GET', 'POST'], query: ['limit', 'offset'], idempotent: true },
   { path: /^\/api\/v1\/universes\/readiness$/, template: '/api/v1/universes/readiness', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/readiness$`), template: '/api/v1/portfolios/{portfolio_id}/readiness', methods: ['GET'], query: [] },
   { path: /^\/api\/v1\/universes$/, template: '/api/v1/universes', methods: ['GET'], query: [] },
@@ -166,13 +181,15 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
         if (key === 'offset' && (!/^\d{1,7}$/.test(value) || Number(value) > 1_000_000)) throw new HttpError(400, 'Invalid pagination');
         if (key === 'q' && (value.trim().length > 120 || /[\x00-\x1f\x7f]/.test(value))) throw new HttpError(400, 'Invalid search');
         if (key === 'risk_profile' && !['all', 'manual', 'conservative', 'balanced', 'growth'].includes(value)) throw new HttpError(400, 'Invalid risk profile');
-        if (key === 'status' && !['QUEUED', 'RUNNING', 'RETRY', 'SUCCEEDED', 'FAILED'].includes(value)) throw new HttpError(400, 'Invalid status');
+        if (key === 'status' && !(url.pathname === '/api/v1/ml/models' ? ['CANDIDATE', 'APPROVED', 'REJECTED'] : ['QUEUED', 'RUNNING', 'RETRY', 'SUCCEEDED', 'FAILED']).includes(value)) throw new HttpError(400, 'Invalid status');
         if (key === 'snapshot_id' && !new RegExp(`^${uuid}$`).test(value)) throw new HttpError(400, 'Invalid snapshot');
         if (key === 'sort' && !['created_desc', 'name_asc', 'capital_desc'].includes(value)) throw new HttpError(400, 'Invalid sort');
       }
       const { id, session } = await load(request);
       const isOperator = 'service' in route;
-      if (isOperator && !session.user.roles.includes('data-operator')) throw new HttpError(403, 'Data operator role required');
+      if ('roles' in route) {
+        if (!(route.roles as readonly string[]).some(role => session.user.roles.includes(role))) throw new HttpError(403, 'Required operation role missing');
+      } else if (isOperator && !session.user.roles.includes('data-operator')) throw new HttpError(403, 'Data operator role required');
       const mutates = !['GET', 'HEAD'].includes(request.method);
       if (mutates) mutation(request, session);
       const headers = new Headers({ accept: 'application/json' });
@@ -185,13 +202,13 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
         const precondition = request.headers.get('if-match');
         if (precondition) headers.set('if-match', precondition);
         const idempotency = request.headers.get('idempotency-key');
-        if ((url.pathname.endsWith('/recommendations') || ['/api/v1/market/ingestions', '/api/v1/market/datasets', '/api/v1/market/publications'].includes(url.pathname)) && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
+        if ((('idempotent' in route && route.idempotent) || url.pathname.endsWith('/recommendations') || ['/api/v1/market/ingestions', '/api/v1/market/datasets', '/api/v1/market/publications'].includes(url.pathname)) && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
         if (idempotency) { if (!/^[A-Za-z0-9_-]{8,128}$/.test(idempotency)) throw new HttpError(400, 'Invalid Idempotency-Key'); headers.set('idempotency-key', idempotency); }
       }
       const active = await fresh(id, session);
       headers.set('authorization', `Bearer ${active.accessToken}`);
       injectTraceHeaders(headers);
-      const serviceUrl = 'service' in route ? route.service === 'market' ? config.marketUrl : config.quantUrl : config.portfolioUrl;
+      const serviceUrl = 'service' in route ? route.service === 'market' ? config.marketUrl : route.service === 'ml' ? config.mlUrl : config.quantUrl : config.portfolioUrl;
       if (!serviceUrl) throw new HttpError(503, 'Operator service unavailable');
       let upstream: Response;
       try { upstream = await fetcher(serviceUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10_000) }); }

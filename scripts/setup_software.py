@@ -25,6 +25,7 @@ PACKAGES = [
     "services/portfolio",
     "services/quant-serving",
     "services/market-data",
+    "services/ml-platform",
 ]
 TOOLS = {"pytest": "8.4.2", "ruff": "0.13.2", "httpx": "0.28.1"}
 LOCK = ROOT / "services/quant-serving/requirements.lock"
@@ -146,7 +147,7 @@ def python_environment_ready() -> bool:
         "assert all(m.version(k)==v for k,v in expected.items()); "
         "packages=json.loads(sys.argv[2]); "
         "names=['portfolio-contracts','portfolio-service-auth','portfolio-service-observability','portfolio-core',"
-        "'portfolio-service','portfolio-quant-service','portfolio-market-service']; "
+        "'portfolio-service','portfolio-quant-service','portfolio-market-service','portfolio-ml-platform']; "
         "urls=[json.loads(m.distribution(n).read_text('direct_url.json')) for n in names]; "
         "assert all(u.get('dir_info',{}).get('editable') and "
         "pathlib.Path(urllib.parse.unquote(urllib.parse.urlparse(u['url']).path)).resolve()==pathlib.Path(p).resolve() "

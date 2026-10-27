@@ -15,7 +15,9 @@
     "test:browser": "playwright test lifecycle.e2e.ts",
     "test:browser:persistence": "BROWSER_VERIFY_RECEIPT=1 playwright test lifecycle.e2e.ts",
     "test:browser:market": "playwright test market-operations.e2e.ts",
-    "test:browser:market:persistence": "MARKET_OPS_VERIFY_RECEIPT=1 playwright test market-operations.e2e.ts"
+    "test:browser:market:persistence": "MARKET_OPS_VERIFY_RECEIPT=1 playwright test market-operations.e2e.ts",
+    "test:browser:p1": "playwright test p1.e2e.ts",
+    "test:browser:p1:persistence": "P1_VERIFY_RECEIPT=1 playwright test p1.e2e.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

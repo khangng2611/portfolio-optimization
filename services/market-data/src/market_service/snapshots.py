@@ -43,6 +43,11 @@ def build_snapshot(session, request):
                     request.start_date, request.end_date
                 ),
                 PriceRevision.available_at <= cutoff,
+                *(
+                    [PriceRevision.provider == request.provider]
+                    if request.provider
+                    else []
+                ),
             )
             .order_by(
                 PriceRevision.available_at, PriceRevision.revision, PriceRevision.id
@@ -100,7 +105,12 @@ def build_snapshot(session, request):
                 f"Inconsistent selected units, basis or origin for {asset_id}"
             )
         observations.extend(observation_json(row) for row in selected)
-    manifest = request.model_dump(mode="json") | {
+    request_manifest = request.model_dump(mode="json")
+    if request.provider is None:
+        request_manifest.pop(
+            "provider", None
+        )  # Preserve historical manifest/hash semantics.
+    manifest = request_manifest | {
         "schema_version": 1,
         "status": "READY",
         "quality_status": "PASS",

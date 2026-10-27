@@ -28,6 +28,7 @@ def validate_request(value):
         "snapshot_hash",
         "universe_id",
         "model",
+        "approved_model_id",
         "max_age_days",
         "lookback",
         "min_returns",
@@ -42,6 +43,8 @@ def validate_request(value):
         if value.get("model") is not None
         else None,
     }
+    if value.get("approved_model_id") is not None:
+        result["approved_model_id"] = str(UUID(value["approved_model_id"]))
     if not re.fullmatch(r"[a-f0-9]{64}", result["snapshot_hash"]):
         raise ValueError("Explicit snapshot hash required")
     if (

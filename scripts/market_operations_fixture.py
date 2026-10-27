@@ -74,6 +74,7 @@ def prepare():
                 "original_dataset_id": identity,
                 "sha256": spec["sha256"],
                 "asset_id": asset,
+                "provider": spec["provider"],
                 "start_date": dates[0].isoformat(),
                 "end_date": dates[-1].isoformat(),
                 "row_count": len(rows),

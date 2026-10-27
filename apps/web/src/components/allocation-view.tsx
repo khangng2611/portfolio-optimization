@@ -2,7 +2,7 @@ export type Allocation = {
   asset_ids: string[]; weights: (string | number)[]; capital_vnd: string;
   strategy: string; requested_strategy?: string; fallback_reason?: string | null;
   demo?: boolean; policy_version_id?: string; data_snapshot_id?: string;
-  model_bundle_id?: string | null; core_version?: string; as_of_date?: string; valid_until?: string;
+  model_bundle_id?: string | null; bundle_hash?: string; core_version?: string; as_of_date?: string; valid_until?: string;
   inputs_provenance?: { data_origin?: string; snapshot_hash?: string; estimator?: string };
 };
 export const money = (amount: number | string) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(amount));

@@ -22,7 +22,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -c services/quant-serving/requirements.lock -e packages/contracts -e packages/service-auth -e packages/service-observability -e packages/portfolio-core -e services/portfolio -e services/quant-serving -e services/market-data pytest==8.4.2 ruff==0.13.2
       - run: python -m pytest tests/software packages/portfolio-core/tests -q
-      - run: ruff check packages services tests/software infra scripts/export_software_contracts.py scripts/lock_software_dependencies.py scripts/smoke_software.py scripts/smoke_g2.py scripts/smoke_ml_serving.py scripts/smoke_market_quant.py scripts/fetch_serving_prices.py scripts/smoke_tracing.py scripts/setup_software.py
+      - run: ruff check packages services tests/software infra scripts/export_software_contracts.py scripts/lock_software_dependencies.py scripts/smoke_software.py scripts/smoke_g2.py scripts/smoke_ml_serving.py scripts/smoke_market_quant.py scripts/fetch_serving_prices.py scripts/browser_fixture.py scripts/smoke_tracing.py scripts/setup_software.py scripts/browser_fixture.py
       - run: python scripts/export_software_contracts.py && git diff --exit-code -- packages/contracts/openapi packages/contracts/events
       - name: Validate local stack configuration
         run: python infra/local/bootstrap.py && docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml config --quiet
@@ -51,12 +51,21 @@ jobs:
   local-stack:
     needs: [backend, web]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci --prefix apps/web
+      - name: Install the pinned Playwright Chromium build
+        working-directory: apps/web
+        run: npx --no-install playwright install --with-deps chromium
       - run: python -m pip install kombu==5.5.4 'psycopg[binary]==3.2.10' httpx==0.28.1
       - run: python infra/local/bootstrap.py --enable-test-client
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml build
@@ -66,10 +75,33 @@ jobs:
       - run: python infra/local/verify_boundaries.py
       - run: python scripts/smoke_software.py
       - run: python scripts/smoke_g2.py
-      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml restart portfolio-api portfolio-consume portfolio-dispatch quant-api quant-consume quant-dispatch market-api market-consume market-dispatch
+      - name: Real browser PKCE and deterministic DEMO lifecycle
+        working-directory: apps/web
+        env:
+          E2E_DISPOSABLE_STACK: '1'
+        run: npm run test:browser
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml restart web portfolio-api portfolio-consume portfolio-dispatch quant-api quant-consume quant-dispatch quant-publication market-api market-consume market-dispatch
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --wait --wait-timeout 120
       - run: python scripts/smoke_software.py --verify-receipt
       - run: python scripts/smoke_g2.py --verify-receipt
+      - name: Verify the same browser receipt after process restart
+        working-directory: apps/web
+        env:
+          E2E_DISPOSABLE_STACK: '1'
+        run: npm run test:browser:persistence
+      - name: Retain only sanitized browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-sanitized-evidence
+          path: |
+            output/playwright/sanitized/lifecycle.json
+            output/playwright/sanitized/persistence.json
+            output/playwright/sanitized/comparison-desktop.png
+            output/playwright/sanitized/comparison-mobile.png
+            output/playwright/sanitized/history-after-restart.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Container status
         if: always()
         run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml ps -a

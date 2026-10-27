@@ -179,3 +179,34 @@ def test_market_demo_catalog_pins_immutable_current_csv_and_preserves_prior_file
     second = json.loads(catalog.read_text())["DEMO_STOCK"]
     assert second["path"] != first["path"]
     assert csv_path.read_bytes() == before
+
+
+def test_publication_uses_local_bundle_owner_without_changing_private_permissions(
+    tmp_path, monkeypatch
+):
+    import os
+    import sys
+
+    bootstrap = load_bootstrap()
+    bootstrap.GENERATED = tmp_path / "generated"
+    monkeypatch.setattr(sys, "argv", ["bootstrap.py"])
+    previous_umask = os.umask(0o077)
+    try:
+        bootstrap.main()
+        environment = dict(
+            line.split("=", 1)
+            for line in (bootstrap.GENERATED / ".env").read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        assert environment["LOCAL_BUNDLE_UID"] == str(os.getuid())
+        assert environment["LOCAL_BUNDLE_GID"] == str(os.getgid())
+        before = (bootstrap.GENERATED / "secrets.json").read_bytes()
+        bootstrap.main()
+        assert (bootstrap.GENERATED / "secrets.json").read_bytes() == before
+        assert bootstrap.GENERATED.stat().st_mode & 0o777 == 0o700
+        assert (bootstrap.GENERATED / "bundles").stat().st_mode & 0o777 == 0o755
+        assert (
+            bootstrap.GENERATED / "bundles/.catalog.lock"
+        ).stat().st_mode & 0o777 == 0o600
+    finally:
+        os.umask(previous_umask)

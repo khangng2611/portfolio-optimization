@@ -176,9 +176,22 @@ def test_overlay_compose_preserves_business_configuration_and_exports_only_to_lo
         "QUANT_CONSUMER_PASSWORD",
         "MARKET_PUBLISHER_PASSWORD",
         "MARKET_CONSUMER_PASSWORD",
+        "MARKET_READER_CLIENT_SECRET",
+        "LOCAL_BUNDLE_UID",
+        "LOCAL_BUNDLE_GID",
     ]
     env_file = tmp_path / "compose.env"
-    env_file.write_text("\n".join(name + "=disposable-test-value" for name in values))
+    env_file.write_text(
+        "\n".join(
+            name
+            + (
+                "=10001"
+                if name.startswith("LOCAL_BUNDLE_")
+                else "=disposable-test-value"
+            )
+            for name in values
+        )
+    )
     command = [
         "docker",
         "compose",

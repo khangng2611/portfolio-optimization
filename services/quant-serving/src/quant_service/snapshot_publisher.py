@@ -40,6 +40,92 @@ class MarketReader:
         return tuple(values)
 
 
+def _intent_filename(intent):
+    return "market-intent-" + hashlib.sha256(intent.encode()).hexdigest() + ".json"
+
+
+def _write_catalog(root, catalog):
+    temporary = root / f"catalog-{uuid4()}.tmp"
+    with temporary.open("x") as stream:
+        json.dump(catalog, stream, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
+    temporary.replace(root / "catalog.json")
+    descriptor = os.open(root, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _insert_publication(root, catalog, reference, value):
+    # Recovery of an old intent must not replace a newer publication as the
+    # latest resolver input. Existing history and hash pins remain untouched.
+    position = 0
+    decision = datetime.fromisoformat(value["decision_at"])
+    for index, entry in enumerate(catalog["bundles"]):
+        if entry.get("universe_id") != value["universe_id"]:
+            continue
+        previous = json.loads(
+            read_artifact(root, {key: entry[key] for key in ("file", "sha256")})
+        )
+        if datetime.fromisoformat(previous["decision_at"]) > decision:
+            position = index + 1
+        else:
+            break
+    catalog["bundles"].insert(
+        position,
+        reference
+        | {
+            "universe_id": value["universe_id"],
+            "bundle_id": value["bundle_id"],
+            "demo": value["demo"],
+            "publication_key": value["publication_key"],
+        },
+    )
+
+
+def _recover_locked(root, intent, intent_hash, catalog):
+    filename = _intent_filename(intent)
+    path = root / filename
+    if not path.exists():
+        return None
+    content = read_artifact(
+        root,
+        {"file": filename, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()},
+    )
+    value = json.loads(content)
+    if (
+        value.get("publication_intent") != intent
+        or value.get("publication_intent_hash") != intent_hash
+    ):
+        raise ValueError("Publication intent pins conflict")
+    reference = {"file": filename, "sha256": hashlib.sha256(content).hexdigest()}
+    indexed = next(
+        (entry for entry in catalog["bundles"] if entry["file"] == filename), None
+    )
+    if indexed is not None and indexed["sha256"] != reference["sha256"]:
+        raise ValueError("Publication intent artifact changed")
+    if indexed is None:
+        _insert_publication(root, catalog, reference, value)
+        _write_catalog(root, catalog)
+    return reference | {"bundle_id": value["bundle_id"]}
+
+
+def recover_publication(directory, publication_intent, intent_hash):
+    """Return immutable committed output, repairing an interrupted catalog update.
+
+    Expired output is still the same historical pin; serving checks its freshness.
+    """
+    root = Path(directory).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / ".catalog.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        path = root / "catalog.json"
+        catalog = json.loads(path.read_text()) if path.exists() else {"bundles": []}
+        return _recover_locked(root, publication_intent, intent_hash, catalog)
+
+
 def publish_snapshot(
     directory,
     snapshot,
@@ -53,11 +139,19 @@ def publish_snapshot(
     lookback=252,
     min_returns=60,
     renew=False,
+    publication_intent=None,
+    intent_hash=None,
 ):
     import re
 
     if not re.fullmatch(r"[A-Z0-9_-]{1,64}", universe_id) or universe_id == "DEMO":
         raise ValueError("A distinct registered real-data universe is required")
+    if (publication_intent is None) != (intent_hash is None):
+        raise ValueError("Publication intent and hash must be supplied together")
+    if publication_intent:
+        recovered = recover_publication(directory, publication_intent, intent_hash)
+        if recovered:
+            return recovered
     now = now or utcnow()
     panel = SnapshotPanel(
         snapshot,
@@ -91,7 +185,9 @@ def publish_snapshot(
     )
     value = {
         "schema_version": 1,
-        "bundle_id": "market-" + str(uuid4()),
+        "bundle_id": _intent_filename(publication_intent)[:-5]
+        if publication_intent
+        else "market-" + str(uuid4()),
         "universe_id": universe_id,
         "snapshot_id": snapshot["id"],
         "model_bundle_id": model["sha256"] if model else None,
@@ -105,6 +201,9 @@ def publish_snapshot(
         "provenance": provenance,
         "publication_key": request_key,
     }
+    if publication_intent:
+        value["publication_intent"] = publication_intent
+        value["publication_intent_hash"] = intent_hash
     if model:
         manifest = ModelManifest.model_validate_json(read_artifact(directory, model))
         if manifest.schema_version != 2 or manifest.demo:
@@ -124,6 +223,10 @@ def publish_snapshot(
             if catalog_file.exists()
             else {"bundles": []}
         )
+        if publication_intent:
+            recovered = _recover_locked(root, publication_intent, intent_hash, catalog)
+            if recovered:
+                return recovered
         for entry in catalog["bundles"]:
             if entry.get("universe_id") and entry["universe_id"] != universe_id:
                 continue
@@ -143,7 +246,11 @@ def publish_snapshot(
                     "publication_key": old.get("publication_key"),
                 }
             )
-            if old.get("publication_key") == request_key and not renew:
+            if (
+                old.get("publication_key") == request_key
+                and not renew
+                and not publication_intent
+            ):
                 if datetime.fromisoformat(old["valid_until"]) <= now:
                     raise ValueError(
                         "Publication expired; renew explicitly after freshness validation"
@@ -155,27 +262,18 @@ def publish_snapshot(
                 }
         content = json.dumps(value, sort_keys=True, allow_nan=False).encode()
         filename = value["bundle_id"] + ".json"
-        with (root / filename).open("xb") as stream:
+        # A crash cannot leave a truncated final artifact. Link publishes a fully
+        # fsynced temporary inode without ever overwriting an immutable bundle.
+        temporary_bundle = root / f"bundle-{uuid4()}.tmp"
+        with temporary_bundle.open("xb") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
+        os.link(temporary_bundle, root / filename)
+        temporary_bundle.unlink()
         reference = {"file": filename, "sha256": hashlib.sha256(content).hexdigest()}
-        catalog["bundles"].insert(
-            0,
-            reference
-            | {
-                "universe_id": universe_id,
-                "bundle_id": value["bundle_id"],
-                "demo": False,
-                "publication_key": request_key,
-            },
-        )
-        temporary = root / f"catalog-{uuid4()}.tmp"
-        with temporary.open("x") as stream:
-            json.dump(catalog, stream, indent=2)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(catalog_file)
+        _insert_publication(root, catalog, reference, value)
+        _write_catalog(root, catalog)
         return reference | {"bundle_id": value["bundle_id"]}
 
 

@@ -651,7 +651,14 @@ def main() -> None:
     )
     settings["test_client"] = settings["test_client"] or args.enable_test_client
     write_private(settings_path, json_text(settings))
-    environment = dict(values, OIDC_TEST_CLIENT_SECRET=values["TEST_CLIENT_SECRET"])
+    environment = dict(
+        values,
+        OIDC_TEST_CLIENT_SECRET=values["TEST_CLIENT_SECRET"],
+        # Only the local publication worker writes this host-owned bind mount.
+        # Numeric container identity avoids world-write/chown of generated files.
+        LOCAL_BUNDLE_UID=str(os.getuid()),
+        LOCAL_BUNDLE_GID=str(os.getgid()),
+    )
     write_private(
         GENERATED / ".env",
         "# GENERATED; local development only. Do not commit.\n"

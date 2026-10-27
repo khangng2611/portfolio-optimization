@@ -1,5 +1,25 @@
 # Tiến độ software app
 
+## P0 — cập nhật 25/10/2026
+
+Đã bổ sung readiness dữ liệu/model có mã nguyên nhân và thời hạn; publication
+jobs bền vững với lease fencing, retry/idempotency, recovery và lịch cấu hình.
+Worker dùng Quant DB và Market snapshot-reader; Quant API/optimizer giữ artifact
+mount read-only. Lịch mặc định tắt; không tự crawl, train hoặc duyệt model.
+
+UI theo design hiện có hỗ trợ sửa tên/vốn có If-Match/conflict recovery, tìm/lọc/
+sắp xếp/phân trang từ server, lịch sử target, so sánh proposal và deep link/reload.
+Phiên hết hạn chỉ lưu đích điều hướng, không tự gửi lại mutation.
+
+Kiểm chứng: **336 Python/core tests / 60 web tests**, Ruff, typecheck, build và
+contracts đạt. Browser thật đã qua PKCE → onboarding → EW/target → history → sửa
+đồng thời/412 → MVO/compare → expiry → 401/đăng nhập lại; sau restart giữ cùng
+target/proposal/allocation hash. Job publish từ snapshot Market giá thật và model
+được duyệt đã SUCCEEDED, retry cùng key và đọc lại sau restart giữ cùng kết quả.
+Workflow đã nối browser lifecycle/persistence với Playwright pin và artifacts
+đã lọc; chưa chạy workflow này trên GitHub. Xem [browser gate](../../apps/web/tests/browser/README.md)
+và [publication worker](../../infra/local/README.md#durable-operator-publication).
+
 ## UI — cập nhật 25/10/2026
 
 UI trên cổng 3000 hỗ trợ onboarding có review, universe thật/minh họa, danh sách

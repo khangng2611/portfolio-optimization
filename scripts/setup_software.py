@@ -254,6 +254,7 @@ def verify(live: bool, tracing: bool = False) -> None:
             "scripts/smoke_ml_serving.py",
             "scripts/smoke_market_quant.py",
             "scripts/fetch_serving_prices.py",
+            "scripts/browser_fixture.py",
             "scripts/smoke_tracing.py",
             "scripts/export_software_contracts.py",
             "scripts/lock_software_dependencies.py",

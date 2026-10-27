@@ -30,6 +30,12 @@ class QuantResolver:
     def universes(self):
         return self._read("/internal/v1/inputs/universes", {})
 
+    def readiness(self, universe_id=None):
+        return self._read(
+            "/internal/v1/inputs/readiness",
+            {"universe_id": universe_id} if universe_id is not None else {},
+        )
+
     def _read(self, path, params):
         with self.lock:
             if self.expires <= time.monotonic():
@@ -60,10 +66,15 @@ class QuantResolver:
                 headers=inject_headers({"Authorization": f"Bearer {token}"}),
                 timeout=3,
             )
-            if (
-                response.status_code == 409
-                and response.json().get("detail", {}).get("code") == "MODEL_UNAVAILABLE"
-            ):
-                raise ModelUnavailable("No compatible approved model")
+            if response.status_code == 409:
+                try:
+                    detail = response.json().get("detail")
+                except (ValueError, AttributeError):
+                    detail = None
+                if (
+                    isinstance(detail, dict)
+                    and detail.get("code") == "MODEL_UNAVAILABLE"
+                ):
+                    raise ModelUnavailable("No compatible approved model")
             response.raise_for_status()
             return response.json()

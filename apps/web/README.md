@@ -46,12 +46,19 @@ Keycloak must allow exactly `${APP_ORIGIN}/auth/callback`, require PKCE S256, en
 - `POST /auth/logout`: requires exact Origin and `X-CSRF-Token`; deletes Redis session before provider revocation. Clears cookies; reports `providerRevoked:false` if Keycloak cannot confirm revocation. This closes the application session; the separate Identity browser SSO cookie may remain.
 - `/api/v1/portfolios` GET/POST, `/api/v1/portfolios/{uuid}` GET/PATCH, `/api/v1/portfolios/{uuid}/recommendations` GET/POST, `/api/v1/recommendations/{uuid}` GET, `/api/v1/jobs/portfolio/{uuid}` GET: fixed allowlist to Portfolio. No internal/admin or arbitrary upstream URL routes.
 - G2 adds `/api/v1/onboarding/portfolios` POST, `/api/v1/portfolios/{uuid}/dashboard` GET, `/api/v1/portfolios/{uuid}/targets` GET and `/api/v1/recommendations/{uuid}/accept` POST. Accept preserves `If-Match`, checks CSRF and only saves a target.
-- List routes allow integer `limit`/`offset` query parameters only. Mutations require JSON, exact Origin, session CSRF token and at most 64 KiB body; recommendation creation additionally requires `Idempotency-Key` (8–128 URL-safe characters). Version preconditions (`If-Match`) and backend version tags (`ETag`) pass through for owner-scoped PATCH. Cookies, caller Authorization, identity headers, upstream redirects and Set-Cookie are never forwarded.
+- Readiness reads are `/api/v1/universes/readiness` and owner-scoped `/api/v1/portfolios/{uuid}/readiness`. These expose data expiry and per-strategy capability, with no artifact paths or publication mutation route.
+- List routes support bounded integer `limit`/`offset`; portfolio lists also accept validated `q`, `risk_profile` and `sort`. JSON bodies remain arrays, with `X-Total-Count`, `X-Limit`, `X-Offset` passed through by BFF. Mutations require JSON, exact Origin, session CSRF token and at most 64 KiB body; recommendation creation additionally requires `Idempotency-Key` (8–128 URL-safe characters). Version preconditions (`If-Match`) and backend version tags (`ETag`) pass through for owner-scoped PATCH. Cookies, caller Authorization, identity headers, upstream redirects and Set-Cookie are never forwarded.
 - `GET /health/live` is process liveness, not a claim that dependencies are healthy.
 
 HTTPS cookies are `__Host-portfolio_session` and `__Host-portfolio_login`, with Secure, HttpOnly, SameSite=Lax and Path=/. Local HTTP has explicitly unprefixed, non-Secure cookies. Tokens refresh under Redis NX locks; Lua checks the current lock owner and session existence before storing rotated tokens, preventing expired lock holders or concurrent logout from resurrecting sessions. Redis failures fail closed without queuing requests. Established clients reconnect with a capped delay (at most 2.1 seconds); initial connection setup has a four-second deadline. If Redis restarts without saved sessions, old cookies remain invalid and users must sign in again. Protect Redis with authentication/TLS and no eviction; only trusted BFF instances should access it. Provider revocation failure does not restore a deleted session.
 
 The wizard loads ready universes from `/api/v1/universes`, prefers a verified real-price universe and labels demo data separately. It uses backend policy v1 (risk aversion 6/3/1.5, max position 0.5) and user-entered capital. Each recommendation gets an idempotency UUID, polls the owner-scoped job and displays weights, planned capital and provenance. Target acceptance never changes holdings. The UI ignores superseded portfolio/proposal responses. Same-step serving/core parity does not establish equivalence to the legacy research pipeline.
+
+The workspace supports editing name/planned capital with version conflict recovery,
+paginated target/proposal history, and comparison of two proposals. Hash deep links
+pin portfolio/proposal IDs and survive reload/back. An expired session remembers
+only the navigation destination; signing in never replays an interrupted mutation.
+Readiness gates new proposals; expired historical targets remain inspectable.
 
 ## Verification
 
@@ -80,6 +87,10 @@ node scripts/verify_ui_live.mjs --verify-receipt
 The first command creates a local test portfolio/proposal/target. The second
 checks the same saved target, including after a stack restart. Receipts stay in
 `infra/local/.generated/`; screenshots and browser logs stay in ignored `output/`.
+
+The reproducible browser CI gate uses the pinned Playwright dependency and
+server-registered synthetic DEMO inputs with the real Keycloak/BFF/DB/broker.
+See [browser gate commands and artifact policy](tests/browser/README.md).
 
 Tests cover encrypted records/tampering, secure cookies, one-time login state, CSRF/origin, proxy allowlists/header isolation/redirect rejection, concurrent refresh, expiry, unavailable Redis and logout races. OIDC tests use the real openid-client/Jose libraries against a deterministic issuer transport with actual RSA-signed tokens, including forged signatures, nonce/state, issuer, audience and expiry rejection. When `redis-server` is on PATH (or set `REDIS_TEST_BINARY`), the suite also runs an isolated nonpersistent Redis process, stops/restarts it, and checks failure during outage, invalidation of lost sessions and successful reauthentication on the same BFF. This test is skipped if the binary is unavailable. A complete Keycloak/Redis/browser stack is a separate integration gate; see the local stack verification record.
 

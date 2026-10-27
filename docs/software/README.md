@@ -135,9 +135,12 @@ integration trên; không cần factory reset hoặc xóa volumes.
 
 ## Phạm vi tiếp theo
 
-Chưa có crawler/live Market Data, training/promotion Model Registry, Chat/RAG,
-onboarding risk profile đầy đủ, acceptance/ledger hoặc giao dịch. Adapter input
-hiện đọc artifact được chuẩn bị phía server; chưa nối các service dữ liệu/model
-đó. Core BL_ML hiện tính từ views đã cung cấp; không khẳng định parity với toàn
-bộ pipeline `ranking_absolute` của Phase 1. Đây là phần nền tảng auth và
-recommendation đã thống nhất, không phải hoàn tất toàn bộ Phase 2.
+Onboarding, accepted target, native approved inference và Market snapshot bridge
+đã có. P0 bổ sung readiness, phân trang, lịch sử/chỉnh sửa/so sánh trên UI và
+publication jobs bền vững; hướng dẫn worker nằm trong
+[local stack](../../infra/local/README.md).
+
+Còn full Market provider/quality workflow, training/promotion registry có phân
+quyền, risk reassessment, ledger/PAPER/rebalance, Research API và Chat/RAG.
+Serving/core parity cùng input không chứng minh parity với toàn bộ pipeline
+`ranking_absolute` của Phase 1 hoặc hiệu quả đầu tư.

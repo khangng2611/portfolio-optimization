@@ -211,6 +211,30 @@ services:
     healthcheck: *api-healthcheck
     restart: unless-stopped
 
+  quant-publication:
+    image: portfolio-software-quant:local
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    command: ["python", "-m", "quant_service.publication_worker", "run"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://quant_runtime:${QUANT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/quant_db
+      BUNDLE_DIRECTORY: /bundles
+      OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+      MARKET_API_URL: http://market-api:8000
+      MARKET_READER_CLIENT_SECRET: ${MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
+      PUBLICATION_SCHEDULES: "[]"
+    volumes: ["./.generated/bundles:/bundles:rw"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; import quant_service.publication_worker; from quant_service.runtime import sessions_from_env; from sqlalchemy import text; s=sessions_from_env()(); s.execute(text('SELECT id FROM publication_job LIMIT 1')); s.close(); assert os.access('/bundles', os.W_OK)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      quant-migrate: {condition: service_completed_successfully}
+      market-api: {condition: service_healthy}
+      keycloak: {condition: service_healthy}
+    restart: unless-stopped
+
   portfolio-dispatch:
     image: portfolio-software-portfolio:local
     command: ["python", "-m", "portfolio_service.worker", "dispatch"]

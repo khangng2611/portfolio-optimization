@@ -185,3 +185,66 @@ Pinned upstream sources: [Keycloak containers and realm import](https://www.keyc
 [RabbitMQ quorum queues](https://www.rabbitmq.com/docs/quorum-queues),
 [PostgreSQL Docker image](https://hub.docker.com/_/postgres),
 [Redis 8.2 releases](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.2-release-notes/).
+
+## Durable operator publication
+
+`quant-publication` runs independently of investor requests, with Quant's runtime
+DB credential and the `quant-publisher` client restricted to Market snapshot reads.
+It alone mounts the numerical bundle directory read/write; Quant API and numerical
+workers retain read-only mounts. Bootstrap derives `LOCAL_BUNDLE_UID` and
+`LOCAL_BUNDLE_GID` from the local operator's numeric identity; only this worker
+uses that container user to write the host-owned directory and mode-0600 catalog
+lock. The bundle directory stays 0755 and `.generated` stays 0700. Existing stacks
+must rerun bootstrap to add these derived `.env` values (existing secrets remain
+unchanged), then recreate `quant-publication`; no chown or broad write permission
+is required. Apply `quant-migrate` after rebuilding the Quant
+image to add `publication_job`; keep the existing generated credentials and volumes.
+No investor publication endpoint, model training or approval runs in this worker.
+
+An operator must choose a registered real-data universe, an existing Market
+snapshot UUID and its exact content SHA-256. Enqueue with an operator-selected
+idempotency key (replace the uppercase placeholders):
+
+```sh
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml exec quant-publication python -m quant_service.publication_worker enqueue --key OPERATOR_KEY --snapshot-id SNAPSHOT_UUID --snapshot-hash SNAPSHOT_SHA256 --universe-id REAL_UNIVERSE
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml exec quant-publication python -m quant_service.publication_worker status --job-id JOB_UUID
+```
+
+Add `--model-file MODEL_MANIFEST --model-sha256 MODEL_SHA256` only for an already
+approved, provenance-complete v2 real-data model in the bundle directory. Omitting
+these pins publishes EW/MVO only. Invalid/stale input fails safely; the worker never
+guesses a newer snapshot or selects, trains or approves a model. A new explicit key
+is a new publication intent, including when refreshing the same snapshot's serving
+window; freshness is validated again. Reusing a key with different request pins or
+retry bounds fails with a conflict. Successful output is immutable and history is
+retained. `status` exposes only job ID, status, attempt count, safe error and output
+pin, and never prints credentials.
+
+The persistent job lease is 120 seconds. Claims are atomic and fenced, expired
+leases are reclaimable after a worker restart. Every artifact/catalog write and
+recovery validates the active unexpired token, renews it, and holds the job's DB
+row lock through local publication and its final result commit. Market network
+reads run outside that lock. Old or expired lease holders cannot write output or
+finalize a replacement claim. Default maximum attempts is five (`--max-attempts` accepts
+1–10); retry waits are 30, 60, 120, 240 seconds, capped at one hour. Invalid input
+is terminal immediately. A crash after bundle fsync recovers the identical output
+before requesting Market again, even when that historical output has expired.
+Serving readiness still rejects an expired output. A terminal job requires operator
+inspection and a new explicit key; it is never silently reset.
+
+Scheduling is disabled by default (`PUBLICATION_SCHEDULES: "[]"`). A trusted local
+Compose override can set this variable to a JSON array with this shape:
+
+```json
+[{"id":"real-daily","anchor":"2026-10-25T00:00:00+00:00","interval_seconds":86400,"request":{"snapshot_id":"SNAPSHOT_UUID","snapshot_hash":"SNAPSHOT_SHA256","universe_id":"REAL_UNIVERSE","model":null}}]
+```
+
+Intervals must be 60 seconds to one year; anchors require a timezone. Every tick
+enqueues the current due slot using a unique deterministic key, so multiple
+schedulers/restarts deduplicate. Missed slots during downtime are skipped; there is
+no catch-up burst. Each slot keeps its exact configured snapshot/hash/model pins.
+Update pins explicitly when new data is available; an old snapshot eventually
+fails freshness validation. Changing request pins inside an already enqueued slot
+is a conflict: use a new schedule ID (and anchor) for a changed publication policy.
+`run --once` performs schedule enqueue and attempts one due job for manual recovery
+or an external supervisor. Avoid logging expanded Compose config; use `config --quiet`.

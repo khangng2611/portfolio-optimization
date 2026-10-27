@@ -113,6 +113,56 @@
           }
         }
       }
+    },
+    "/internal/v1/inputs/readiness": {
+      "get": {
+        "summary": "Readiness",
+        "operationId": "readiness_internal_v1_inputs_readiness_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "universe_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Z0-9_-]{1,64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Universe Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

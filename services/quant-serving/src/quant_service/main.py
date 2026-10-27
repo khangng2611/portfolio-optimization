@@ -1,7 +1,7 @@
 import os
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 
@@ -69,6 +69,16 @@ def create_app(*, sessions, verifier, catalog):
             raise HTTPException(409, {"code": "MODEL_UNAVAILABLE"}) from None
         except ValueError:
             raise HTTPException(503, "Compatible verified input unavailable") from None
+
+    @app.get("/internal/v1/inputs/readiness")
+    def readiness(
+        universe_id: str | None = Query(default=None, pattern=r"^[A-Z0-9_-]{1,64}$"),
+        identity=Depends(resolver_identity),
+    ):
+        try:
+            return catalog.readiness(universe_id)
+        except (ValueError, KeyError, TypeError, OSError):
+            raise HTTPException(503, "Verified catalog unavailable") from None
 
     return app
 

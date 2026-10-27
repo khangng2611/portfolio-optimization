@@ -285,6 +285,41 @@ def _allocate(request: dict) -> dict:
     }
 
 
+def validate_numerical_inputs(inputs: dict, *, strategy: str = "MVO") -> None:
+    """Validate explicit data without policy checks, posterior solving or allocation.
+
+    Uses the allocator's numeric, shape and covariance tolerances. Missing model
+    views and market weights are permitted for EW/MVO; BL_ML requires both.
+    Success does not establish feasibility for an investor's constraints.
+    """
+    try:
+        with np.errstate(over="raise", invalid="raise", divide="raise"):
+            if not isinstance(inputs, dict):
+                raise _invalid("inputs", "inputs must be an object")
+            allowed = {
+                "asset_ids", "mean_returns", "covariance", "market_weights",
+                "views_p", "views_q", "view_confidences", "tau", "delta",
+            }
+            if set(inputs) - allowed:
+                raise _invalid("inputs", "inputs contain unsupported fields")
+            if not isinstance(strategy, str) or strategy not in {"EW", "MVO", "BL_ML"}:
+                raise CoreError("unsupported_strategy", "Unsupported strategy")
+            assets = _asset_ids(inputs.get("asset_ids"), "asset_ids")
+            _vector(inputs.get("mean_returns"), len(assets), "mean_returns")
+            _covariance(inputs.get("covariance"), len(assets))
+            _positive(inputs.get("tau", 0.05), "tau")
+            _positive(inputs.get("delta", 2.5), "delta")
+            _views(inputs, len(assets), required=strategy == "BL_ML")
+            if inputs.get("market_weights") is not None:
+                market = _vector(inputs["market_weights"], len(assets), "market_weights")
+                if np.any(market < 0) or abs(market.sum() - 1.0) > 1e-8:
+                    raise _invalid("market_weights", "market_weights must be nonnegative and sum to one")
+            elif strategy == "BL_ML":
+                raise _invalid("market_weights", "BL_ML requires market_weights")
+    except (np.linalg.LinAlgError, FloatingPointError, OverflowError):
+        raise CoreError("numerical_failure", "Inputs exceed the stable numerical range of the allocator") from None
+
+
 def allocate(request: dict) -> dict:
     """Allocate a fully invested, long-only portfolio or raise ``CoreError``.
 

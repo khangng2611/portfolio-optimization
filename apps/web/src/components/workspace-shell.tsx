@@ -1,22 +1,24 @@
 'use client';
 import type { ReactNode } from 'react';
+import { workspaceHash, type WorkspaceView } from '../lib/workspace-state';
 
-export type WorkspaceView = 'overview' | 'portfolios' | 'create' | 'proposal' | 'profile';
+export type { WorkspaceView } from '../lib/workspace-state';
 export function DesignIcon({ name }: { name: 'overview' | 'portfolio' | 'chat' | 'views' | 'settings' | 'empty-portfolio' }) {
   const size = name === 'empty-portfolio' ? 28 : 20;
   return <img className="nav-icon" src={`/figma/${name}.svg`} width={size} height={size} alt="" aria-hidden="true"/>;
 }
 
-export function WorkspaceShell({ children, view, account, busy, onLogout, context }: {
+export function WorkspaceShell({ children, view, portfolioId, account, busy, onLogout, context }: {
   children: ReactNode; view: WorkspaceView; account: string | null; busy: boolean;
-  onLogout: () => void; context: string;
+  onLogout: () => void; context: string; portfolioId?: string;
 }) {
+  const link = (view: WorkspaceView) => workspaceHash({ view, ...(['portfolios', 'create'].includes(view) ? {} : { portfolioId }) });
   const links = <>
-    <a href="#overview" className={`nav-link ${view === 'overview' ? 'active' : ''}`} aria-current={view === 'overview' ? 'page' : undefined}><DesignIcon name="overview"/>Tổng quan</a>
+    <a href={link('overview')} className={`nav-link ${view === 'overview' ? 'active' : ''}`} aria-current={view === 'overview' ? 'page' : undefined}><DesignIcon name="overview"/>Tổng quan</a>
     <a href="#portfolios" className={`nav-link ${['portfolios', 'create', 'proposal'].includes(view) ? 'active' : ''}`} aria-current={['portfolios', 'create', 'proposal'].includes(view) ? 'page' : undefined}><DesignIcon name="portfolio"/>Danh mục</a>
     <span className="nav-link unavailable" aria-disabled="true" title="Hội thoại chưa được triển khai"><DesignIcon name="chat"/>Hội thoại <small>Sắp có</small></span>
     <span className="nav-link unavailable" aria-disabled="true" title="Nhận định chưa được triển khai"><DesignIcon name="views"/>Nhận định <small>Sắp có</small></span>
-    <a href="#profile" className={`nav-link ${view === 'profile' ? 'active' : ''}`} aria-current={view === 'profile' ? 'page' : undefined}><DesignIcon name="settings"/>Hồ sơ & cài đặt</a>
+    <a href={link('profile')} className={`nav-link ${view === 'profile' ? 'active' : ''}`} aria-current={view === 'profile' ? 'page' : undefined}><DesignIcon name="settings"/>Hồ sơ & cài đặt</a>
   </>;
   return <>
     <a className="skip-link" href="#main-content">Đến nội dung chính</a>
@@ -31,10 +33,10 @@ export function WorkspaceShell({ children, view, account, busy, onLogout, contex
       </main>
     </div>
     <nav className="bottom-nav" aria-label="Điều hướng di động">
-      <a href="#overview" aria-current={view === 'overview' ? 'page' : undefined}><DesignIcon name="overview"/><span>Tổng quan</span></a>
+      <a href={link('overview')} aria-current={view === 'overview' ? 'page' : undefined}><DesignIcon name="overview"/><span>Tổng quan</span></a>
       <a href="#portfolios" aria-current={['portfolios', 'create'].includes(view) ? 'page' : undefined}><DesignIcon name="portfolio"/><span>Danh mục</span></a>
-      <a href="#proposal" aria-current={view === 'proposal' ? 'page' : undefined}><DesignIcon name="views"/><span>Đề xuất</span></a>
-      <a href="#profile" aria-current={view === 'profile' ? 'page' : undefined}><DesignIcon name="settings"/><span>Hồ sơ</span></a>
+      <a href={link('proposal')} aria-current={view === 'proposal' ? 'page' : undefined}><DesignIcon name="views"/><span>Đề xuất</span></a>
+      <a href={link('profile')} aria-current={view === 'profile' ? 'page' : undefined}><DesignIcon name="settings"/><span>Hồ sơ</span></a>
     </nav>
   </>;
 }

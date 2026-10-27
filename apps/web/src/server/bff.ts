@@ -11,12 +11,14 @@ const equal = (a: string, b: string) => { const left = Buffer.from(a); const rig
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 const routes = [
+  { path: /^\/api\/v1\/universes\/readiness$/, template: '/api/v1/universes/readiness', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/readiness$`), template: '/api/v1/portfolios/{portfolio_id}/readiness', methods: ['GET'], query: [] },
   { path: /^\/api\/v1\/universes$/, template: '/api/v1/universes', methods: ['GET'], query: [] },
   { path: /^\/api\/v1\/onboarding\/portfolios$/, template: '/api/v1/onboarding/portfolios', methods: ['POST'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/dashboard$`), template: '/api/v1/portfolios/{portfolio_id}/dashboard', methods: ['GET'], query: [] },
-  { path: new RegExp(`^/api/v1/portfolios/${uuid}/targets$`), template: '/api/v1/portfolios/{portfolio_id}/targets', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/targets$`), template: '/api/v1/portfolios/{portfolio_id}/targets', methods: ['GET'], query: ['limit', 'offset'] },
   { path: new RegExp(`^/api/v1/recommendations/${uuid}/accept$`), template: '/api/v1/recommendations/{recommendation_id}/accept', methods: ['POST'], query: [] },
-  { path: /^\/api\/v1\/portfolios$/, template: '/api/v1/portfolios', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
+  { path: /^\/api\/v1\/portfolios$/, template: '/api/v1/portfolios', methods: ['GET', 'POST'], query: ['limit', 'offset', 'q', 'risk_profile', 'sort'] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}$`), template: '/api/v1/portfolios/{portfolio_id}', methods: ['GET', 'PATCH'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/recommendations$`), template: '/api/v1/portfolios/{portfolio_id}/recommendations', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
   { path: new RegExp(`^/api/v1/recommendations/${uuid}$`), template: '/api/v1/recommendations/{recommendation_id}', methods: ['GET'], query: [] },
@@ -146,7 +148,14 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       const url = new URL(request.url);
       const route = routes.find(route => route.path.test(url.pathname) && route.methods.includes(request.method));
       if (!route || [...url.searchParams.keys()].some(key => !route.query.includes(key))) throw new HttpError(404, 'Route not found');
-      for (const value of url.searchParams.values()) if (!/^\d{1,6}$/.test(value)) throw new HttpError(400, 'Invalid pagination');
+      for (const [key, value] of url.searchParams) {
+        if (url.searchParams.getAll(key).length !== 1) throw new HttpError(400, 'Duplicate query parameter');
+        if (key === 'limit' && (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 100)) throw new HttpError(400, 'Invalid pagination');
+        if (key === 'offset' && (!/^\d{1,7}$/.test(value) || Number(value) > 1_000_000)) throw new HttpError(400, 'Invalid pagination');
+        if (key === 'q' && (value.trim().length > 120 || /[\x00-\x1f\x7f]/.test(value))) throw new HttpError(400, 'Invalid search');
+        if (key === 'risk_profile' && !['all', 'manual', 'conservative', 'balanced', 'growth'].includes(value)) throw new HttpError(400, 'Invalid risk profile');
+        if (key === 'sort' && !['created_desc', 'name_asc', 'capital_desc'].includes(value)) throw new HttpError(400, 'Invalid sort');
+      }
       const { id, session } = await load(request);
       const mutates = !['GET', 'HEAD'].includes(request.method);
       if (mutates) mutation(request, session);
@@ -177,6 +186,10 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       const response = json(sanitizeTraceFields(data, traceViewerBase(process.env.TRACE_VIEWER_URL)), upstream.status);
       const etag = upstream.headers.get('etag');
       if (etag) response.headers.set('etag', etag);
+      for (const name of ['x-total-count', 'x-limit', 'x-offset']) {
+        const value = upstream.headers.get(name);
+        if (value && /^\d+$/.test(value)) response.headers.set(name, value);
+      }
       return response;
     })),
   };

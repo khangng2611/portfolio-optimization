@@ -58,6 +58,6 @@ export function RiskWizard({ busy, onCreate, universes = [], onStepChange, onCan
         <div><dt>Hồ sơ & policy</dt><dd>Hệ thống xác định khi xác nhận · risk-v1</dd></div>
       </dl><p className="muted small">Hồ sơ rủi ro không bảo đảm mức thua lỗ tối đa hoặc lợi nhuận. Bạn sẽ duyệt từng đề xuất trước khi lưu tỷ trọng mục tiêu.</p></div>}
     </section>
-    <div className="actions"><button type="submit" disabled={busy || !selectedUniverse}>{busy ? 'Đang xử lý…' : step < 2 ? step === 0 ? 'Tiếp tục' : 'Xem lại hồ sơ' : 'Xác nhận & tạo danh mục'}</button>{step > 0 ? <button type="button" className="quiet" disabled={busy} onClick={() => changeStep(step - 1)}>{step === 2 ? 'Sửa câu trả lời' : 'Quay lại'}</button> : onCancel && <button type="button" className="quiet" disabled={busy} onClick={onCancel}>Quay lại</button>}</div>
+    <div className="actions"><button data-testid={step === 2 ? 'create-portfolio-submit' : undefined} type="submit" disabled={busy || !selectedUniverse}>{busy ? 'Đang xử lý…' : step < 2 ? step === 0 ? 'Tiếp tục' : 'Xem lại hồ sơ' : 'Xác nhận & tạo danh mục'}</button>{step > 0 ? <button type="button" className="quiet" disabled={busy} onClick={() => changeStep(step - 1)}>{step === 2 ? 'Sửa câu trả lời' : 'Quay lại'}</button> : onCancel && <button type="button" className="quiet" disabled={busy} onClick={onCancel}>Quay lại</button>}</div>
   </form>;
 }

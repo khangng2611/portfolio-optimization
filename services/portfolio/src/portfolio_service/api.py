@@ -1,14 +1,14 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import Field
+from pydantic import Field, StringConstraints
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -81,6 +81,33 @@ class PortfolioUpdate(StrictModel):
     )
     risk_aversion: float | None = Field(default=None, gt=0, le=100)
     max_position_weight: float | None = Field(default=None, gt=0, le=1)
+
+
+class StrategyReadiness(StrictModel):
+    strategy: Literal["EW", "MVO", "BL_ML"]
+    available: bool
+    reason_code: Literal[
+        "READY",
+        "MODEL_UNAVAILABLE",
+        "MODEL_INVALID",
+        "INPUT_EXPIRED",
+        "INPUT_UNAVAILABLE",
+        "INPUT_INVALID",
+    ]
+
+
+class InputReadiness(StrictModel):
+    universe_id: str = Field(pattern=r"^[A-Z0-9_-]{1,64}$")
+    asset_ids: list[str]
+    as_of_date: date | None
+    valid_until: datetime | None
+    demo: bool
+    data_origin: Literal["real", "synthetic", "unverified"]
+    status: Literal["READY", "EXPIRED", "UNAVAILABLE"]
+    reason_code: Literal["READY", "INPUT_EXPIRED", "INPUT_UNAVAILABLE", "INPUT_INVALID"]
+    strategies: list[StrategyReadiness]
+    next_action: Literal["NONE", "REFRESH_DATA", "CONTACT_OPERATOR"]
+    checked_at: datetime
 
 
 def policy_id(value):
@@ -231,6 +258,24 @@ def create_app(*, sessions, verifier, resolver):
                 503, "Danh sách dữ liệu phục vụ chưa sẵn sàng."
             ) from None
 
+    def resolve_readiness(universe_id=None):
+        try:
+            value = resolver.readiness(universe_id)
+            if universe_id is not None:
+                result = InputReadiness.model_validate(value)
+                if result.universe_id != universe_id:
+                    raise ValueError("Readiness universe mismatch")
+                return result
+            if not isinstance(value, list):
+                raise ValueError("Invalid readiness catalog")
+            return [InputReadiness.model_validate(item) for item in value]
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            raise HTTPException(503, "Dữ liệu phục vụ chưa sẵn sàng.") from None
+
+    @app.get("/api/v1/universes/readiness", response_model=list[InputReadiness])
+    def universes_readiness(identity=Depends(principal)):
+        return resolve_readiness()
+
     @app.post("/api/v1/portfolios", status_code=201)
     def create_portfolio(body: NewPortfolio, user_id=Depends(owner)):
         with sessions.begin() as session:
@@ -249,17 +294,53 @@ def create_app(*, sessions, verifier, resolver):
             return portfolio_json(value)
 
     @app.get("/api/v1/portfolios")
-    def list_portfolios(user_id=Depends(owner)):
+    def list_portfolios(
+        response: Response,
+        limit: int = Query(default=100, ge=1, le=100),
+        offset: int = Query(default=0, ge=0, le=1_000_000),
+        q: Annotated[
+            str, StringConstraints(strip_whitespace=True, max_length=120)
+        ] = "",
+        risk_profile: Literal[
+            "all", "manual", "conservative", "balanced", "growth"
+        ] = "all",
+        sort: Literal["created_desc", "name_asc", "capital_desc"] = "created_desc",
+        user_id=Depends(owner),
+    ):
+        filters = [Portfolio.owner_user_id == user_id]
+        if q.strip():
+            filters.append(Portfolio.name.icontains(q.strip(), autoescape=True))
+        if risk_profile == "manual":
+            filters.append(Portfolio.risk_profile.is_(None))
+        elif risk_profile != "all":
+            filters.append(
+                Portfolio.risk_profile["profile"].as_string() == risk_profile
+            )
+        order = {
+            "created_desc": Portfolio.created_at.desc(),
+            "name_asc": func.lower(Portfolio.name).asc(),
+            "capital_desc": Portfolio.capital_vnd.desc(),
+        }[sort]
         with sessions() as session:
+            page_headers(
+                response, session, select(Portfolio).where(*filters), limit, offset
+            )
             return [
                 portfolio_json(p)
                 for p in session.scalars(
                     select(Portfolio)
-                    .where(Portfolio.owner_user_id == user_id)
-                    .order_by(Portfolio.created_at.desc())
-                    .limit(100)
+                    .where(*filters)
+                    .order_by(order, Portfolio.id.asc())
+                    .limit(limit)
+                    .offset(offset)
                 )
             ]
+
+    def page_headers(response, session, query, limit, offset):
+        total = session.scalar(select(func.count()).select_from(query.subquery()))
+        response.headers["X-Total-Count"] = str(total)
+        response.headers["X-Limit"] = str(limit)
+        response.headers["X-Offset"] = str(offset)
 
     @app.post("/api/v1/onboarding/portfolios", status_code=201)
     def onboarding(body: OnboardingPortfolio, user_id=Depends(owner)):
@@ -286,25 +367,50 @@ def create_app(*, sessions, verifier, resolver):
             raise HTTPException(404, "Không tìm thấy danh mục.")
         return value
 
-    def targets(session, portfolio_id, user_id):
+    @app.get(
+        "/api/v1/portfolios/{portfolio_id}/readiness", response_model=InputReadiness
+    )
+    def portfolio_readiness(portfolio_id: UUID, user_id=Depends(owner)):
+        with sessions() as session:
+            value = owned_portfolio(session, portfolio_id, user_id)
+            universe_id = value.universe_id
+        return resolve_readiness(universe_id)
+
+    def target_query(portfolio_id, user_id):
+        return select(AcceptedTarget).where(
+            AcceptedTarget.portfolio_id == str(portfolio_id),
+            AcceptedTarget.owner_user_id == user_id,
+        )
+
+    def targets(session, portfolio_id, user_id, *, limit=100, offset=0):
         return [
             target_json(value)
             for value in session.scalars(
-                select(AcceptedTarget)
-                .where(
-                    AcceptedTarget.portfolio_id == str(portfolio_id),
-                    AcceptedTarget.owner_user_id == user_id,
+                target_query(portfolio_id, user_id)
+                .order_by(
+                    AcceptedTarget.portfolio_version.desc(),
+                    AcceptedTarget.accepted_at.desc(),
+                    AcceptedTarget.id.asc(),
                 )
-                .order_by(AcceptedTarget.portfolio_version.desc())
-                .limit(100)
+                .limit(limit)
+                .offset(offset)
             )
         ]
 
     @app.get("/api/v1/portfolios/{portfolio_id}/targets")
-    def list_targets(portfolio_id: UUID, user_id=Depends(owner)):
+    def list_targets(
+        portfolio_id: UUID,
+        response: Response,
+        limit: int = Query(default=100, ge=1, le=100),
+        offset: int = Query(default=0, ge=0, le=1_000_000),
+        user_id=Depends(owner),
+    ):
         with sessions() as session:
             owned_portfolio(session, portfolio_id, user_id)
-            return targets(session, portfolio_id, user_id)
+            page_headers(
+                response, session, target_query(portfolio_id, user_id), limit, offset
+            )
+            return targets(session, portfolio_id, user_id, limit=limit, offset=offset)
 
     @app.get("/api/v1/portfolios/{portfolio_id}/dashboard")
     def dashboard(portfolio_id: UUID, user_id=Depends(owner)):
@@ -455,7 +561,13 @@ def create_app(*, sessions, verifier, resolver):
             return portfolio_json(value)
 
     @app.get("/api/v1/portfolios/{portfolio_id}/recommendations")
-    def list_recommendations(portfolio_id: UUID, user_id=Depends(owner)):
+    def list_recommendations(
+        portfolio_id: UUID,
+        response: Response,
+        limit: int = Query(default=100, ge=1, le=100),
+        offset: int = Query(default=0, ge=0, le=1_000_000),
+        user_id=Depends(owner),
+    ):
         with sessions() as session:
             portfolio = session.scalar(
                 select(Portfolio).where(
@@ -465,18 +577,24 @@ def create_app(*, sessions, verifier, resolver):
             )
             if not portfolio:
                 raise HTTPException(404, "Không tìm thấy danh mục.")
+            query = (
+                select(Recommendation, Job)
+                .join(Job, Job.id == Recommendation.job_id)
+                .where(
+                    Recommendation.portfolio_id == portfolio.id,
+                    Recommendation.owner_user_id == user_id,
+                    Job.owner_user_id == user_id,
+                )
+            )
+            page_headers(response, session, query, limit, offset)
             return [
                 recommendation_json(value, job)
                 for value, job in session.execute(
-                    select(Recommendation, Job)
-                    .join(Job, Job.id == Recommendation.job_id)
-                    .where(
-                        Recommendation.portfolio_id == portfolio.id,
-                        Recommendation.owner_user_id == user_id,
-                        Job.owner_user_id == user_id,
+                    query.order_by(
+                        Recommendation.created_at.desc(), Recommendation.id.asc()
                     )
-                    .order_by(Recommendation.created_at.desc())
-                    .limit(100)
+                    .limit(limit)
+                    .offset(offset)
                 )
             ]
 

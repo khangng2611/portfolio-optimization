@@ -139,6 +139,8 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         "portfolio:read",
         "market:read",
         "market:write",
+        "chat:read",
+        "chat:write",
     }
     for client_id in ("web-id", "portfolio-service"):
         assert "basic" in {scope["name"] for scope in state["defaults"][client_id]}
@@ -151,7 +153,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
     assert {
         mapper["config"]["included.client.audience"]
         for mapper in state["mappers"]["test-id"]
-    } == {"portfolio-api", "market-api"}
+    } == {"portfolio-api", "market-api", "chat-api"}
     assert {s["name"] for s in state["optional"]["web-id"]} == {
         "market:read",
         "market:write",
@@ -162,7 +164,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
     }
     assert {
         m["config"]["included.client.audience"] for m in state["mappers"]["web-id"]
-    } == {"portfolio-api", "market-api", "quant-api", "ml-api"}
+    } == {"portfolio-api", "market-api", "quant-api", "ml-api", "chat-api"}
     assert state["clients"]["market-api"]["bearerOnly"] is True
     publisher = state["clients"]["quant-publisher"]
     assert publisher["secret"] == "publisher-secret"
@@ -227,6 +229,10 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
                 "ml:train",
                 "ml:review",
                 "ml:model:read",
+                "chat:read",
+                "chat:write",
+                "chat:delegate",
+                "market:chat:read",
             }
             scopes.append(dict(value, id=value["name"]))
             return httpx.Response(201)
@@ -244,6 +250,7 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             assert value["clientId"] in {
                 "market-api",
                 "ml-api",
+                "chat-api",
                 "portfolio-web",
                 "portfolio-service",
             }
@@ -262,7 +269,13 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
                 if request.method == "GET"
                 else httpx.Response(201)
             )
-        if path.endswith("/default-client-scopes/basic") and request.method == "PUT":
+        if (
+            any(
+                path.endswith("/default-client-scopes/" + scope)
+                for scope in ("basic", "chat:read", "chat:write")
+            )
+            and request.method == "PUT"
+        ):
             return httpx.Response(204)
         raise AssertionError(
             "Disabled test-client setting caused an unexpected identity mutation"
@@ -279,6 +292,7 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
     assert {c["clientId"] for c in clients} == {
         "market-api",
         "ml-api",
+        "chat-api",
         "portfolio-web",
         "portfolio-service",
     }

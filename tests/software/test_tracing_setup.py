@@ -118,6 +118,7 @@ def test_install_includes_editable_observability_package_in_software_environment
         "services/quant-serving",
         "services/market-data",
         "services/ml-platform",
+        "services/chat",
     ]:
         directory = tmp_path / package
         directory.mkdir(parents=True)
@@ -182,6 +183,10 @@ def test_overlay_compose_preserves_business_configuration_and_exports_only_to_lo
         "ML_RUNTIME_PASSWORD",
         "ML_MARKET_READER_CLIENT_SECRET",
         "ML_READER_CLIENT_SECRET",
+        "CHAT_MIGRATOR_PASSWORD",
+        "CHAT_RUNTIME_PASSWORD",
+        "CHAT_CLIENT_SECRET",
+        "PORTFOLIO_ACCOUNT_READER_SECRET",
         "LOCAL_BUNDLE_UID",
         "LOCAL_BUNDLE_GID",
     ]

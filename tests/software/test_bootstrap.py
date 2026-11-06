@@ -83,7 +83,7 @@ def test_market_scopes_optional_for_web_with_operator_backend_role_gate(
     assert clients["market-api"]["bearerOnly"] is True
     test = clients["portfolio-test"]
     assert {"market:read", "market:write"} <= set(test["defaultClientScopes"])
-    assert {"portfolio-api", "market-api"} == {
+    assert {"portfolio-api", "market-api", "chat-api"} == {
         mapper["config"]["included.client.audience"]
         for mapper in test["protocolMappers"]
     }
@@ -92,7 +92,7 @@ def test_market_scopes_optional_for_web_with_operator_backend_role_gate(
     assert [
         mapper["config"]["included.client.audience"]
         for mapper in web["protocolMappers"]
-    ] == ["portfolio-api", "market-api", "quant-api", "ml-api"]
+    ] == ["portfolio-api", "market-api", "quant-api", "ml-api", "chat-api"]
     assert set(web["optionalClientScopes"]) == {
         "market:read",
         "market:write",

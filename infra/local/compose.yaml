@@ -14,6 +14,7 @@ x-portfolio-environment: &portfolio-environment
   OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
   OIDC_AUDIENCE: portfolio-api
   OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+  OIDC_ACCOUNT_READER_SECRET: ${PORTFOLIO_ACCOUNT_READER_SECRET:?Run bootstrap.py}
   QUANT_API_URL: http://quant-api:8000
   QUANT_CLIENT_SECRET: ${QUANT_CLIENT_SECRET:?Run bootstrap.py}
 
@@ -41,6 +42,16 @@ x-ml-environment: &ml-environment
   OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
   OIDC_AUDIENCE: ml-api
   ML_ARTIFACT_DIRECTORY: /ml-models
+
+x-chat-environment: &chat-environment
+  DATABASE_URL: postgresql+psycopg://chat_runtime:${CHAT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/chat_db
+  OIDC_ISSUER: http://localhost:8080/realms/portfolio
+  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_AUDIENCE: chat-api
+  OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+  CHAT_CLIENT_SECRET: ${CHAT_CLIENT_SECRET:?Run bootstrap.py}
+  PORTFOLIO_API_URL: http://portfolio-api:8000
+  MARKET_API_URL: http://market-api:8000
 
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
@@ -163,6 +174,43 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
     restart: "no"
+
+  chat-migrate:
+    build: {context: ../.., dockerfile: services/chat/Dockerfile}
+    image: portfolio-software-chat:local
+    command: ["alembic", "-c", "/app/services/chat/alembic.ini", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://chat_migrator:${CHAT_MIGRATOR_PASSWORD:?Run bootstrap.py}@postgres:5432/chat_db
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  chat-api:
+    image: portfolio-software-chat:local
+    environment: *chat-environment
+    ports: ["127.0.0.1:8005:8000"]
+    depends_on:
+      chat-migrate: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  chat-worker:
+    image: portfolio-software-chat:local
+    command: ["python", "-m", "chat_service.worker"]
+    environment: *chat-environment
+    healthcheck:
+      test: ["CMD", "python", "-c", "import chat_service.worker; from chat_service.runtime import sessions_from_env; from sqlalchemy import text; s=sessions_from_env()(); s.execute(text('SELECT id FROM chat_job LIMIT 1')); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      chat-migrate: {condition: service_completed_successfully}
+      portfolio-api: {condition: service_healthy}
+      market-api: {condition: service_healthy}
+      keycloak: {condition: service_healthy}
+    restart: unless-stopped
 
   ml-migrate:
     build: {context: ../.., dockerfile: services/ml-platform/Dockerfile}
@@ -362,13 +410,14 @@ services:
       OIDC_CLIENT_ID: portfolio-web
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Run bootstrap.py}
       OIDC_AUDIENCE: portfolio-api
-      OIDC_SCOPE: openid profile email portfolio:read portfolio:write market:read market:write quant:publish ml:read ml:train ml:review
+      OIDC_SCOPE: openid profile email portfolio:read portfolio:write market:read market:write quant:publish ml:read ml:train ml:review chat:read chat:write
       REDIS_URL: redis://:${REDIS_PASSWORD:?Run bootstrap.py}@redis:6379/0
       SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Run bootstrap.py}
       PORTFOLIO_API_URL: http://portfolio-api:8000
       MARKET_API_URL: http://market-api:8000
       QUANT_API_URL: http://quant-api:8000
       ML_API_URL: http://ml-api:8000
+      CHAT_API_URL: http://chat-api:8000
       ALLOW_INSECURE_HTTP: "true"
     ports: ["127.0.0.1:3000:3000"]
     depends_on:

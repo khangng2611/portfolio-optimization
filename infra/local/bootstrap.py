@@ -48,8 +48,18 @@ ML_SECRET_NAMES = [
     "ML_MARKET_READER_CLIENT_SECRET",
     "ML_READER_CLIENT_SECRET",
 ]
+CHAT_SECRET_NAMES = [
+    "CHAT_MIGRATOR_PASSWORD",
+    "CHAT_RUNTIME_PASSWORD",
+    "CHAT_CLIENT_SECRET",
+    "PORTFOLIO_ACCOUNT_READER_SECRET",
+]
 SECRET_NAMES = (
-    LEGACY_SECRET_NAMES + MARKET_SECRET_NAMES + PUBLISHER_SECRET_NAMES + ML_SECRET_NAMES
+    LEGACY_SECRET_NAMES
+    + MARKET_SECRET_NAMES
+    + PUBLISHER_SECRET_NAMES
+    + ML_SECRET_NAMES
+    + CHAT_SECRET_NAMES
 )
 
 
@@ -73,7 +83,12 @@ def create_secrets() -> dict[str, str]:
                 "Existing secrets are incomplete; restore secrets.json rather than silently rotating credentials."
             )
         additions = (
-            set(MARKET_SECRET_NAMES + PUBLISHER_SECRET_NAMES + ML_SECRET_NAMES)
+            set(
+                MARKET_SECRET_NAMES
+                + PUBLISHER_SECRET_NAMES
+                + ML_SECRET_NAMES
+                + CHAT_SECRET_NAMES
+            )
             - values.keys()
         )
         if additions:
@@ -121,7 +136,7 @@ def make_database_sql(values: dict[str, str]) -> str:
         "REVOKE ALL ON DATABASE postgres FROM PUBLIC;",
         "REVOKE ALL ON DATABASE template1 FROM PUBLIC;",
     ]
-    for name in ("identity", "portfolio", "quant", "market", "ml"):
+    for name in ("identity", "portfolio", "quant", "market", "ml", "chat"):
         owner, migrator, runtime, database = [
             f"{name}_{suffix}" for suffix in ("owner", "migrator", "runtime", "db")
         ]
@@ -260,6 +275,10 @@ def make_realm(
             "market:read",
             "market:write",
             "market:snapshot:read",
+            "chat:read",
+            "chat:write",
+            "chat:delegate",
+            "market:chat:read",
         ]
     ]
     web = {
@@ -286,6 +305,8 @@ def make_realm(
             "roles",
             "portfolio:read",
             "portfolio:write",
+            "chat:read",
+            "chat:write",
         ],
         "optionalClientScopes": [
             "market:read",
@@ -297,7 +318,7 @@ def make_realm(
         ],
         "protocolMappers": [
             audience_mapper(a)
-            for a in ("portfolio-api", "market-api", "quant-api", "ml-api")
+            for a in ("portfolio-api", "market-api", "quant-api", "ml-api", "chat-api")
         ],
     }
     service = {
@@ -321,7 +342,7 @@ def make_realm(
             "protocol": "openid-connect",
             "bearerOnly": True,
         }
-        for name in ["portfolio-api", "quant-api", "market-api", "ml-api"]
+        for name in ["portfolio-api", "quant-api", "market-api", "ml-api", "chat-api"]
     ]
     if values.get("MARKET_READER_CLIENT_SECRET"):
         clients.append(
@@ -366,6 +387,59 @@ def make_realm(
                     "protocolMappers": [audience_mapper(audience)],
                 }
             )
+    if values.get("CHAT_CLIENT_SECRET"):
+        clients.append(
+            {
+                "clientId": "chat-service",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "secret": values["CHAT_CLIENT_SECRET"],
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": True,
+                "defaultClientScopes": ["basic", "chat:delegate", "market:chat:read"],
+                "optionalClientScopes": [],
+                "protocolMappers": [
+                    audience_mapper("portfolio-api"),
+                    audience_mapper("market-api"),
+                ],
+            }
+        )
+    if values.get("PORTFOLIO_ACCOUNT_READER_SECRET"):
+        clients.append(
+            {
+                "clientId": "portfolio-account-reader",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "secret": values["PORTFOLIO_ACCOUNT_READER_SECRET"],
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": True,
+                "defaultClientScopes": ["basic"],
+                "optionalClientScopes": [],
+                "protocolMappers": [
+                    audience_mapper("realm-management"),
+                    {
+                        "name": "account-reader-management-role",
+                        "protocol": "openid-connect",
+                        "protocolMapper": "oidc-usermodel-client-role-mapper",
+                        "consentRequired": False,
+                        "config": {
+                            "usermodel.clientRoleMapping.clientId": "realm-management",
+                            "claim.name": "resource_access.realm-management.roles",
+                            "jsonType.label": "String",
+                            "multivalued": "true",
+                            "access.token.claim": "true",
+                            "id.token.claim": "false",
+                        },
+                    },
+                ],
+            }
+        )
     if test_client:
         clients.append(
             {
@@ -389,11 +463,14 @@ def make_realm(
                     "portfolio:write",
                     "market:read",
                     "market:write",
+                    "chat:read",
+                    "chat:write",
                 ],
                 "optionalClientScopes": [],
                 "protocolMappers": [
                     audience_mapper("portfolio-api"),
                     audience_mapper("market-api"),
+                    audience_mapper("chat-api"),
                 ],
             }
         )
@@ -435,7 +512,20 @@ def make_realm(
                 ],
             }
             for account in accounts
-        ],
+        ]
+        + (
+            [
+                {
+                    "username": "service-account-portfolio-account-reader",
+                    "enabled": True,
+                    "serviceAccountClientId": "portfolio-account-reader",
+                    "realmRoles": [],
+                    "clientRoles": {"realm-management": ["view-users"]},
+                }
+            ]
+            if values.get("PORTFOLIO_ACCOUNT_READER_SECRET")
+            else []
+        ),
     }
 
 

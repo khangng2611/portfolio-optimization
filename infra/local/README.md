@@ -1,5 +1,13 @@
 # Local software stack
 
+Chat LLM is optional: apply `compose.chat-llm.yaml` with the base stack and the
+tracing overlay already in use. Only `chat-worker` reads the ignored
+`.generated/chat-openai.env` secret file. Conversations default to no outbound
+LLM consent; the UI enables it explicitly. Daily call reservations default to 20
+for the whole Chat service, survive restart, and fall back to rules/templates.
+See [OpenAI dialogue operations](../../docs/software/SETUP_AND_API_TESTING.md#openai-dialogue--phương-án-b-05112026)
+before running the separate paid browser gate. Do not enable Auto Recharge.
+
 This Compose project is **local development only**: it explicitly permits HTTP,
 uses disposable generated accounts and retains a synthetic DEMO bundle. Operator
 flows also support trusted KBS stock refresh, snapshot-based manual XGBoost
@@ -47,6 +55,7 @@ enabling the flag; bootstrap alone changes only generated configuration.
 | Quant API | <http://localhost:8002> |
 | Market Data API / Swagger | <http://localhost:8003> / <http://localhost:8003/docs> |
 | ML API / Swagger | <http://localhost:8004> / <http://localhost:8004/docs> |
+| Chat API / Swagger | <http://localhost:8005> / <http://localhost:8005/docs> |
 | PostgreSQL | `localhost:5433` |
 | RabbitMQ AMQP / management | `localhost:5673` / <http://localhost:15673> |
 | Redis | `localhost:6380` |
@@ -60,10 +69,20 @@ owner, and a runtime role with DML and sequence use only. `PUBLIC` database and
 schema privileges are revoked. There are no cross-database application grants.
 Keycloak's one-shot `identity-migrate` service imports the realm and migrates its
 schema; normal Keycloak startup validates it with a restricted runtime role.
-Alembic migrations for Portfolio, Quant, Market and ML run in separate init containers.
+Alembic migrations for Portfolio, Quant, Market, ML and Chat run in separate init containers.
 Market owns `market_db`, its revisions, jobs and immutable snapshots. ML Platform
 owns `ml_db`, training jobs, candidate registry and immutable review decisions.
 `ml-migrate`, `ml-api` and `ml-worker` have separate migration/runtime duties.
+Chat owns `chat_db`: `chat-migrate` uses its migrator, while `chat-api` and
+`chat-worker` receive only Chat runtime credentials. Its durable leased SQL queue
+is independent of the existing Portfolio allocation outbox/RabbitMQ flow.
+Chat API and worker use `chat-service` client credentials with only
+`chat:delegate market:chat:read` and Portfolio/Market audiences; no human role is
+assigned. Portfolio alone receives `OIDC_ACCOUNT_READER_SECRET` from the generated
+`PORTFOLIO_ACCOUNT_READER_SECRET`. The corresponding `portfolio-account-reader`
+service account has only the Keycloak `realm-management` role `view-users`, for
+fresh enabled-account and effective realm-role checks at tool invocation. It has
+no user mutation or realm administration role.
 
 RabbitMQ's `portfolio` vhost has predeclared direct exchanges
 `portfolio.commands`, `portfolio.events`, `market.commands` and `portfolio.dead`.
@@ -92,8 +111,8 @@ needs no process restart. Market jobs record the accepted dataset hash and rejec
 changed registrations rather than silently ingesting different input.
 
 The test and normal BFF clients support the configured Portfolio, Market, Quant
-and ML audiences/scopes. The BFF requests `market:read market:write quant:publish
-ml:read ml:train ml:review` alongside Portfolio scopes. Each service still checks
+ML and Chat audiences/scopes. The BFF requests `market:read market:write quant:publish
+ml:read ml:train ml:review chat:read chat:write` alongside Portfolio scopes. Each service still checks
 its required role and scope: an investor cannot refresh data, train, approve or
 publish merely because a scope is present. Reauthenticate after an additive
 realm upgrade to receive the current claims.
@@ -125,7 +144,7 @@ limits of local collection. Only new instrumented jobs have a real timeline.
 ## Upgrade an existing local stack
 
 Keep the existing ignored `.generated` directory and its matching volumes.
-Bootstrap appends missing Market/ML service credentials and never
+Bootstrap appends missing Market/ML/Chat service and account-reader credentials and never
 replaces an existing password/session key. A missing previously required credential
 still fails and asks you to restore the matching `secrets.json`. Do not delete
 volumes or rotate a config file to get past this failure.
@@ -144,10 +163,12 @@ docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yam
 `upgrade.py` uses fixed localhost endpoints and the named local Compose project.
 It applies conditional PostgreSQL role/database creation and privileges to an
 already initialized volume, imports only Market broker accounts/topology and
-extends the dead-letter policy, then adds missing Market/ML/Quant scopes,
+extends the dead-letter policy, then adds missing Market/ML/Quant/Chat scopes,
 audiences and service clients to the imported Keycloak realm. When `--enable-test-client` is recorded in settings, it
 creates a missing local test client or adds its required scopes/audiences. It preserves
 existing realm users, passwords, BFF configuration and existing client secrets.
+The account-reader service role mapping is added idempotently; existing human role
+mappings remain unchanged.
 The process can be repeated; a component failure stops with a redacted error and
 can be retried after the dependencies recover. It never clears database records,
 queues, sessions or volumes. It needs `httpx` from the software environment.
@@ -172,7 +193,8 @@ docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yam
 
 With the software test virtual environment installed and the stack healthy,
 check live database isolation, broker ACLs, normal-web password-grant denial and
-the enabled test client's Market audience/scopes/operator role:
+the enabled test client's Market/Chat audiences/scopes/operator role, Chat machine
+scopes/audiences, and the account reader's read-only user/role access:
 
 ```sh
 .venv-software/bin/python infra/local/verify_boundaries.py

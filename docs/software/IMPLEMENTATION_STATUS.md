@@ -397,3 +397,27 @@ IDs/hashes cũ; hướng dẫn có lệnh restart đầy đủ.
 Không đánh dấu live integration, provider crawling, numerical research parity
 hoặc staging deployment hoàn tất chỉ từ các kết quả offline này. Chưa commit,
 push hoặc deploy thay đổi; giữ các file/chỉnh sửa đã có của người dùng.
+
+
+### Chat merge verification — 07/11/2026
+
+- Fresh local verification: 540 Python/core tests passed with all three real
+  PostgreSQL concurrency probes enabled; one unrelated opt-in test skipped.
+  Web: 134 tests, TypeScript and production build passed. Ruff, 11 contract
+  exports, Compose configuration and real DB/broker/Identity boundaries passed.
+- Real Chat API lifecycle and four browser journeys passed: PKCE/confirmation/
+  MVO/result/explicit accept/reconnect, session reauthorization, late refresh and
+  late conversation creation. After restarting Chat/Portfolio/Quant processes,
+  API and browser replay verified the same history, facts, input hashes and target.
+- Initial browser attempts correctly failed on expired prepared real inputs.
+  Renewed the existing immutable real snapshot through the standard publisher
+  with freshness validation, then regenerated the API receipt before browser use.
+  No source prices or stored expiration fields were edited.
+- Fixed CSV metadata validation mixing host-local dates with the UTC observation
+  contract; a regression reproduces local midnight before UTC midnight.
+  Refresh rejection tests now use the Vietnamese business cutoff.
+- CI exposed a setup test relying on the developer's existing venv executable;
+  its fixture now selects the current runner's Python explicitly.
+- Paid LLM, provider-outage and five-minute live grant-expiry gates were not
+  repeated in this merge run. Prior dated evidence above remains historical.
+  Knowledge RAG and untracked research extensions are outside this PR.

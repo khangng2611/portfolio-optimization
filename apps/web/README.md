@@ -33,13 +33,14 @@ The local stack and its bootstrap script are in `infra/local`. For a container, 
 | `MARKET_API_URL` | Fixed Market origin, local `http://market-api:8000`; operator inventory/quality/refresh routes only. |
 | `QUANT_API_URL` | Fixed Quant origin, local `http://quant-api:8000`; allowlisted publication operations. |
 | `ML_API_URL` | Fixed ML origin, local `http://ml-api:8000`; training/model/review routes. |
+| `CHAT_API_URL` | Fixed Chat origin, local `http://chat-api:8000`; conversation/message/job/SSE/explanation routes. |
 | `ALLOW_INSECURE_HTTP` | Set exactly `true` only for local HTTP Keycloak and localhost browser access. Otherwise secure cookies and HTTPS OIDC are required. |
 | `OTEL_TRACES_ENABLED` | Set exactly `true` to enable manual BFF tracing; default disabled. |
 | `OTEL_SERVICE_NAME` | Trace process resource name, local `web-bff`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | OTLP HTTP endpoint, local container `http://jaeger:4318/v1/traces`. |
 | `TRACE_VIEWER_URL` | Trusted server-configured Jaeger base, local `http://localhost:16686`; never taken from caller input or build-time public env. |
 
-Keycloak must allow exactly `${APP_ORIGIN}/auth/callback`, require PKCE S256, enable standard flow, disable implicit/direct grants, and map the configured service audiences (`portfolio-api`, `market-api`, `quant-api`, `ml-api`) and `realm_access.roles` into RS256 access tokens. Five supported application roles are investor, researcher, data-operator, model-reviewer, system-admin. Backend services remain authoritative for scope, RBAC and record ownership.
+Keycloak must allow exactly `${APP_ORIGIN}/auth/callback`, require PKCE S256, enable standard flow, disable implicit/direct grants, and map the configured service audiences (`portfolio-api`, `market-api`, `quant-api`, `ml-api`, `chat-api`) and `realm_access.roles` into RS256 access tokens. Five supported application roles are investor, researcher, data-operator, model-reviewer, system-admin. Backend services remain authoritative for scope, RBAC and record ownership.
 
 ## Routes and session behavior
 
@@ -185,3 +186,43 @@ The offline gate passed 451 Python/core and 84 web tests (one optional PostgreSQ
 test skipped; separate live DB/fencing probes passed). Existing Figma comparisons cover the
 implemented views and do not establish complete future-screen parity or
 production certification.
+
+## Chat MVP
+
+OpenAI conversation assistance is opt-in per conversation. The checkbox defaults
+off and describes outbound context; the backend persists consent and checks it
+before new model calls. Automatic strategy selection asks again when the user
+has not specified a supported strategy. Explicit UI intents skip interpretation
+to save credits. See [OpenAI setup](../../docs/software/SETUP_AND_API_TESTING.md#openai-dialogue--phương-án-b-05112026).
+
+`/#chat` lists conversations; `/#chat?conversation=UUID&job=UUID` restores a
+specific conversation/job. The view reuses the app shell, tokens and existing
+allocation/accept UI, with Figma F01/F02/F03 as references. Conversation and message
+lists paginate through the real API. Confirmation cards pin backend facts and
+versions before allocation; opening a recommendation and accepting its target
+remain explicit actions. Chat cannot accept, trade, promote or edit weights.
+
+Configure `CHAT_API_URL`, the `chat-api` audience and `chat:read chat:write` scopes
+in `OIDC_SCOPE`; local setup/upgrade provisions these additively. Provider secrets
+belong only to the backend worker. BFF routes conversations/messages/chat jobs,
+cancel/resume and recommendation explanations through an explicit allowlist.
+The backend checks JWT, role/scope and ownership, including every SSE reconnect.
+
+SSE uses fetch with Last-Event-ID, an owner/job-scoped cursor and canonical
+refetch on retention reset. The relay isolates headers, handles backpressure and
+closes on session expiry/revocation. Pending intents preserve the same
+client_message_id/body across reload or uncertain responses. After session expiry,
+login does not replay a mutation: the user must explicitly retry/reconfirm.
+Results show canonical Portfolio facts; template explanations remain usable
+without a configured provider and during a provider outage.
+
+```sh
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:persistence
+```
+
+Run from the repository root after the API gate and an actual restart between
+these commands. See [Chat real-stack gates](tests/browser/README.md#chat-mvp-real-stack-gates)
+for real input preparation, outage/restart commands, receipt isolation and
+artifact policy. Current evidence and remaining limits are in
+[implementation status](../../docs/software/IMPLEMENTATION_STATUS.md#chat-mvp--kiểm-chứng-local-04112026).

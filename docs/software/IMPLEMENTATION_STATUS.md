@@ -1,5 +1,113 @@
 # Tiến độ software app
 
+## Chat LLM phương án B — 05/11/2026
+
+Đã nối OpenAI Responses thật với `gpt-6-luna`, reasoning none, strict schemas,
+context ngắn và consent theo conversation (mặc định tắt). LLM chỉ trả intent/
+strategy/reference và fact plan; backend giữ quyền tools, canonical facts,
+confirmation và explicit accept UI. Không phát prose tài chính chưa kiểm chứng.
+Worker có quota ngày UTC, invocation ledger/fencing/dedupe, actual usage và
+fallback; provider key chỉ ở worker qua overlay opt-in, không đổi Auto Recharge.
+
+Live browser đã đi qua PKCE → bật consent → thiếu strategy/hỏi lại → MVO follow-up
+→ confirmation → Portfolio/RabbitMQ/Quant thật → giải thích → hỏi tiếp đúng cùng
+recommendation → tắt consent → explicit accept UI. Tổng **5 OpenAI calls**, actual
+usage **1786 input + 196 output tokens**; ước tính bảo thủ **$0.00032125**, không
+phải số tiền hóa đơn. Không HTTP interception hay tạo giả SQL results. Market
+được refresh KBS đến 04/11/2026, schedule tắt; không dùng dữ liệu hết hạn/DEMO.
+
+Gate đầu dừng ở phép cộng usage sau khi đã accept: message của lượt hỏi tiếp
+chỉ mang explanation metadata, thiếu interpretation usage trong phép cộng.
+Đã sửa bằng owner-scoped `provider_usage` trên job API và regression RED→GREEN.
+Để tiết kiệm, đối chiếu lại chính jobs/requests/ledger đã lưu bằng đọc SQL và
+canonical HTTP, không sửa business rows hoặc gọi model lần nữa. Browser receipt
+verification sau restart Chat API/worker/Web đạt; replay giữ cùng IDs/hashes/
+history và ledger vẫn 5 calls. Gate cap thật ở mức đã dùng 5 trả TEMPLATE với
+DAILY_BUDGET_EXHAUSTED, canonical facts giữ nguyên và không thêm invocation.
+Fault injection HTTPS proxy loopback từ chối kết nối cũng trả
+TEMPLATE trước khi tới OpenAI: ledger hiện 6 reservations, chỉ 5 có paid usage.
+Proxy đã được gỡ; worker trở lại quota 20/ngày.
+
+Offline: 539 Python/core + 1 skip ngoài phạm vi, 104 web tests, TypeScript,
+Ruff, 11 contracts và production builds đạt tại mốc kiểm tra. Đã bổ sung thêm
+PostgreSQL storage probe cho quota LLM đồng thời (callbacks injected, không gọi
+provider); ba Chat PostgreSQL concurrency probes đạt. Read-only review tìm lỗi
+cách viết “BL + ML”; đã sửa với regression test. Explanation planner nhận câu hỏi đã redaction để chọn
+sections đúng trọng tâm. Bổ sung owner grant/account
+preflight trước interpretation, nên revoke/disable chặn cả lượt gửi context ra LLM.
+Xem
+[setup/giới hạn credits](SETUP_AND_API_TESTING.md#openai-dialogue--phương-án-b-05112026).
+
+Giới hạn: chưa đánh giá rộng chất lượng hội thoại tiếng Việt/full RAG; explanation
+vẫn là finite fact plan do backend render; model alias chưa có dated snapshot;
+redaction không bảo đảm loại mọi PII tự do; số tiền chỉ ước tính. Full paid lifecycle
+không chạy lại sau sửa phép cộng usage; kiểm chứng lại trên chính receipt cũ để
+không tốn thêm credits. Không tuyên bố production/HA hoặc GitHub CI đã chạy.
+
+## Chat MVP — kiểm chứng local 04/11/2026
+
+Đã hiện thực vertical slice Chat trên API thật, kiểm thử backend trước frontend:
+
+- `chat_db`, migration/API riêng (Swagger port 8005), leased SQL worker, conversations,
+  messages, jobs, event sequence và tool audit. HTTP 202 trả resource references;
+  client_message_id/key/body conflict, quota theo owner, retry/deadline, fencing
+  và dependency checkpoint chống duplicate khi restart.
+- Portfolio cấp/kiểm tra delegation 5 phút, binding user/service/conversation/job/
+  resource/tool, expiry/revoke và account/role hiện hành qua Identity. Chỉ lượt
+  structured-confirmed được cấp request_allocation; không có accept/trade/promote
+  trong tools. Market cung cấp observations/source/timestamps từ database owner.
+- Canonical recommendation/facts/versions được refetch; provider schema chỉ chọn
+  fact-template sections. Deadline tổng 5 giây, body budgets, durable one-call/job;
+  unconfigured/outage/unverified output dùng template, giữ nguyên quantitative
+  result. Template v2 dùng câu tiếng Việt, hashes trong phần đối chiếu.
+- BFF relay SSE có Last-Event-ID/header isolation, session expiry, backpressure;
+  events bền vững 7 ngày và reset khi quá retention. Browser có list/history paging,
+  review cards, job progress, canonical cards, explicit retry/reauthorize, deep
+  links/reload và mở proposal để accept rõ ràng bằng UI hiện có.
+
+Bằng chứng cuối: **508 Python/core tests passed, 1 skipped** (opt-in có sẵn ngoài
+Chat); hai storage concurrency tests Chat chạy trên PostgreSQL thật. **102 web
+tests**, TypeScript, Ruff, production Docker build và 11 contracts đạt. DB/broker/
+Identity boundaries và PostgreSQL migration/metadata check đạt. Read-only review
+phát hiện các race/recovery/budget/SSE defects; đã sửa và có regression tests.
+
+Real API gate normal/outage/restart đạt trên Keycloak, PostgreSQL, RabbitMQ,
+Portfolio/Quant thực; snapshot KBS FPT/MWG/VCB đến 03/11/2026, không HTTP interception
+hoặc tạo giả SQL results. Gate authorization riêng **47 probes / 305.34s** đạt,
+bao gồm hết hạn thực sau 5 phút, revoke, account disable/restore, sai binding/tool,
+stale portfolio/risk và rejected expired real inputs. Bob đã được khôi phục;
+không tự accept từ API harness.
+
+Browser thật đạt 4 cases thường (PKCE→conversation→confirmation→allocation→verified
+facts/template→accept UI; expiry/explicit retry; hai races), 1 case provider outage,
+và 2 receipt cases sau restart. Có nhận accepted SSE event trong browser khi worker
+đang dừng, lưu cursor, offline và tiếp tục cùng job sau restart. Race tests chỉ
+làm chậm network response thật qua Chromium, không thay response. Desktop/390px
+đã kiểm tra và xem screenshot; Figma F01/F02/F03 trong đúng project 24.10.2026 và
+ui-ux-pro-max; giữ shell/tokens/assets/AllocationView hiện có.
+
+Receipts không token ở `infra/local/.generated/chat-*-receipt.json`; báo cáo/ảnh
+ở `output/playwright/sanitized/chat-*.json/png`, không vào Git. Sau restart 9 tiến
+trình Chat/Web/Portfolio/Quant, IDs, input/facts/target hashes và lịch sử khớp.
+Đã scan logs: không có configured secrets, bearer strings hoặc grant references;
+installed Chat/Portfolio source hashes khớp workspace. Worker outage đã trở lại
+cấu hình bình thường. Xem [API/worker](SETUP_AND_API_TESTING.md#chat-mvp-api-và-worker)
+và [browser gate](../../apps/web/tests/browser/README.md#chat-mvp-real-stack-gates).
+
+Trong triển khai, disk-full làm Docker treo. Theo yêu cầu người dùng, đã dọn
+**13.61GB build cache +1.758GB dangling images**; giữ containers/volumes/secrets/
+data, phục hồi Docker và kiểm chứng lại. Lịch KBS thử nghiệm đang tắt. Giữ nguyên
+`extensions_C_v1/`, nghiên cứu/core và dữ liệu cũ. Chưa commit/push.
+Sau build cuối, dọn thêm 3.325 GB build cache + 699.5 MB dangling images;
+11 volumes giữ nguyên, ổ đĩa còn 8.9 GiB. Health và cả hai API receipts vẫn đạt.
+
+Giới hạn: intent/tool allowlist deterministic; hosted provider dùng protocol
+`fact-plan-v1`, chưa cấu hình provider thương mại/SDK riêng. Chưa có full RAG/
+Knowledge, Chat AMQP continuation consumer (worker reconcile bằng owner API),
+production HA/load/SLO certification; GitHub CI chưa chạy bản này. Market calendar
+vẫn là observed VNINDEX sessions, không coi ingestion availability là historical
+point-in-time proof. Đây là local MVP, không chứng nhận nghiên cứu/production.
+
 ## P1 — kiểm chứng local 27/10/2026
 
 Đã bổ sung ba luồng và UI nối API thật:

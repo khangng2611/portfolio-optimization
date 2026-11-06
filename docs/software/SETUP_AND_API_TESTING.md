@@ -449,3 +449,155 @@ Với private base images, dùng cơ chế đăng nhập registry của môi tr�
 Kiến trúc và trạng thái hiện thực: [software README](README.md),
 [local infrastructure](../../infra/local/README.md),
 [implementation status](IMPLEMENTATION_STATUS.md).
+
+
+## Chat MVP API và worker
+
+Chat sở hữu `chat_db` và có `chat-migrate`, `chat-api` (Swagger port 8005),
+`chat-worker`. Queue SQL có lease/fencing giống ML/publication; allocation vẫn do
+Portfolio outbox → RabbitMQ → Quant xử lý. Chat lưu dependency intent trước HTTP
+và reconcile bằng stable key, không phụ thuộc browser connection hoặc broker hint.
+
+- `POST/GET /api/v1/conversations`; `GET /api/v1/conversations/{id}`.
+- `GET/POST /api/v1/conversations/{id}/messages`: GET có limit/offset và pagination
+  headers. POST cần Idempotency-Key bằng client_message_id; trả 202 message/job,
+  status_url/events_url. Cùng key/nội dung trả cùng receipt; body khác trả 409.
+- `GET /api/v1/jobs/chat/{id}`, `GET .../{id}/events` nhận Last-Event-ID;
+  `POST .../{id}/cancel`; `POST .../{id}/resume` cần confirmed=true và UUID
+  authorization_id mới từ thao tác người dùng, giữ nguyên job/dependency.
+- `GET /api/v1/recommendations/{id}/explanation` kiểm tra lại quyền qua Portfolio.
+
+Confirmation tham chiếu message_id/facts_hash của card server lưu, ghim portfolio,
+risk/policy, constraints và strategy. Text “đồng ý” không thay structured
+confirmation. Portfolio kiểm tra lại pins dưới lock; retry đã commit trả receipt
+cũ trước khi đánh giá version hiện tại. Accept/trade/promote không có trong tools.
+
+Portfolio cấp grant qua `POST /internal/v1/delegation-grants` nhận user bearer
+và X-Service-Authorization của chat-service. Delayed call tới
+`/internal/v1/chat-tools/{tool}` nhận service bearer và các headers
+X-Delegation-Grant/X-Chat-Job/X-Chat-Conversation. Grant mặc định 5 phút, binding
+subject/actor/conversation/job/portfolio/tools; mỗi call kiểm tra account/role
+hiện hành qua read-only Keycloak identity và ownership tại Portfolio.
+Grant chỉ cấp request_allocation cho lượt đã xác nhận. Grant replay không gia hạn;
+resume phải được người dùng cấp lại quyền. `/api/v1/chat/delegations/revoke` thu
+hồi grants của user; BFF gọi khi logout. Grant/token không vào bus, SSE hoặc logs.
+
+Quotas: 5 jobs pending và 100 turns/user/giờ, serialize theo owner trên PostgreSQL;
+job deadline 180 giây, tối đa 5 retry lỗi, lease 30 giây. Mỗi worker step tối đa
+6 tools. SSE events giữ 7 ngày; reset_required yêu cầu refetch message/job/resource.
+SSE heartbeat 15 giây, stream tối đa 85 giây; BFF tối đa 80 giây và đóng khi session
+bị thu hồi/hết hạn. Poll SQL/JWKS chạy ngoài event loop và có wait cap 5 giây.
+
+Provider mặc định chưa cấu hình: template deterministic từ canonical facts.
+Có thể cấu hình riêng worker bằng CHAT_PROVIDER_URL/CHAT_PROVIDER_KEY/
+CHAT_PROVIDER_MODEL qua secret environment; không đưa vào browser/BFF public env.
+Adapter protocol `fact-plan-v1` nhận facts tối thiểu, trả sections/facts_hash và
+usage theo schema; không nhận prose hoặc tool instructions tùy ý. Giới hạn
+usage schema tối đa 1600 input + 448 output tokens, request 6400 bytes, response
+8192 bytes, total deadline 5 giây. Một lượt gọi provider/job được reserve bền vững trước I/O; crash sau đó
+fallback template, không tiêu thêm budget tự động. Đây là adapter protocol, chưa
+phải adapter SDK riêng cho một provider thương mại. Lỗi provider không đổi weights,
+constraints hoặc strategy. RAG/Knowledge đầy đủ còn ngoài phạm vi MVP.
+
+Offline và live gates (môi trường local disposable đã chuẩn bị):
+
+```sh
+CHAT_POSTGRES_TEST=1 .venv-software/bin/python -m pytest tests/software packages/portfolio-core/tests -q
+npm --prefix apps/web test
+npm --prefix apps/web run typecheck
+.venv-software/bin/python scripts/export_software_contracts.py
+.venv-software/bin/python infra/local/verify_boundaries.py
+.venv-software/bin/python scripts/smoke_chat.py
+# Sau restart Chat/Portfolio/Quant thực, đọc cùng receipt:
+.venv-software/bin/python scripts/smoke_chat.py --verify-receipt
+# Gate quyền riêng: quan sát expiry thực 5 phút, disable/restore Bob trong finally:
+E2E_DISPOSABLE_STACK=1 .venv-software/bin/python scripts/smoke_chat_authorization.py
+```
+
+`smoke_chat.py` yêu cầu universe real-price MVO READY, kiểm tra trực tiếp Market
+snapshot/observations hashes và canonical Portfolio facts; không mock HTTP hoặc
+tạo giả SQL result. `--provider-outage` chỉ kiểm chứng khi worker thực được cấu
+hình trỏ đến provider đang unavailable. Không đổi dữ liệu thành DEMO để vượt
+freshness. Receipt không token ở `infra/local/.generated/chat-api-receipt.json`.
+Các test PostgreSQL concurrency dùng schema tạm riêng và injected tools: đây là
+storage unit tests, được báo riêng với gate integration thật. API gate không
+accept target; chấp nhận phải đi qua UI rõ ràng trong browser gate.
+
+## OpenAI dialogue — phương án B (05/11/2026)
+
+LLM hỗ trợ nhận diện intent, hiểu câu trả lời trong ngữ cảnh ngắn và chọn các
+phần giải thích. Backend tiếp tục lấy canonical facts, hỏi thông tin thiếu,
+tạo confirmation card và cấp quyền tools. Text đồng ý không thay structured
+confirmation; không có accept/trade/promote hoặc sửa weights qua LLM.
+
+Adapter gọi trực tiếp OpenAI Responses bằng httpx đã pin, không thêm agent
+framework. Model ban đầu `gpt-6-luna`, reasoning `none`, Structured Outputs strict,
+`store=false`, không hosted tools/previous_response_id. Model hiện chỉ công bố
+alias này; lưu model trả về và prompt/schema versions, chưa có dated snapshot để
+pin. Tham chiếu [model](https://developers.openai.com/api/docs/models/gpt-6-luna)
+và [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+
+Mỗi conversation có `llm_consent=false` mặc định. Investor chủ động bật checkbox
+“Cho phép OpenAI hỗ trợ hội thoại này”; thay đổi qua
+`POST /api/v1/conversations/{id}/preferences` với `{ "llm_consent": true/false }`,
+BFF kiểm tra session/CSRF và backend kiểm tra scope/owner. Thu hồi consent ngăn
+các lời gọi mới, không thu hồi dữ liệu đã gửi trong một request đang chạy.
+Chỉ gửi nội dung hiện tại, tối đa 4 messages trước (mỗi nội dung 400 ký tự),
+trạng thái card tối thiểu và facts cần thiết; loại UUID/email/bearer/API keys/
+chuỗi số định danh phổ biến. Đây không phải cam kết loại mọi PII từ văn bản tự do.
+Không gửi owner/grant/service tokens hoặc provider key trong context/logs/SSE.
+`store=false` không đồng nghĩa Zero Data Retention của provider.
+
+### Bật local
+
+Tạo project API key trong API organization đã nhận subscription credits. Lưu
+riêng trong `infra/local/.generated/chat-openai.env` (Git ignored), ví dụ từ
+`infra/local/chat-openai.env.example`, với `OPENAI_API_KEY=...`, rồi `chmod 600`
+file đó. Không đưa giá trị vào chat, command arguments, Git hoặc screenshot.
+Không cần bật Auto Recharge. Overlay chỉ đưa key vào `chat-worker`, không API/BFF.
+
+```sh
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml build chat-migrate web
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml run --rm --no-deps chat-migrate
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml -f infra/local/compose.chat-llm.yaml up -d --no-deps chat-api chat-worker web
+```
+
+Giữ overlay tracing khi stack đang dùng tracing. Lệnh `setup_software.py up` chưa
+tự thêm overlay LLM; nếu dùng lệnh đó để tạo lại worker, áp dụng lại lệnh cuối.
+Để tắt provider và quay về xử lý deterministic, chạy cùng lệnh cuối nhưng bỏ
+`-f infra/local/compose.chat-llm.yaml`. Dữ liệu/consent/history vẫn được giữ nguyên.
+
+### Credits và kiểm thử
+
+Mặc định 20 invocation/ngày UTC cho toàn Chat, tối đa 100 qua cấu hình deployment
+`CHAT_LLM_DAILY_CALL_LIMIT`; 0 tắt các lượt gọi. Một job tối đa 1 interpretation
+và 1 explanation. Intent/strategy được chọn rõ ở UI và structured confirmation
+bỏ qua interpretation. Model không được tự chọn strategy thiếu bằng chứng từ
+người dùng; backend hỏi lại. Explicit UI strategy ưu tiên hơn model.
+
+`provider_invocation` reserve bền vững trước I/O, serialize quota bằng PostgreSQL
+advisory lock; crash/timeout không gọi trả phí lần hai. Validated plan được lưu
+để reuse trên cùng job. Reservation chưa có kết quả vẫn chiếm quota. Mỗi request
+tối đa 12000 bytes envelope, 384 output tokens, wall timeout 8 giây, không retry
+HTTP trả phí tự động. Khi lỗi/schema không hợp lệ/đạt quota, dùng rule/template.
+Giới hạn lời gọi là rào chi phí; `estimated_cost_usd` chỉ là ước tính theo bảng
+giá lúc triển khai, không thay hóa đơn OpenAI. `GET /api/v1/jobs/chat/{id}` có
+`provider_usage` theo từng purpose từ ledger, bao gồm lượt hiểu intent của job
+giải thích tiếp; không cộng usage chỉ từ message vì có thể thiếu lượt đó.
+
+```sh
+# Offline (không load key file, không gọi provider thật):
+CHAT_POSTGRES_TEST=1 .venv-software/bin/python -m pytest tests/software packages/portfolio-core/tests -q
+npm --prefix apps/web test
+npm --prefix apps/web run typecheck
+# Opt-in: 5 provider calls cho một lifecycle mới, không tự retry:
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:llm
+# Sau restart API/worker/web thật: replay/refetch, không thêm provider calls:
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:llm:persistence
+```
+
+Live gate cần real-price MVO universe READY và receipt
+`infra/local/.generated/chat-real-input-receipt.json` từ Market refresh/publication
+thật. Receipt Chat LLM riêng là `.generated/chat-llm-browser-receipt.json`; báo
+cáo/ảnh nằm trong `output/playwright/sanitized/chat-llm-*`, ngoài Git. Xem
+[browser guide](../../apps/web/tests/browser/README.md#chat-llm-paid-gate).

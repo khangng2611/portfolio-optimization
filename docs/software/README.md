@@ -1,5 +1,11 @@
 # Software foundation — Identity/BFF và Portfolio/Quant
 
+**Cập nhật 07/11/2026:** Chat có API/SSE, lịch sử bền vững, worker SQL,
+delegation theo owner và xác nhận rõ ràng trước khi tạo đề xuất. LLM là tùy chọn,
+cần consent; lỗi provider dùng giải thích template từ dữ kiện canonical.
+Xem [Chat MVP](CHAT_MVP_PLAN.md), [Chat LLM](CHAT_LLM_PLAN.md) và
+[setup hiện hành](SETUP_AND_API_TESTING.md). Knowledge RAG vẫn là kế hoạch.
+
 **Cập nhật 27/10/2026:** P1 bổ sung Data Refresh từ KBS, ML Platform MVP
 (training/registry/review và publication bằng approved model ID), cùng đánh giá
 lại hồ sơ rủi ro có lịch sử phiên bản. UI và BFF nối API của từng owner.
@@ -31,6 +37,7 @@ services/portfolio/          Portfolio API, DB/migrations, job/result workers
 services/quant-serving/      Ready-input API, DB/migrations, numerical workers
 services/market-data/        Refresh/ingestion, quality, revisions, immutable snapshots
 services/ml-platform/        Training worker, candidate registry, reviewer decisions
+services/chat/               Conversations, SSE, scoped tools, durable SQL worker
 packages/portfolio-core/    Numerical package cài bằng pip; không phụ thuộc root
 packages/contracts/         Wire contracts, OpenAPI và event schemas
 packages/service-auth/      Xác thực JWT/JWKS dùng chung; không có business DB
@@ -147,7 +154,6 @@ Onboarding, accepted target, native approved inference và Market snapshot bridg
 publication jobs bền vững; hướng dẫn worker nằm trong
 [local stack](../../infra/local/README.md).
 
-Còn full Market provider/quality workflow, training/promotion registry có phân
-quyền, risk reassessment, ledger/PAPER/rebalance, Research API và Chat/RAG.
+Còn ledger/PAPER/rebalance, Research API và Knowledge RAG.
 Serving/core parity cùng input không chứng minh parity với toàn bộ pipeline
 `ranking_absolute` của Phase 1 hoặc hiệu quả đầu tư.

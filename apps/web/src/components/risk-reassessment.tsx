@@ -1,5 +1,6 @@
 'use client';
 
+import { TaskActions } from './task-actions';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { profileName } from './allocation-view';
 import { Pagination } from './portfolio-lifecycle';
@@ -11,7 +12,7 @@ type RiskAnswers = {
   questionnaire_version: 'risk-v1'; horizon_months: number; liquidity_need: Level;
   loss_tolerance: Level; experience: 'beginner' | 'experienced';
 };
-type Draft = { horizon: string; liquidity: Level; loss: Level; experience: RiskAnswers['experience'] };
+type Draft = { horizon: string; liquidity: Level | ''; loss: Level | ''; experience: RiskAnswers['experience'] | '' };
 type Profile = { profile: string; answers?: RiskAnswers; version_id?: string; mapping_version?: string };
 type PolicyState = {
   risk_profile: Profile | null; policy_version_id: string;
@@ -34,8 +35,8 @@ const number = (value: number) => value.toLocaleString('vi-VN', { maximumFractio
 function initialDraft(portfolio: Portfolio): Draft {
   const answers = (portfolio.risk_profile as Profile | null)?.answers;
   return {
-    horizon: String(answers?.horizon_months ?? 36), liquidity: answers?.liquidity_need ?? 'low',
-    loss: answers?.loss_tolerance ?? 'medium', experience: answers?.experience ?? 'beginner',
+    horizon: answers?.horizon_months === undefined ? '' : String(answers.horizon_months), liquidity: answers?.liquidity_need ?? '',
+    loss: answers?.loss_tolerance ?? '', experience: answers?.experience ?? '',
   };
 }
 
@@ -105,7 +106,8 @@ export function RiskReassessment({ portfolio, api, fetchPage, onSaved, onReload 
 
   async function previewAnswers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inFlight.current || conflict) return;
+    if (inFlight.current || conflict || !draft.liquidity || !draft.loss || !draft.experience) return;
+    if (!event.currentTarget.checkValidity()) { event.currentTarget.reportValidity(); return; }
     inFlight.current = true; setBusy('preview'); setError(''); setSaved(null); setUncertain(false);
     const answers: RiskAnswers = {
       questionnaire_version: 'risk-v1', horizon_months: Number(draft.horizon),
@@ -152,7 +154,7 @@ export function RiskReassessment({ portfolio, api, fetchPage, onSaved, onReload 
   return <div className="risk-wizard" data-testid="risk-reassessment">
     <section className="panel wizard-card">
       <ol className="step-progress" aria-label="Tiến trình đánh giá lại rủi ro">{['Câu trả lời', 'Xem lại', 'Xác nhận'].map((label, index) => <li key={label} className={index <= step ? 'complete' : ''} aria-current={index === step ? 'step' : undefined}><span className="sr-only">{index + 1}. {label}{index < step ? ' · Đã hoàn thành' : ''}</span></li>)}</ol>
-      <p className="eyebrow">HỒ SƠ RỦI RO · {portfolio.name}</p>
+      <p className="muted small">{portfolio.name}</p>
       <h2>Điều chỉnh theo mục tiêu hiện tại</h2>
       <p className="muted">Xem lại câu trả lời và policy do hệ thống xác định trước khi xác nhận. Mục tiêu đã chấp nhận được giữ nguyên trong lịch sử; đề xuất cũ cần được tính lại sau khi hồ sơ thay đổi.</p>
       {error && <div className="error" role="alert" tabIndex={-1} ref={alert} data-testid={conflict ? 'risk-conflict-notice' : 'risk-error'}>
@@ -165,21 +167,20 @@ export function RiskReassessment({ portfolio, api, fetchPage, onSaved, onReload 
         <fieldset disabled={!!busy || conflict}><legend className="sr-only">Câu trả lời đánh giá rủi ro</legend>
           <div className="form-grid">
             <label>Thời gian đầu tư (tháng)<input data-testid="risk-horizon" type="number" required min="1" max="600" step="1" value={draft.horizon} onChange={event => change('horizon', event.target.value)}/><small>Số nguyên từ 1 đến 600 tháng.</small></label>
-            <label>Nhu cầu rút vốn sớm<select data-testid="risk-liquidity" value={draft.liquidity} onChange={event => change('liquidity', event.target.value as Level)}><option value="low">Thấp — có nguồn dự phòng riêng</option><option value="medium">Vừa — có thể cần một phần</option><option value="high">Cao — có thể cần phần lớn</option></select></label>
-            <label>Khi danh mục giảm giá, mức chịu đựng của bạn<select data-testid="risk-loss" value={draft.loss} onChange={event => change('loss', event.target.value as Level)}><option value="low">Thấp — ưu tiên giữ vốn</option><option value="medium">Vừa — chấp nhận dao động</option><option value="high">Cao — chấp nhận giảm mạnh</option></select></label>
-            <label>Kinh nghiệm đầu tư<select data-testid="risk-experience" value={draft.experience} onChange={event => change('experience', event.target.value as RiskAnswers['experience'])}><option value="beginner">Mới bắt đầu</option><option value="experienced">Đã có kinh nghiệm</option></select></label>
+            <label>Nhu cầu rút vốn sớm<select data-testid="risk-liquidity" required value={draft.liquidity} onChange={event => change('liquidity', event.target.value as Level)}><option value="" disabled>Chọn câu trả lời…</option><option value="low">Thấp — có nguồn dự phòng riêng</option><option value="medium">Vừa — có thể cần một phần</option><option value="high">Cao — có thể cần phần lớn</option></select></label>
+            <label>Khi danh mục giảm giá, mức chịu đựng của bạn<select data-testid="risk-loss" required value={draft.loss} onChange={event => change('loss', event.target.value as Level)}><option value="" disabled>Chọn câu trả lời…</option><option value="low">Thấp — ưu tiên giữ vốn</option><option value="medium">Vừa — chấp nhận dao động</option><option value="high">Cao — chấp nhận giảm mạnh</option></select></label>
+            <label>Kinh nghiệm đầu tư<select data-testid="risk-experience" required value={draft.experience} onChange={event => change('experience', event.target.value as RiskAnswers['experience'])}><option value="" disabled>Chọn câu trả lời…</option><option value="beginner">Mới bắt đầu</option><option value="experienced">Đã có kinh nghiệm</option></select></label>
           </div>
-          <div className="actions"><button data-testid="risk-preview" type="submit">{busy === 'preview' ? 'Đang xem lại…' : 'Xem lại hồ sơ'}</button></div>
+          {!preview && <TaskActions hint="Xem lại trước khi xác nhận hồ sơ rủi ro mới."><button data-testid="risk-preview" type="submit">{busy === 'preview' ? 'Đang xem lại…' : 'Xem lại hồ sơ'}</button></TaskActions>}
         </fieldset>
       </form>
     </section>
     {preview && <section className="panel" aria-busy={busy === 'confirm'} aria-labelledby="risk-review-heading">
-      <p className="eyebrow">XEM LẠI TRƯỚC KHI XÁC NHẬN</p>
       <h2 id="risk-review-heading" ref={reviewHeading} tabIndex={-1}>Hồ sơ thay đổi như thế nào?</h2>
       <p className="muted">Đang xem lại phiên bản danh mục {preview.portfolio_version}. Chỉ bước xác nhận bên dưới mới lưu hồ sơ mới.</p>
       <div><PolicySummary value={preview.before} title="Hồ sơ hiện tại"/><PolicySummary value={preview.after} title="Sau khi xác nhận" proposed/></div>
       <aside className="notice warning">Hồ sơ rủi ro không bảo đảm mức thua lỗ tối đa hoặc lợi nhuận. Xác nhận tạo phiên bản mới và yêu cầu tính lại các đề xuất cũ; các mục tiêu đã lưu giữ nguyên tỷ trọng và policy tại thời điểm chấp nhận.</aside>
-      <div className="actions"><button type="button" data-testid="risk-confirm" disabled={!!busy || conflict} onClick={confirm}>{busy === 'confirm' ? 'Đang xác nhận…' : uncertain ? 'Xác nhận lại cùng yêu cầu' : 'Xác nhận hồ sơ mới'}</button><button className="quiet" type="button" disabled={!!busy} onClick={() => { setPreview(null); intent.current = null; setUncertain(false); }}>Sửa câu trả lời</button></div>
+      <TaskActions hint="Xác nhận chỉ lưu hồ sơ mới; mục tiêu đã lưu giữ nguyên."><button type="button" data-testid="risk-confirm" disabled={!!busy || conflict} onClick={confirm}>{busy === 'confirm' ? 'Đang xác nhận…' : uncertain ? 'Xác nhận lại cùng yêu cầu' : 'Xác nhận hồ sơ mới'}</button><button className="quiet" type="button" disabled={!!busy} onClick={() => { setPreview(null); intent.current = null; setUncertain(false); }}>Sửa câu trả lời</button></TaskActions>
     </section>}
     <section className="panel" aria-label="Lịch sử hồ sơ rủi ro" aria-busy={historyBusy}>
       <h2>Lịch sử hồ sơ rủi ro</h2><p className="muted">Mỗi lần xác nhận lưu câu trả lời, ràng buộc và mã policy của riêng lần đánh giá đó. Trạng thái hiện tại cho biết hồ sơ nào đang được áp dụng.</p>
@@ -200,6 +201,6 @@ export function RiskReassessment({ portfolio, api, fetchPage, onSaved, onReload 
         <Pagination total={history.total} offset={offset} onChange={setOffset} busy={historyBusy}/>
       </>}
     </section>
-    <div className="actions"><a className="button quiet" href={workspaceHash({ view: 'profile', portfolioId: portfolio.id })}>Về hồ sơ & cài đặt</a><a className="button quiet" href={workspaceHash({ view: 'history', portfolioId: portfolio.id })}>Xem mục tiêu đã lưu</a></div>
+    <div className="actions"><a className="button quiet" href={workspaceHash({ view: 'profile', portfolioId: portfolio.id })}>Về hồ sơ rủi ro</a><a className="button quiet" href={workspaceHash({ view: 'history', portfolioId: portfolio.id })}>Xem mục tiêu đã lưu</a></div>
   </div>;
 }

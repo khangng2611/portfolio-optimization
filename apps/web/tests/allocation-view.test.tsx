@@ -24,7 +24,7 @@ describe('allocation presentation', () => {
   });
   it('shows the explicit effective fallback strategy and demo label', () => {
     const html = renderToStaticMarkup(<AllocationView allocation={{ asset_ids: ['AAA', 'BBB'], weights: ['0.5', '0.5'], capital_vnd: '100', strategy: 'EW', requested_strategy: 'BL_ML', fallback_reason: 'MODEL_UNAVAILABLE', demo: true }}/>);
-    expect(html).toContain('BL_ML → EW');
+    expect(html).toContain('BL + ML → EW');
     expect(html).toContain('chưa có model ML được duyệt');
     expect(html).toContain('Dữ liệu minh họa');
   });

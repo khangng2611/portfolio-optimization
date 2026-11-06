@@ -257,14 +257,16 @@ test('real operator source to publication to investor accepted target', async ({
     await alice.getByLabel('Thời gian đầu tư (tháng)').fill('36');
     await alice.getByLabel('Bộ tài sản').selectOption(fixture.universe_id);
     await alice.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-    await alice.getByLabel('Kinh nghiệm đầu tư').selectOption('experienced');
+    await alice.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
     await alice.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
     const portfolio = (await uiMutation(alice, '/api/v1/onboarding/portfolios',
       () => alice.getByTestId('create-portfolio-submit').click(), 201)).result;
     await alice.goto(`/#proposal?portfolio=${portfolio.id}`);
-    await alice.getByLabel('Chiến lược được cho phép').selectOption('EW');
+    await alice.getByTestId('strategy-EW').check();
     const job = (await uiMutation(alice, `/api/v1/portfolios/${portfolio.id}/recommendations`,
-      () => alice.getByTestId('propose-portfolio').click(), 202)).result;
+      async () => { await alice.getByTestId('propose-portfolio').click(); await alice.getByTestId('confirm-proposal').click(); }, 202)).result;
     await expect(alice.getByTestId('accept-proposal')).toBeEnabled({ timeout: 90_000 });
     const completed = await get(investor, `/api/v1/jobs/portfolio/${job.job_id}`);
     expect(completed.status).toBe('SUCCEEDED');

@@ -9,7 +9,7 @@ it('offers server supplied real assets and a separately labelled demo choice', (
   ]}/>);
   expect(html).toContain('name="universe"');
   expect(html).toContain('FPT, VCB, HPG');
-  expect(html).toContain('giá thật');
+  expect(html).toContain('giá thị trường');
   expect(html).toContain('minh họa');
   expect(html).toMatch(/<option[^>]*value="REAL_STOCKS"[^>]*selected=""/);
 });

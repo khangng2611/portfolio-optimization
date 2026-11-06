@@ -1,17 +1,19 @@
-export type WorkspaceView = 'overview' | 'portfolios' | 'create' | 'proposal' | 'profile' | 'history' | 'edit' | 'compare' | 'market' | 'market-ingestion' | 'market-quality' | 'market-snapshots' | 'market-publications' | 'market-refresh' | 'models' | 'model-training' | 'model-review' | 'risk-assessment';
-export type WorkspaceRoute = { view: WorkspaceView; portfolioId?: string; proposalId?: string; compareIds?: [string, string]; invalid?: boolean; jobId?: string; snapshotId?: string; modelId?: string };
+export type WorkspaceView = 'overview' | 'portfolios' | 'create' | 'proposal' | 'profile' | 'history' | 'edit' | 'compare' | 'market' | 'market-ingestion' | 'market-quality' | 'market-snapshots' | 'market-publications' | 'market-refresh' | 'models' | 'model-training' | 'model-review' | 'risk-assessment' | 'chat';
+export type WorkspaceRoute = { view: WorkspaceView; focus?: 'history'; conversationId?: string; portfolioId?: string; proposalId?: string; compareIds?: [string, string]; invalid?: boolean; jobId?: string; snapshotId?: string; modelId?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const views: WorkspaceView[] = ['overview', 'portfolios', 'create', 'proposal', 'profile', 'history', 'edit', 'compare', 'market', 'market-ingestion', 'market-quality', 'market-snapshots', 'market-publications', 'market-refresh', 'models', 'model-training', 'model-review', 'risk-assessment'];
+const views: WorkspaceView[] = ['overview', 'portfolios', 'create', 'proposal', 'profile', 'history', 'edit', 'compare', 'market', 'market-ingestion', 'market-quality', 'market-snapshots', 'market-publications', 'market-refresh', 'models', 'model-training', 'model-review', 'risk-assessment', 'chat'];
 export function parseWorkspaceHash(hash: string): WorkspaceRoute {
   const [name, query] = hash.replace(/^#/, '').split('?');
   const view = views.includes(name as WorkspaceView) ? name as WorkspaceView : 'overview';
   const params = new URLSearchParams(query);
   const route: WorkspaceRoute = { view };
-  for (const [key, field] of [['portfolio', 'portfolioId'], ['proposal', 'proposalId'], ['job', 'jobId'], ['snapshot', 'snapshotId'], ['model', 'modelId']] as const) {
+  for (const [key, field] of [['conversation', 'conversationId'], ['portfolio', 'portfolioId'], ['proposal', 'proposalId'], ['job', 'jobId'], ['snapshot', 'snapshotId'], ['model', 'modelId']] as const) {
     const value = params.get(key);
     if (value && uuid.test(value) && params.getAll(key).length === 1) route[field] = value;
     else if (value) route.invalid = true;
   }
+  const focus = params.get('focus');
+  if (focus) { if (focus === 'history' && view === 'proposal' && params.getAll('focus').length === 1) route.focus = 'history'; else route.invalid = true; }
   const a = params.get('a'), b = params.get('b');
   if (a || b) {
     if (a && b && a !== b && uuid.test(a) && uuid.test(b) && params.getAll('a').length === 1 && params.getAll('b').length === 1) route.compareIds = [a, b];
@@ -22,6 +24,8 @@ export function parseWorkspaceHash(hash: string): WorkspaceRoute {
 }
 export function workspaceHash(route: WorkspaceRoute): string {
   const params = new URLSearchParams();
+  if (route.focus) params.set('focus', route.focus);
+  if (route.conversationId) params.set('conversation', route.conversationId);
   if (route.portfolioId) params.set('portfolio', route.portfolioId);
   if (route.proposalId) params.set('proposal', route.proposalId);
   if (route.jobId) params.set('job', route.jobId);

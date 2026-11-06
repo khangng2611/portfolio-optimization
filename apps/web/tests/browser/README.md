@@ -97,3 +97,129 @@ safe static phase names and assertion line numbers enter the reporter. These
 commands passed locally on 27 October 2026, including the same P1 receipt after
 restarting 14 application processes. P0/Market lifecycle and persistence gates
 passed in the same verification run; GitHub CI has not run this P1 gate.
+
+## Chat MVP real stack gates
+
+Use the updated, migrated localhost stack with Chat API/worker, Portfolio/Quant,
+Keycloak, Redis, PostgreSQL and RabbitMQ running. Publish a fresh **real-price MVO**
+universe through the existing Market refresh/publication flow first. This gate
+rejects missing or expired real inputs; it does not substitute DEMO data. Run the
+API gate before the browser lifecycle, from the repository root:
+
+```sh
+.venv-software/bin/python scripts/smoke_chat.py
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat
+```
+
+The browser signs in through real PKCE, creates its own portfolio and conversation,
+reviews the server's confirmation card, waits for allocation through Portfolio →
+RabbitMQ → Quant, compares canonical facts/hashes, and explicitly accepts the
+proposal through the existing target UI. It temporarily stops/restarts only
+`chat-worker` to observe a persisted SSE event, disconnects/reloads the browser,
+and verifies the same job/history without duplicate submissions. Additional cases
+expire the current Redis session and require explicit confirmation retry after a
+fresh login, and delay genuine Chromium network responses to check stale refresh
+and conversation-navigation races. There is no HTTP response interception or SQL
+result fabrication. Run serially, without other tests mutating these receipts.
+
+After a successful lifecycle, restart actual application processes, preserving the
+tracing overlay when it is enabled:
+
+```sh
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml restart chat-api chat-worker web portfolio-api portfolio-consume portfolio-dispatch quant-api quant-consume quant-dispatch
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --wait
+.venv-software/bin/python scripts/smoke_chat.py --verify-receipt
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:persistence
+```
+
+Provider outage requires a genuinely unavailable provider configured on the
+**worker**. Create an override outside Git, for example
+`/tmp/chat-provider-outage.yaml`, containing:
+
+```yaml
+services:
+  chat-worker:
+    environment:
+      CHAT_PROVIDER_URL: http://127.0.0.1:9/explain
+```
+
+Then apply it and run the outage gates:
+
+```sh
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml -f /tmp/chat-provider-outage.yaml up -d --no-deps chat-worker
+.venv-software/bin/python scripts/smoke_chat.py --provider-outage
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:outage
+```
+
+The API gate replaces `chat-api-receipt.json`, so archive the normal receipt under
+an ignored filename first if both are needed. Outage and normal browser receipts
+are separate. Restore the normal worker configuration even if a gate fails:
+
+```sh
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --no-deps chat-worker
+# After another actual process restart, verify the outage browser receipt:
+E2E_DISPOSABLE_STACK=1 CHAT_PROVIDER_OUTAGE=1 npm --prefix apps/web run test:browser:chat:persistence
+```
+
+Persistence reads saved resources and hashes; it requires no active provider
+outage. Reports are `output/playwright/sanitized/chat-lifecycle.json`,
+`chat-outage.json`, `chat-persistence.json` and `chat-outage-persistence.json`.
+Token-free receipts stay in `infra/local/.generated/chat-api-receipt.json`,
+`chat-browser-receipt.json` and `chat-browser-outage-receipt.json`. Explicit
+screenshots mask the account name. Keep screenshots, logs and design dumps out of
+Git; do not enable raw auth traces, storageState or unfiltered reporters.
+
+On 4 November 2026, four normal cases, one actual outage case and both receipt
+checks after restarting nine application processes passed. Desktop and 390px
+screenshots were inspected. A separate real authorization gate observes actual
+five-minute delegation expiry, revoke, current account/role checks, binding,
+stale versions and expired real inputs:
+
+```sh
+E2E_DISPOSABLE_STACK=1 .venv-software/bin/python scripts/smoke_chat_authorization.py
+```
+
+It creates Bob-owned test records and temporarily disables Bob, restoring the
+enabled state in `finally`. Credentials/grants remain in memory. Do not run this
+gate concurrently with another test using Bob. It neither accepts a target nor
+modifies existing investor data. Local acceptance is separate from GitHub CI or
+production certification.
+
+## Chat LLM paid gate
+
+Use `infra/local/compose.chat-llm.yaml` after applying the Chat migration. Store
+OPENAI_API_KEY only in the ignored worker env file; do not enable Auto Recharge.
+Consent defaults off per conversation. See
+[OpenAI setup](../../../../docs/software/SETUP_AND_API_TESTING.md#openai-dialogue--phương-án-b-05112026).
+
+```sh
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:llm
+```
+
+One successful lifecycle uses five Responses calls: initial intent, contextual
+strategy answer, explanation, recommendation follow-up intent and its explanation.
+Confirmations, replay, consent revocation and explicit accept spend no extra calls.
+The gate uses the real publication in `.generated/chat-real-input-receipt.json`,
+creates a separate investor portfolio and checks only one recommendation. No
+HTTP interception or fabricated SQL. Stop and inspect safe job metadata before
+rerunning a failed paid lifecycle: a fresh lifecycle would spend more credits.
+
+After a real restart of Chat API/worker/web:
+
+```sh
+E2E_DISPOSABLE_STACK=1 npm --prefix apps/web run test:browser:chat:llm:persistence
+```
+
+This reads `.generated/chat-llm-browser-receipt.json`, replays original durable
+requests and checks resources/hashes/history and per-purpose job usage. It makes
+no new provider calls. Reports are `chat-llm-lifecycle.json` and
+`chat-llm-persistence.json`; explicit masked screenshots are
+`chat-llm-grounded-*.png` in ignored `output/playwright/sanitized/`.
+
+On 5 November, the paid browser flow reached explicit accept with five calls
+VERIFIED: 1786 input + 196 output tokens, conservatively estimated $0.00032125.
+The final usage assertion initially missed interpretation inside the follow-up
+explanation job. A regression now reads `provider_usage` from the job ledger.
+Original requests/IDs were recovered from read-only persisted evidence; the
+same-receipt browser gate passed after restart without repeating the paid flow.
+A real exhausted daily budget returned TEMPLATE without a sixth invocation.

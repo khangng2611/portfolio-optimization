@@ -1,6 +1,8 @@
 import type { Allocation } from '../components/allocation-view';
 import type { TraceReference } from './job-trace';
-export type Portfolio = { id: string; name: string; capital_vnd: string; universe_id: string; version: number; constraints: { risk_aversion: number; max_position_weight: number }; risk_profile: { profile: string } | null; policy_version_id: string };
+export type RiskAnswers = { questionnaire_version: string; horizon_months: number; liquidity_need: 'low' | 'medium' | 'high'; loss_tolerance: 'low' | 'medium' | 'high'; experience: 'beginner' | 'experienced' };
+export type RiskProfile = { profile: string; answers?: RiskAnswers; version_id?: string; mapping_version?: string };
+export type Portfolio = { id: string; name: string; capital_vnd: string; universe_id: string; version: number; constraints: { risk_aversion: number; max_position_weight: number }; risk_profile: RiskProfile | null; policy_version_id: string };
 export type Recommendation = TraceReference & Allocation & { id: string; portfolio_id: string; portfolio_version: number };
 export type Target = { id: string; recommendation_id: string; accepted_at: string; allocation: Recommendation; portfolio_version: number };
 export type Dashboard = { portfolio: Portfolio; accepted_target: Target | null; proposal_count: number; target_matches_portfolio: boolean };

@@ -17,7 +17,12 @@
     "test:browser:market": "playwright test market-operations.e2e.ts",
     "test:browser:market:persistence": "MARKET_OPS_VERIFY_RECEIPT=1 playwright test market-operations.e2e.ts",
     "test:browser:p1": "playwright test p1.e2e.ts",
-    "test:browser:p1:persistence": "P1_VERIFY_RECEIPT=1 playwright test p1.e2e.ts"
+    "test:browser:p1:persistence": "P1_VERIFY_RECEIPT=1 playwright test p1.e2e.ts",
+    "test:browser:chat:llm": "CHAT_LLM_LIVE=1 playwright test chat.e2e.ts --grep 'real Chat LLM'",
+    "test:browser:chat:llm:persistence": "CHAT_LLM_LIVE=1 CHAT_VERIFY_RECEIPT=1 playwright test chat.e2e.ts --grep 'real Chat LLM'",
+    "test:browser:chat": "playwright test chat.e2e.ts",
+    "test:browser:chat:persistence": "CHAT_VERIFY_RECEIPT=1 playwright test chat.e2e.ts",
+    "test:browser:chat:outage": "CHAT_PROVIDER_OUTAGE=1 playwright test chat.e2e.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

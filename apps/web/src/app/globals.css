@@ -66,7 +66,7 @@ h3 { font-size: 18px; line-height: 1.5; margin: 0 0 12px; }
 .account-name { color: var(--muted); max-width: 240px; overflow-wrap: anywhere; }
 .page-heading { display: grid; gap: 12px; margin-bottom: 28px; }
 .page-heading p { margin: 0; }
-.notice { padding: 16px 20px; margin-bottom: 24px; background: var(--soft); border-left: 3px solid var(--green); border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.7; }
+.notice { padding: 16px 20px; margin-bottom: 24px; background: var(--soft); border-left: 1px solid var(--green); border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.7; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; min-width: 0; }
 .welcome-card > h2 { font-size: 30px; line-height: 1.5; margin-bottom: 16px; }
 .welcome-card > p.muted { margin: 0; }
@@ -103,7 +103,7 @@ label > small, label > span > small { display: block; color: var(--muted); font-
 .loading-state { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; min-height: 240px; color: var(--muted); }
 .loading-mark { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: loading 800ms linear infinite; }
 @keyframes loading { to { transform: rotate(360deg); } }
-.error { margin: 0 0 24px; padding: 16px 20px; background: var(--red-bg); color: var(--red); border-left: 3px solid var(--red); border-radius: 0 8px 8px 0; font-size: 14px; overflow-wrap: anywhere; }
+.error { margin: 0 0 24px; padding: 16px 20px; background: var(--red-bg); color: var(--red); border-left: 1px solid var(--red); border-radius: 0 8px 8px 0; font-size: 14px; overflow-wrap: anywhere; }
 .error p { margin: 4px 0 0; }
 .empty-state { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; padding: 60px 24px; text-align: center; min-height: 275px; }
 .empty-state h2, .empty-state h3, .empty-state p { margin: 0; }

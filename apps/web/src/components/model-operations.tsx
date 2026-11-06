@@ -1,4 +1,5 @@
 'use client';
+import { IconButton } from './action-controls';
 import { useEffect, useState, type FormEvent } from 'react';
 import { dateTime, type Api, type PageApi } from '../lib/portfolio-types';
 import { activeJob, marketCutoffDate, type Snapshot } from '../lib/market-types';
@@ -10,7 +11,7 @@ type Operations = ReturnType<typeof useOperation>;
 export function ModelOperations({ route, api, fetchPage, operator, reviewer }: { route: WorkspaceRoute; api: Api; fetchPage: PageApi; operator: boolean; reviewer: boolean }) {
   const op = useOperation(api);
   return <div className="p1-operations"><nav className="portfolio-tabs" aria-label="Vận hành mô hình"><a href="#models" aria-current={route.view === 'models' ? 'page' : undefined}>Model candidates</a>{operator && <a href="#model-training" aria-current={route.view === 'model-training' ? 'page' : undefined}>Training jobs</a>}{route.view === 'model-review' && <a href={workspaceHash(route)} aria-current="page">Bằng chứng & quyết định</a>}</nav>
-    <OperationError error={op.error}/><div className="market-toolbar"><p className="muted small">{reviewer ? 'Model reviewer' : 'Data operator'} · Registry có phiên bản và quyết định có lý do.</p><button className="quiet" disabled={op.busy} onClick={op.refresh}>Làm mới</button></div>
+    <OperationError error={op.error}/><div className="market-toolbar"><p className="muted small">{reviewer ? 'Model reviewer' : 'Data operator'} · Registry có phiên bản và quyết định có lý do.</p><IconButton icon="refresh" label="Làm mới" disabled={op.busy} onClick={op.refresh}/></div>
     {route.view === 'models' ? <CandidateList fetchPage={fetchPage} op={op} operator={operator}/> : route.view === 'model-training' ? operator ? <Training route={route} api={api} fetchPage={fetchPage} op={op}/> : <aside className="notice">Cần quyền data operator để tạo training job. Bạn vẫn có thể review candidates từ registry.</aside> : <ModelReview key={route.modelId} modelId={route.modelId} api={api} op={op} operator={operator} reviewer={reviewer}/>}
     {route.view !== 'model-training' && <ModelServing api={api} revision={op.revision} modelId={route.view === 'model-review' ? route.modelId : undefined}/>}
     <details className="methodology"><summary>Phạm vi model và quy trình phục vụ</summary><div className="methodology-body"><p>Training được kích hoạt thủ công, ghim snapshot và feature schema, tạo model native XGBoost. Candidate cần được model reviewer quyết định trước khi dùng cho BL + ML.</p><p>Phê duyệt chưa phát hành bộ input hoặc thay model của đề xuất đang chạy. Data operator cần chọn model đã duyệt khi xác nhận publication. Kết quả validation của model không phải hiệu suất đầu tư hoặc xác suất danh mục sinh lời.</p></div></details>

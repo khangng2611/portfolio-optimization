@@ -194,9 +194,9 @@ async function capture(page: Page, name: string) {
 
 async function propose(page: Page, pid: string, strategy: 'EW' | 'BL_ML') {
   await page.goto(`/#proposal?portfolio=${pid}`);
-  await page.getByLabel('Chiến lược được cho phép').selectOption(strategy);
+  await page.getByTestId(`strategy-${strategy}`).check();
   const submitted = await uiMutation(page, `${investorPath(pid)}/recommendations`,
-    () => page.getByTestId('propose-portfolio').click(), 202);
+    async () => { await page.getByTestId('propose-portfolio').click(); await page.getByTestId('confirm-proposal').click(); }, 202);
   await expect(page.getByTestId('accept-proposal')).toBeEnabled({ timeout: 90_000 });
   const job = await get(page.context(), `/api/v1/jobs/portfolio/${submitted.result.job_id}`);
   expect(job.status).toBe('SUCCEEDED');
@@ -474,7 +474,9 @@ test('real P1 provider refresh model review publication and risk reassessment li
     await alice.getByLabel('Thời gian đầu tư (tháng)').fill('36');
     await alice.getByLabel('Bộ tài sản').selectOption(universe);
     await alice.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-    await alice.getByLabel('Kinh nghiệm đầu tư').selectOption('experienced');
+    await alice.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
     await alice.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
     const created = await uiMutation(alice, '/api/v1/onboarding/portfolios',
       () => alice.getByTestId('create-portfolio-submit').click(), 201, false);

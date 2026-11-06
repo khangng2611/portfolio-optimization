@@ -61,12 +61,13 @@ async function screenshot(page: Page, name: string) {
 async function propose(page: Page, pid: string, strategy: 'EW' | 'MVO', expected?: { name: string; capital: RegExp }) {
   await page.goto(`/#proposal?portfolio=${pid}`);
   if (expected) {
-    await expect(page.getByLabel('Danh mục', { exact: true })).toHaveValue(expected.name);
-    await expect(page.getByLabel('Vốn kế hoạch (VND)', { exact: true })).toHaveValue(expected.capital);
+    await expect(page.locator('.plan-context')).toContainText(expected.name);
+    await expect(page.locator('.plan-context')).toContainText(expected.capital);
   }
-  await page.getByLabel('Chiến lược được cho phép').selectOption(strategy);
+  await page.getByTestId(`strategy-${strategy}`).check();
   const queued = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === `/api/v1/portfolios/${pid}/recommendations`);
   await page.getByTestId('propose-portfolio').click();
+  await page.getByTestId('confirm-proposal').click();
   const response = await queued;
   expect(response.status()).toBe(202);
   expect(Boolean(response.request().headers()['idempotency-key'])).toBe(true);
@@ -117,7 +118,9 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     await page.getByLabel('Thời gian đầu tư (tháng)').fill('36');
     await page.getByLabel('Bộ tài sản').selectOption('DEMO');
     await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-    await page.getByLabel('Kinh nghiệm đầu tư').selectOption('experienced');
+    await page.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
+    await page.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
+    await page.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
     await page.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
     const createdResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/onboarding/portfolios');
     await page.getByTestId('create-portfolio-submit').click();
@@ -182,6 +185,7 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     await expect(page.getByTestId('comparison')).toContainText('MVO');
     await expect(page.getByTestId('comparison')).toContainText('AAA');
     await expect(page.getByTestId('comparison')).toContainText('Các phương án khác cơ sở đầu vào');
+    await page.getByText('Đối chiếu dữ liệu & phiên bản', { exact: true }).click();
     for (const label of ['Ngày dữ liệu', 'Policy', 'Snapshot dữ liệu', 'Core', 'Vốn kế hoạch', 'Phiên bản danh mục']) {
       await expect(page.getByTestId('comparison')).toContainText(label);
     }
@@ -198,7 +202,7 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
 
     phase(info, 'expired-input');
     fixture('expired');
-    await page.goto(`/#overview?portfolio=${pid}`);
+    await page.goto(`/#proposal?portfolio=${pid}`);
     await page.getByRole('button', { name: 'Kiểm tra lại', exact: true }).click();
     await expect(page.getByTestId('expired-input-notice')).toBeVisible();
     const readiness = await get(page.context(), `/api/v1/portfolios/${pid}/readiness`);

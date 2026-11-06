@@ -1,4 +1,5 @@
 'use client';
+import { IconButton } from './action-controls';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { Api, Page, PageApi } from '../lib/portfolio-types';
 import type { ModelCandidate } from '../lib/p1-types';
@@ -11,7 +12,7 @@ const date = (value?: string | null) => value ? value.split('-').reverse().join(
 const today = marketCutoffDate;
 const mutation = (body: unknown, key = crypto.randomUUID()): RequestInit => ({ method: 'POST', headers: { 'idempotency-key': key }, body: JSON.stringify(body) });
 function Status({ value }: { value: string }) { return <span className={`badge ${['PASS', 'SUCCEEDED'].includes(value) ? 'success' : ['FAILED', 'QUARANTINED'].includes(value) ? 'danger' : ''}`}>{marketStatus(value)}</span>; }
-function Pager({ page, offset, onPage }: { page: Page<unknown> | null; offset: number; onPage: (value: number) => void }) { return <div className="pagination"><button className="quiet" disabled={!page || offset === 0} onClick={() => onPage(Math.max(0, offset - page!.limit))}>Trang trước</button><span>{page ? `${offset + (page.items.length ? 1 : 0)}–${offset + page.items.length} / ${page.total} kết quả` : 'Đang tải…'}</span><button className="quiet" disabled={!page || offset + page.limit >= page.total} onClick={() => onPage(offset + page!.limit)}>Trang sau</button></div>; }
+function Pager({ page, offset, onPage }: { page: Page<unknown> | null; offset: number; onPage: (value: number) => void }) { return <div className="pagination"><IconButton icon="previous" label="Trang trước" disabled={!page || offset === 0} onClick={() => onPage(Math.max(0, offset - page!.limit))}/><span>{page ? `${offset + (page.items.length ? 1 : 0)}–${offset + page.items.length} / ${page.total} kết quả` : 'Đang tải…'}</span><IconButton icon="next" label="Trang sau" disabled={!page || offset + page.limit >= page.total} onClick={() => onPage(offset + page!.limit)}/></div>; }
 function usePage<T>(fetchPage: PageApi, path: string, revision: number) {
   const [page, setPage] = useState<Page<T> | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState('');
   useEffect(() => { let active = true; setLoading(true); setError(''); fetchPage<T>(path).then(value => { if (active) setPage(value); }).catch(err => { if (active) setError(err.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [fetchPage, path, revision]);
@@ -51,7 +52,7 @@ export function MarketOperations({ route, api, fetchPage }: { route: WorkspaceRo
     <nav className="portfolio-tabs" aria-label="Vận hành dữ liệu">{([['market', 'Datasets'], ['market-refresh', 'Lịch cập nhật'], ['market-ingestion', 'Ingestion'], ['market-quality', 'Chất lượng'], ['market-snapshots', 'Snapshots'], ['market-publications', 'Phát hành']] as const).map(([view, label]) => <a key={view} href={'#' + view} aria-current={route.view === view ? 'page' : undefined}>{label}</a>)}</nav>
     {error && <div className="error" ref={errorRef} role="alert" tabIndex={-1}><strong>Chưa thể hoàn tất thao tác</strong><p>{error}</p><p>Kiểm tra dữ liệu rồi gửi lại để khôi phục yêu cầu đang lưu.</p></div>}
     {message && <p className="notice" role="status">{message}</p>}
-    <div className="market-toolbar"><p className="muted small">Nguồn, chất lượng và kết quả được lưu trên backend.</p><button className="quiet" onClick={refresh} disabled={busy}>Làm mới</button></div>
+    <div className="market-toolbar"><p className="muted small">Nguồn, chất lượng và kết quả được lưu trên backend.</p><IconButton icon="refresh" label="Làm mới" onClick={refresh} disabled={busy}/></div>
     {route.view === 'market' ? <Datasets fetchPage={fetchPage} revision={revision} busy={busy} perform={perform} onMessage={setMessage}/>
       : route.view === 'market-ingestion' ? <Ingestions fetchPage={fetchPage} revision={revision} refresh={refresh}/>
       : route.view === 'market-quality' ? <QualityPanel jobId={route.jobId} api={api} fetchPage={fetchPage} revision={revision}/>

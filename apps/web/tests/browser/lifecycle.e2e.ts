@@ -128,7 +128,7 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     expect(createdHTTP.status()).toBe(201);
     const portfolio = await createdHTTP.json();
     const pid = portfolio.id;
-    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
 
     phase(info, 'broker-proposal-accept');
     const first = await propose(page, pid, 'EW');

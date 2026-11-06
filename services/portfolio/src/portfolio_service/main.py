@@ -3,7 +3,7 @@ import os
 from service_auth import TokenVerifier
 from service_observability import configure
 from .api import create_app
-from .runtime import QuantResolver, sessions_from_env
+from .runtime import IdentityStatus, QuantResolver, sessions_from_env
 
 
 def app_factory():
@@ -14,4 +14,5 @@ def app_factory():
             os.environ["OIDC_ISSUER"], "portfolio-api", os.environ["OIDC_JWKS_URL"]
         ),
         resolver=QuantResolver(),
+        account_active=IdentityStatus(),
     )

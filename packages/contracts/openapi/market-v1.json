@@ -771,6 +771,27 @@
         }
       }
     },
+    "/internal/v1/chat/market-facts": {
+      "get": {
+        "summary": "Chat Market Facts",
+        "operationId": "chat_market_facts_internal_v1_chat_market_facts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/market/refresh-schedules": {
       "get": {
         "summary": "List Schedules",

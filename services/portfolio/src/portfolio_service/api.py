@@ -229,7 +229,7 @@ def portfolio_json(value):
     }
 
 
-def create_app(*, sessions, verifier, resolver):
+def create_app(*, sessions, verifier, resolver, account_active=None):
     app = FastAPI(title="Portfolio Service", version="0.1.0")
     install_http_tracing(app)
     bearer = HTTPBearer(auto_error=False)
@@ -845,6 +845,8 @@ def create_app(*, sessions, verifier, resolver):
         body: NewRecommendation,
         user_id=Depends(owner),
         idempotency_key: str | None = Header(default=None),
+        expected_chat_version: int | None = None,
+        expected_chat_policy: str | None = None,
     ):
         if (
             not idempotency_key
@@ -852,7 +854,10 @@ def create_app(*, sessions, verifier, resolver):
             or any(ord(c) < 33 or ord(c) > 126 for c in idempotency_key)
         ):
             raise HTTPException(400, "Cần Idempotency-Key hợp lệ (1–128 ký tự ASCII).")
-        body_hash = canonical_hash(body.model_dump(exclude_none=True))
+        payload = body.model_dump(exclude_none=True)
+        if expected_chat_version is not None or expected_chat_policy is not None:
+            payload['chat_confirmation'] = {'portfolio_version': expected_chat_version, 'policy_version_id': expected_chat_policy}
+        body_hash = canonical_hash(payload)
         with sessions.begin() as session:
             # NO KEY UPDATE serializes the owner's quota without blocking FK
             # KEY SHARE checks when a result inserts its Recommendation.
@@ -885,6 +890,8 @@ def create_app(*, sessions, verifier, resolver):
                     "portfolio.job.accept", job_id=existing.id, outcome="duplicate"
                 )
                 return accepted(existing)
+            if (expected_chat_version is not None and portfolio.version != expected_chat_version) or (expected_chat_policy is not None and policy_id(portfolio) != expected_chat_policy):
+                raise HTTPException(409, "Danh mục/hồ sơ thay đổi; cần xác nhận lại.")
             pending = session.scalar(
                 select(func.count())
                 .select_from(Job)
@@ -1030,4 +1037,9 @@ def create_app(*, sessions, verifier, resolver):
                 raise HTTPException(404, "Không tìm thấy tác vụ.")
             return recommendation_json(value, job)
 
+    from .delegation import install
+    install(app, sessions=sessions, verifier=verifier, principal=principal, owner=owner,
+            owned_portfolio=owned_portfolio, portfolio_json=portfolio_json,
+            recommend=recommend, recommendation_json=recommendation_json,
+            recommendation_type=NewRecommendation, account_active=account_active)
     return app

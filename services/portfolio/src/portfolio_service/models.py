@@ -135,3 +135,19 @@ class Inbox(Base):
     __tablename__ = "inbox_event"
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     received_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DelegationGrant(Base):
+    __tablename__ = "delegation_grant"
+    __table_args__ = (UniqueConstraint("owner_user_id", "chat_job_id", "authorization_id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_user_id: Mapped[str] = mapped_column(ForeignKey("app_user.id"), index=True)
+    actor: Mapped[str] = mapped_column(String(64))
+    conversation_id: Mapped[str] = mapped_column(String(36))
+    chat_job_id: Mapped[str] = mapped_column(String(36))
+    authorization_id: Mapped[str] = mapped_column(String(36), default="initial")
+    portfolio_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    tools: Mapped[list] = mapped_column(JSON)
+    body_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[object] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)

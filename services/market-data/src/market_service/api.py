@@ -595,6 +595,26 @@ def create_app(*, sessions, verifier, provider):
                 raise HTTPException(404, "Snapshot not found")
             return value.observations
 
+    def chat_reader(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
+        try:
+            if credentials is None:
+                raise AuthError()
+            identity = verifier.verify(credentials.credentials)
+        except AuthError:
+            raise HTTPException(401, 'Valid Chat service identity required') from None
+        if identity.client_id != 'chat-service' or 'market:chat:read' not in identity.scopes:
+            raise HTTPException(403, 'Chat market reader required')
+        return identity
+
+    @app.get('/internal/v1/chat/market-facts')
+    def chat_market_facts(identity=Depends(chat_reader)):
+        with sessions() as s:
+            rows = s.scalars(select(PriceRevision).where(PriceRevision.available_at <= utcnow()).order_by(PriceRevision.observation_date.desc(), PriceRevision.available_at.desc(), PriceRevision.id).limit(20)).all()
+            latest = max((r.observation_date for r in rows), default=None)
+            return {'checked_at': utcnow().isoformat(), 'status': 'NO_OBSERVATIONS' if latest is None else 'STALE' if (utcnow().date() - latest).days > 7 else 'AVAILABLE',
+                    'scope': 'recent_observations', 'calendar_verified': False,
+                    'observations': [observation_json(r) for r in rows]}
+
     from .refresh_api import install_refresh_routes
     install_refresh_routes(app, sessions=sessions, operator=operator, actor=actor, valid_key=valid_key, page_headers=page_headers)
     return app

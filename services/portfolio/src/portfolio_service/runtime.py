@@ -78,3 +78,63 @@ class QuantResolver:
                     raise ModelUnavailable("No compatible approved model")
             response.raise_for_status()
             return response.json()
+
+
+class IdentityStatus:
+    """Current account/role check using a read-only Keycloak service identity.
+
+    A dependency outage fails closed. No user token or grant is sent to Identity.
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.token, self.expires = None, 0
+
+    def __call__(self, issuer, subject):
+        from uuid import UUID
+
+        try:
+            UUID(subject)
+            if issuer != os.environ["OIDC_ISSUER"]:
+                return False
+            with self.lock:
+                if self.expires <= time.monotonic():
+                    r = httpx.post(
+                        os.environ["OIDC_TOKEN_URL"],
+                        data={
+                            "grant_type": "client_credentials",
+                            "client_id": "portfolio-account-reader",
+                            "client_secret": os.environ["OIDC_ACCOUNT_READER_SECRET"],
+                        },
+                        timeout=3,
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                    self.token, self.expires = (
+                        data["access_token"],
+                        time.monotonic() + max(0, data["expires_in"] - 30),
+                    )
+                headers = {"Authorization": "Bearer " + self.token}
+            base = (
+                os.environ["OIDC_TOKEN_URL"].split("/realms/")[0]
+                + "/admin/realms/portfolio/users/"
+                + subject
+            )
+            r = httpx.get(base, headers=headers, timeout=3)
+            r.raise_for_status()
+            if not r.json().get("enabled"):
+                return False
+            r = httpx.get(
+                base + "/role-mappings/realm/composite", headers=headers, timeout=3
+            )
+            r.raise_for_status()
+            human = {
+                "investor",
+                "researcher",
+                "data-operator",
+                "model-reviewer",
+                "system-admin",
+            }
+            return bool(human.intersection(role["name"] for role in r.json()))
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return False

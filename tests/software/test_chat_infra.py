@@ -3,6 +3,7 @@
 import importlib.util
 import base64
 import json
+import sys
 from pathlib import Path
 
 import httpx
@@ -98,6 +99,7 @@ def test_setup_installs_and_validates_chat_editable_package(tmp_path, monkeypatc
     spec.loader.exec_module(setup)
     assert "services/chat" in setup.PACKAGES
     monkeypatch.setattr(setup, "VENV", tmp_path)
+    monkeypatch.setattr(setup, "PYTHON", Path(sys.executable))
     calls = []
     monkeypatch.setattr(
         setup, "run", lambda command, **kwargs: calls.append(command) or ""

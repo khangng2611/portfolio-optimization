@@ -137,7 +137,10 @@ def main():
         },
     )
     require(
-        status == 201 and portfolio["policy_version_id"] == "risk-policy-v1:balanced",
+        status == 201
+        and portfolio["risk_profile"]["profile"] == "balanced"
+        and portfolio["policy_version_id"]
+        == f"risk-policy-v1:balanced:{portfolio['risk_profile']['version_id']}",
         f"Onboarding failed ({status})",
     )
     pid = portfolio["id"]

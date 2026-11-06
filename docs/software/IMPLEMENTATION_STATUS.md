@@ -418,6 +418,9 @@ push hoặc deploy thay đổi; giữ các file/chỉnh sửa đã có của ng�
   Refresh rejection tests now use the Vietnamese business cutoff.
 - CI exposed a setup test relying on the developer's existing venv executable;
   its fixture now selects the current runner's Python explicitly.
+- The clean CI stack also exposed a stale G2 smoke assertion predating versioned
+  risk policies. Updated it to check profile and revision-bound policy ID;
+  17 onboarding/risk tests and the real G2 lifecycle passed after refreshing DEMO.
 - Paid LLM, provider-outage and five-minute live grant-expiry gates were not
   repeated in this merge run. Prior dated evidence above remains historical.
   Knowledge RAG and untracked research extensions are outside this PR.

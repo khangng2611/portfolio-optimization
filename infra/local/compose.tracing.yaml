@@ -61,3 +61,13 @@ services:
     environment:
       <<: *tracing-environment
       OTEL_SERVICE_NAME: market-consume
+
+  chat-api:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: chat-api
+
+  chat-worker:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: chat-worker

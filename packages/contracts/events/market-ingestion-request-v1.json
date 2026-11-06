@@ -69,6 +69,27 @@
           ],
           "title": "Price Type",
           "type": "string"
+        },
+        "data_origin": {
+          "default": "unverified",
+          "enum": [
+            "real",
+            "synthetic",
+            "unverified"
+          ],
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "price_basis": {
+          "default": "unverified",
+          "enum": [
+            "provider_adjusted",
+            "raw_close",
+            "nav",
+            "unverified"
+          ],
+          "title": "Price Basis",
+          "type": "string"
         }
       },
       "required": [

@@ -58,10 +58,10 @@
         ]
       }
     },
-    "/api/v1/portfolios": {
+    "/api/v1/universes": {
       "get": {
-        "summary": "List Portfolios",
-        "operationId": "list_portfolios_api_v1_portfolios_get",
+        "summary": "Universes",
+        "operationId": "universes_api_v1_universes_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -77,15 +77,183 @@
             "HTTPBearer": []
           }
         ]
-      },
+      }
+    },
+    "/api/v1/universes/readiness": {
+      "get": {
+        "summary": "Universes Readiness",
+        "operationId": "universes_readiness_api_v1_universes_readiness_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InputReadiness"
+                  },
+                  "type": "array",
+                  "title": "Response Universes Readiness Api V1 Universes Readiness Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/portfolios": {
       "post": {
         "summary": "Create Portfolio",
         "operationId": "create_portfolio_api_v1_portfolios_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NewPortfolio"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Portfolios",
+        "operationId": "list_portfolios_api_v1_portfolios_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 120,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "risk_profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "manual",
+                "conservative",
+                "balanced",
+                "growth"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Risk Profile"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "created_desc",
+                "name_asc",
+                "capital_desc"
+              ],
+              "type": "string",
+              "default": "created_desc",
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding/portfolios": {
+      "post": {
+        "summary": "Onboarding",
+        "operationId": "onboarding_api_v1_onboarding_portfolios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingPortfolio"
               }
             }
           },
@@ -116,6 +284,443 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/risk-assessments/preview": {
+      "post": {
+        "summary": "Preview Risk Assessment",
+        "operationId": "preview_risk_assessment_api_v1_portfolios__portfolio_id__risk_assessments_preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskAssessmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAssessmentPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/risk-assessments": {
+      "get": {
+        "summary": "List Risk Assessments",
+        "operationId": "list_risk_assessments_api_v1_portfolios__portfolio_id__risk_assessments_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RiskAssessmentHistoryEntry"
+                  },
+                  "title": "Response List Risk Assessments Api V1 Portfolios  Portfolio Id  Risk Assessments Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Confirm Risk Assessment",
+        "operationId": "confirm_risk_assessment_api_v1_portfolios__portfolio_id__risk_assessments_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskAssessmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAssessmentRevision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/readiness": {
+      "get": {
+        "summary": "Portfolio Readiness",
+        "operationId": "portfolio_readiness_api_v1_portfolios__portfolio_id__readiness_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputReadiness"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/targets": {
+      "get": {
+        "summary": "List Targets",
+        "operationId": "list_targets_api_v1_portfolios__portfolio_id__targets_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/dashboard": {
+      "get": {
+        "summary": "Dashboard",
+        "operationId": "dashboard_api_v1_portfolios__portfolio_id__dashboard_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recommendations/{recommendation_id}/accept": {
+      "post": {
+        "summary": "Accept Target",
+        "operationId": "accept_target_api_v1_recommendations__recommendation_id__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Recommendation Id"
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrictModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/portfolios/{portfolio_id}": {
@@ -247,6 +852,30 @@
               "format": "uuid",
               "title": "Portfolio Id"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
           }
         ],
         "responses": {
@@ -287,6 +916,38 @@
               "type": "string",
               "format": "uuid",
               "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "expected_chat_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Chat Version"
+            }
+          },
+          {
+            "name": "expected_chat_policy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Chat Policy"
             }
           },
           {
@@ -423,10 +1084,326 @@
           }
         }
       }
+    },
+    "/internal/v1/delegation-grants": {
+      "post": {
+        "summary": "Issue",
+        "operationId": "issue_internal_v1_delegation_grants_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-service-authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Service-Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/delegations/revoke": {
+      "post": {
+        "summary": "Revoke",
+        "operationId": "revoke_api_v1_chat_delegations_revoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrictModel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/v1/chat-tools/{tool}": {
+      "post": {
+        "summary": "Invoke",
+        "operationId": "invoke_internal_v1_chat_tools__tool__post",
+        "parameters": [
+          {
+            "name": "tool",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tool"
+            }
+          },
+          {
+            "name": "x-delegation-grant",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Delegation-Grant"
+            }
+          },
+          {
+            "name": "x-chat-job",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Chat-Job"
+            }
+          },
+          {
+            "name": "x-chat-conversation",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Chat-Conversation"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolArguments"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Constraints": {
+        "properties": {
+          "risk_aversion": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Risk Aversion",
+            "default": 1.5
+          },
+          "max_position_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Position Weight",
+            "default": 0.5
+          },
+          "defensive_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Defensive Asset Ids"
+          },
+          "min_defensive_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Defensive Weight",
+            "default": 0
+          },
+          "max_non_defensive_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Max Non Defensive Weight",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Constraints"
+      },
+      "GrantRequest": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          },
+          "authorization_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Id"
+          },
+          "portfolio_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Id"
+          },
+          "tools": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "get_profile",
+                "get_portfolio_summary",
+                "request_allocation",
+                "get_recommendation",
+                "get_allocation_job"
+              ]
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Tools"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "job_id",
+          "tools"
+        ],
+        "title": "GrantRequest"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -439,6 +1416,173 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InputReadiness": {
+        "properties": {
+          "bundle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Id"
+          },
+          "bundle_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Hash"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "approved_model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Model Id"
+          },
+          "model_manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Manifest Hash"
+          },
+          "universe_id": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_-]{1,64}$",
+            "title": "Universe Id"
+          },
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Asset Ids"
+          },
+          "as_of_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Date"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "demo": {
+            "type": "boolean",
+            "title": "Demo"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "synthetic",
+              "unverified"
+            ],
+            "title": "Data Origin"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "EXPIRED",
+              "UNAVAILABLE"
+            ],
+            "title": "Status"
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "INPUT_EXPIRED",
+              "INPUT_UNAVAILABLE",
+              "INPUT_INVALID"
+            ],
+            "title": "Reason Code"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyReadiness"
+            },
+            "type": "array",
+            "title": "Strategies"
+          },
+          "next_action": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "REFRESH_DATA",
+              "CONTACT_OPERATOR"
+            ],
+            "title": "Next Action"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "universe_id",
+          "asset_ids",
+          "as_of_date",
+          "valid_until",
+          "demo",
+          "data_origin",
+          "status",
+          "reason_code",
+          "strategies",
+          "next_action",
+          "checked_at"
+        ],
+        "title": "InputReadiness"
       },
       "NewPortfolio": {
         "properties": {
@@ -502,11 +1646,64 @@
             ],
             "title": "Strategy",
             "default": "MVO"
+          },
+          "fallback_strategy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "EW"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Strategy"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "NewRecommendation"
+      },
+      "OnboardingPortfolio": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name"
+          },
+          "capital_vnd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1e+19,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Capital Vnd"
+          },
+          "universe_id": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_-]{1,64}$",
+            "title": "Universe Id",
+            "default": "DEMO"
+          },
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "capital_vnd",
+          "answers"
+        ],
+        "title": "OnboardingPortfolio"
       },
       "PortfolioUpdate": {
         "properties": {
@@ -570,6 +1767,378 @@
         "additionalProperties": false,
         "type": "object",
         "title": "PortfolioUpdate"
+      },
+      "RiskAnswers": {
+        "properties": {
+          "questionnaire_version": {
+            "type": "string",
+            "const": "risk-v1",
+            "title": "Questionnaire Version"
+          },
+          "horizon_months": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Horizon Months"
+          },
+          "liquidity_need": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Liquidity Need"
+          },
+          "loss_tolerance": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Loss Tolerance"
+          },
+          "experience": {
+            "type": "string",
+            "enum": [
+              "beginner",
+              "experienced"
+            ],
+            "title": "Experience"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "questionnaire_version",
+          "horizon_months",
+          "liquidity_need",
+          "loss_tolerance",
+          "experience"
+        ],
+        "title": "RiskAnswers"
+      },
+      "RiskAssessmentHistoryEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Portfolio Id"
+          },
+          "portfolio_version": {
+            "type": "integer",
+            "title": "Portfolio Version"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "onboarding",
+              "reassessment"
+            ],
+            "title": "Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "risk_profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Risk Profile"
+          },
+          "mapping_version": {
+            "type": "string",
+            "title": "Mapping Version"
+          },
+          "policy_version_id": {
+            "type": "string",
+            "title": "Policy Version Id"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "portfolio_version",
+          "reason",
+          "created_at",
+          "answers",
+          "constraints",
+          "risk_profile",
+          "mapping_version",
+          "policy_version_id",
+          "is_active"
+        ],
+        "title": "RiskAssessmentHistoryEntry"
+      },
+      "RiskAssessmentPreview": {
+        "properties": {
+          "portfolio_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Portfolio Id"
+          },
+          "portfolio_version": {
+            "type": "integer",
+            "title": "Portfolio Version"
+          },
+          "before": {
+            "$ref": "#/components/schemas/RiskPolicyState"
+          },
+          "after": {
+            "$ref": "#/components/schemas/RiskPolicyState"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "portfolio_version",
+          "before",
+          "after"
+        ],
+        "title": "RiskAssessmentPreview"
+      },
+      "RiskAssessmentRequest": {
+        "properties": {
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answers"
+        ],
+        "title": "RiskAssessmentRequest"
+      },
+      "RiskAssessmentRevision": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Portfolio Id"
+          },
+          "portfolio_version": {
+            "type": "integer",
+            "title": "Portfolio Version"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "onboarding",
+              "reassessment"
+            ],
+            "title": "Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "answers": {
+            "$ref": "#/components/schemas/RiskAnswers"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "risk_profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Risk Profile"
+          },
+          "mapping_version": {
+            "type": "string",
+            "title": "Mapping Version"
+          },
+          "policy_version_id": {
+            "type": "string",
+            "title": "Policy Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "portfolio_version",
+          "reason",
+          "created_at",
+          "answers",
+          "constraints",
+          "risk_profile",
+          "mapping_version",
+          "policy_version_id"
+        ],
+        "title": "RiskAssessmentRevision"
+      },
+      "RiskPolicyState": {
+        "properties": {
+          "risk_profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Profile"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "policy_version_id": {
+            "type": "string",
+            "title": "Policy Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "risk_profile",
+          "constraints",
+          "policy_version_id"
+        ],
+        "title": "RiskPolicyState"
+      },
+      "StrategyReadiness": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "EW",
+              "MVO",
+              "BL_ML"
+            ],
+            "title": "Strategy"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "MODEL_UNAVAILABLE",
+              "MODEL_INVALID",
+              "INPUT_EXPIRED",
+              "INPUT_UNAVAILABLE",
+              "INPUT_INVALID"
+            ],
+            "title": "Reason Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "strategy",
+          "available",
+          "reason_code"
+        ],
+        "title": "StrategyReadiness"
+      },
+      "StrictModel": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StrictModel"
+      },
+      "ToolArguments": {
+        "properties": {
+          "portfolio_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Id"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "EW",
+                  "MVO",
+                  "BL_ML"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "expected_policy_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Policy Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ToolArguments"
       },
       "ValidationError": {
         "properties": {

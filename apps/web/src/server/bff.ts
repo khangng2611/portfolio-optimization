@@ -10,8 +10,53 @@ const opaque = () => randomBytes(32).toString('base64url');
 const equal = (a: string, b: string) => { const left = Buffer.from(a); const right = Buffer.from(b); return left.length === right.length && timingSafeEqual(left, right); };
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+const operatorRoutes = [
+  { path: /^\/api\/v1\/market\/refresh-schedules$/, template: '/api/v1/market/refresh-schedules', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market', idempotent: true },
+  { path: new RegExp(`^/api/v1/market/refresh-schedules/${uuid}$`), template: '/api/v1/market/refresh-schedules/{schedule_id}', methods: ['GET', 'PATCH'], query: [], service: 'market', idempotent: true },
+  { path: /^\/api\/v1\/market\/refresh-jobs$/, template: '/api/v1/market/refresh-jobs', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market', idempotent: true },
+  { path: new RegExp(`^/api/v1/market/refresh-jobs/${uuid}$`), template: '/api/v1/market/refresh-jobs/{job_id}', methods: ['GET'], query: [], service: 'market' },
+  { path: /^\/api\/v1\/market\/(dataset-inventory|datasets)$/, template: '/api/v1/market/datasets', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
+  { path: /^\/api\/v1\/market\/ingestions$/, template: '/api/v1/market/ingestions', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
+  { path: new RegExp(`^/api/v1/market/ingestions/${uuid}/quality$`), template: '/api/v1/market/ingestions/{job_id}/quality', methods: ['GET'], query: [], service: 'market' },
+  { path: new RegExp(`^/api/v1/jobs/market/${uuid}$`), template: '/api/v1/jobs/market/{job_id}', methods: ['GET'], query: [], service: 'market' },
+  { path: /^\/api\/v1\/market\/snapshots$/, template: '/api/v1/market/snapshots', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market' },
+  { path: new RegExp(`^/api/v1/market/snapshots/${uuid}$`), template: '/api/v1/market/snapshots/{snapshot_id}', methods: ['GET'], query: [], service: 'market' },
+  { path: /^\/api\/v1\/market\/publications$/, template: '/api/v1/market/publications', methods: ['GET', 'POST'], query: ['limit', 'offset', 'status', 'snapshot_id'], service: 'quant' },
+  { path: new RegExp(`^/api/v1/market/publications/${uuid}$`), template: '/api/v1/market/publications/{job_id}', methods: ['GET'], query: [], service: 'quant' },
+] as const;
+const mlRoutes = [
+  { path: /^\/api\/v1\/ml\/training-jobs$/, template: '/api/v1/ml/training-jobs', methods: ['GET'], query: ['limit', 'offset', 'status', 'snapshot_id'], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: /^\/api\/v1\/ml\/training-jobs$/, template: '/api/v1/ml/training-jobs', methods: ['POST'], query: [], service: 'ml', roles: ['data-operator'], idempotent: true },
+  { path: new RegExp(`^/api/v1/ml/training-jobs/${uuid}$`), template: '/api/v1/ml/training-jobs/{job_id}', methods: ['GET'], query: [], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: /^\/api\/v1\/ml\/models$/, template: '/api/v1/ml/models', methods: ['GET'], query: ['limit', 'offset', 'status'], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: new RegExp(`^/api/v1/ml/models/${uuid}$`), template: '/api/v1/ml/models/{model_id}', methods: ['GET'], query: [], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
+  { path: new RegExp(`^/api/v1/ml/models/${uuid}/reviews$`), template: '/api/v1/ml/models/{model_id}/reviews', methods: ['POST'], query: [], service: 'ml', roles: ['model-reviewer'], idempotent: true },
+] as const;
+const chatRoles = ['investor', 'researcher', 'data-operator', 'model-reviewer', 'system-admin'];
+const chatRoutes = [
+  { path: /^\/api\/v1\/conversations$/, template: '/api/v1/conversations', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/conversations/${uuid}$`), template: '/api/v1/conversations/{conversation_id}', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/conversations/${uuid}/preferences$`), template: '/api/v1/conversations/{conversation_id}/preferences', methods: ['POST'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/conversations/${uuid}/messages$`), template: '/api/v1/conversations/{conversation_id}/messages', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'chat', roles: chatRoles, idempotent: true },
+  { path: new RegExp(`^/api/v1/jobs/chat/${uuid}$`), template: '/api/v1/jobs/chat/{job_id}', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/jobs/chat/${uuid}/events$`), template: '/api/v1/jobs/chat/{job_id}/events', methods: ['GET'], query: [], service: 'chat', roles: chatRoles, stream: true },
+  { path: new RegExp(`^/api/v1/jobs/chat/${uuid}/(cancel|resume)$`), template: '/api/v1/jobs/chat/{job_id}/action', methods: ['POST'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/recommendations/${uuid}/explanation$`), template: '/api/v1/recommendations/{recommendation_id}/explanation', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
+] as const;
 const routes = [
-  { path: /^\/api\/v1\/portfolios$/, template: '/api/v1/portfolios', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
+  ...chatRoutes,
+  ...operatorRoutes,
+  ...mlRoutes,
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/risk-assessments/preview$`), template: '/api/v1/portfolios/{portfolio_id}/risk-assessments/preview', methods: ['POST'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/risk-assessments$`), template: '/api/v1/portfolios/{portfolio_id}/risk-assessments', methods: ['GET', 'POST'], query: ['limit', 'offset'], idempotent: true },
+  { path: /^\/api\/v1\/universes\/readiness$/, template: '/api/v1/universes/readiness', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/readiness$`), template: '/api/v1/portfolios/{portfolio_id}/readiness', methods: ['GET'], query: [] },
+  { path: /^\/api\/v1\/universes$/, template: '/api/v1/universes', methods: ['GET'], query: [] },
+  { path: /^\/api\/v1\/onboarding\/portfolios$/, template: '/api/v1/onboarding/portfolios', methods: ['POST'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/dashboard$`), template: '/api/v1/portfolios/{portfolio_id}/dashboard', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/targets$`), template: '/api/v1/portfolios/{portfolio_id}/targets', methods: ['GET'], query: ['limit', 'offset'] },
+  { path: new RegExp(`^/api/v1/recommendations/${uuid}/accept$`), template: '/api/v1/recommendations/{recommendation_id}/accept', methods: ['POST'], query: [] },
+  { path: /^\/api\/v1\/portfolios$/, template: '/api/v1/portfolios', methods: ['GET', 'POST'], query: ['limit', 'offset', 'q', 'risk_profile', 'sort'] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}$`), template: '/api/v1/portfolios/{portfolio_id}', methods: ['GET', 'PATCH'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/recommendations$`), template: '/api/v1/portfolios/{portfolio_id}/recommendations', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
   { path: new RegExp(`^/api/v1/recommendations/${uuid}$`), template: '/api/v1/recommendations/{recommendation_id}', methods: ['GET'], query: [] },
@@ -87,7 +132,7 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
   }
   function traced(handler: (request: Request) => Promise<Response>) {
     return (request: Request) => {
-      const route = routes.find(route => route.path.test(new URL(request.url).pathname) && route.methods.includes(request.method));
+      const route = routes.find(route => route.path.test(new URL(request.url).pathname) && (route.methods as readonly string[]).includes(request.method));
       return route ? traceProxy(request, route.template, () => handler(request)) : handler(request);
     };
   }
@@ -129,23 +174,53 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
     logout: guarded(async request => {
       const { id, session } = await load(request);
       mutation(request, session);
+      let delegationRevoked = !config.chatUrl;
+      if (config.chatUrl) {
+        try {
+          const active = await fresh(id, session);
+          const revoke = await fetcher(config.portfolioUrl + '/api/v1/chat/delegations/revoke', { method: 'POST', headers: { authorization: `Bearer ${active.accessToken}`, 'content-type': 'application/json' }, body: '{}', redirect: 'manual', signal: AbortSignal.timeout(4000) });
+          delegationRevoked = revoke.ok;
+        } catch { delegationRevoked = false; }
+      }
       await store.del(`session:${id}`);
       let providerRevoked = true;
       try { await identity.revoke(session.refreshToken); } catch { providerRevoked = false; }
-      const response = json({ loggedOut: true, providerRevoked });
+      const response = json({ loggedOut: true, providerRevoked, delegationRevoked });
       response.headers.append('set-cookie', cookie(sessionName, '', 0));
       response.headers.append('set-cookie', cookie(flowName, '', 0));
       return response;
     }),
     proxy: traced(guarded(async request => {
       const url = new URL(request.url);
-      const route = routes.find(route => route.path.test(url.pathname) && route.methods.includes(request.method));
-      if (!route || [...url.searchParams.keys()].some(key => !route.query.includes(key))) throw new HttpError(404, 'Route not found');
-      for (const value of url.searchParams.values()) if (!/^\d{1,6}$/.test(value)) throw new HttpError(400, 'Invalid pagination');
+      const route = routes.find(route => route.path.test(url.pathname) && (route.methods as readonly string[]).includes(request.method));
+      if (url.pathname === '/api/v1/market/dataset-inventory' && request.method !== 'GET') throw new HttpError(404, 'Route not found');
+      if (!route || [...url.searchParams.keys()].some(key => !(route.query as readonly string[]).includes(key))) throw new HttpError(404, 'Route not found');
+      for (const [key, value] of url.searchParams) {
+        if (url.searchParams.getAll(key).length !== 1) throw new HttpError(400, 'Duplicate query parameter');
+        if (key === 'limit' && (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 100)) throw new HttpError(400, 'Invalid pagination');
+        if (key === 'offset' && (!/^\d{1,7}$/.test(value) || Number(value) > 1_000_000)) throw new HttpError(400, 'Invalid pagination');
+        if (key === 'q' && (value.trim().length > 120 || /[\x00-\x1f\x7f]/.test(value))) throw new HttpError(400, 'Invalid search');
+        if (key === 'risk_profile' && !['all', 'manual', 'conservative', 'balanced', 'growth'].includes(value)) throw new HttpError(400, 'Invalid risk profile');
+        if (key === 'status' && !(url.pathname === '/api/v1/ml/models' ? ['CANDIDATE', 'APPROVED', 'REJECTED'] : ['QUEUED', 'RUNNING', 'RETRY', 'SUCCEEDED', 'FAILED']).includes(value)) throw new HttpError(400, 'Invalid status');
+        if (key === 'snapshot_id' && !new RegExp(`^${uuid}$`).test(value)) throw new HttpError(400, 'Invalid snapshot');
+        if (key === 'sort' && !['created_desc', 'name_asc', 'capital_desc'].includes(value)) throw new HttpError(400, 'Invalid sort');
+      }
       const { id, session } = await load(request);
+      const isOperator = 'service' in route;
+      if ('roles' in route) {
+        if (!(route.roles as readonly string[]).some(role => session.user.roles.includes(role))) throw new HttpError(403, 'Required operation role missing');
+      } else if (isOperator && !session.user.roles.includes('data-operator')) throw new HttpError(403, 'Data operator role required');
       const mutates = !['GET', 'HEAD'].includes(request.method);
       if (mutates) mutation(request, session);
-      const headers = new Headers({ accept: 'application/json' });
+      const streaming = 'stream' in route && route.stream;
+      const headers = new Headers({ accept: streaming ? 'text/event-stream' : 'application/json' });
+      if (streaming) {
+        const cursor = request.headers.get('last-event-id');
+        if (cursor !== null) {
+          if (!/^[0-9]{1,12}$/.test(cursor)) throw new HttpError(400, 'Invalid event sequence');
+          headers.set('last-event-id', cursor);
+        }
+      }
       let body: string | undefined;
       if (mutates) {
         if (request.headers.get('content-type')?.split(';')[0] !== 'application/json') throw new HttpError(415, 'JSON required');
@@ -155,23 +230,85 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
         const precondition = request.headers.get('if-match');
         if (precondition) headers.set('if-match', precondition);
         const idempotency = request.headers.get('idempotency-key');
-        if (url.pathname.endsWith('/recommendations') && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
+        if ((('idempotent' in route && route.idempotent) || url.pathname.endsWith('/recommendations') || ['/api/v1/market/ingestions', '/api/v1/market/datasets', '/api/v1/market/publications'].includes(url.pathname)) && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
         if (idempotency) { if (!/^[A-Za-z0-9_-]{8,128}$/.test(idempotency)) throw new HttpError(400, 'Invalid Idempotency-Key'); headers.set('idempotency-key', idempotency); }
       }
       const active = await fresh(id, session);
       headers.set('authorization', `Bearer ${active.accessToken}`);
       injectTraceHeaders(headers);
+      const serviceUrl = 'service' in route ? route.service === 'chat' ? config.chatUrl : route.service === 'market' ? config.marketUrl : route.service === 'ml' ? config.mlUrl : config.quantUrl : config.portfolioUrl;
+      if (!serviceUrl) throw new HttpError(503, 'Operator service unavailable');
+      const disconnect = new AbortController();
+      const lifetime = streaming ? Math.max(1, Math.min(80_000, active.accessExpiresAt - Date.now(), active.expiresAt - Date.now())) : 10_000;
+      const signal = AbortSignal.any([request.signal, disconnect.signal, AbortSignal.timeout(lifetime)]);
       let upstream: Response;
-      try { upstream = await fetcher(config.portfolioUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10_000) }); }
-      catch { throw new HttpError(502, 'Portfolio service unavailable'); }
+      try { upstream = await fetcher(serviceUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal }); }
+      catch { throw new HttpError(502, 'Backend service unavailable'); }
       if (upstream.status >= 300 && upstream.status < 400) throw new HttpError(502, 'Unexpected backend redirect');
       if (upstream.status === 204) return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+      if (streaming && upstream.ok) {
+        if (!upstream.headers.get('content-type')?.includes('text/event-stream') || !upstream.body) throw new HttpError(502, 'Unexpected stream response');
+        const reader = upstream.body.getReader();
+        const encoder = new TextEncoder();
+        let output: ReadableStreamDefaultController<Uint8Array>;
+        let closed = false;
+        let checkingSession = false;
+        let monitor: ReturnType<typeof setInterval> | undefined;
+        const onAbort = () => close();
+        function close(sessionExpired = false) {
+          if (closed) return;
+          closed = true;
+          clearInterval(monitor);
+          signal.removeEventListener('abort', onAbort);
+          try {
+            if (sessionExpired) output.enqueue(encoder.encode('event: session_expired\ndata: {}\n\n'));
+            output.close();
+          } catch { /* The downstream may already have cancelled. */ }
+          disconnect.abort();
+          void reader.cancel().catch(() => {});
+        }
+        async function sessionActive() {
+          const current = await store.get<Session>(`session:${id}`);
+          if (!current || current.expiresAt <= Date.now()) { close(true); return false; }
+          return !closed;
+        }
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            output = controller;
+            signal.addEventListener('abort', onAbort, { once: true });
+            // Session revocation and lifetime still close a silent or paused stream.
+            monitor = setInterval(async () => {
+              if (closed || checkingSession) return;
+              checkingSession = true;
+              try { await sessionActive(); } catch { close(); }
+              finally { checkingSession = false; }
+            }, 500);
+            if (signal.aborted) close();
+          },
+          async pull() {
+            try {
+              if (!await sessionActive()) return;
+              const part = await reader.read();
+              if (closed) return;
+              if (part.done || part.value.byteLength > 256 * 1024) { close(); return; }
+              if (await sessionActive()) output.enqueue(part.value);
+            } catch { close(); }
+          },
+          cancel() { close(); },
+        }, { highWaterMark: 0 });
+
+        return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store', 'x-accel-buffering': 'no', 'x-content-type-options': 'nosniff' } });
+      }
       if (!upstream.headers.get('content-type')?.includes('application/json')) throw new HttpError(502, 'Unexpected backend response');
       let data: unknown;
       try { data = await upstream.json(); } catch { throw new HttpError(502, 'Invalid backend response'); }
       const response = json(sanitizeTraceFields(data, traceViewerBase(process.env.TRACE_VIEWER_URL)), upstream.status);
       const etag = upstream.headers.get('etag');
       if (etag) response.headers.set('etag', etag);
+      for (const name of ['x-total-count', 'x-limit', 'x-offset']) {
+        const value = upstream.headers.get(name);
+        if (value && /^\d+$/.test(value)) response.headers.set(name, value);
+      }
       return response;
     })),
   };

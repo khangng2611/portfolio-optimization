@@ -10,5 +10,7 @@ for directory in (
     "services/portfolio",
     "services/quant-serving",
     "services/market-data",
+    "services/ml-platform",
+    "services/chat",
 ):
     sys.path.insert(0, str(ROOT / directory / "src"))

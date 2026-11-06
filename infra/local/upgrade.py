@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add the Market milestone to a healthy disposable local stack without resetting it.
+"""Add owner services to a healthy disposable local stack without resetting it.
 
 Run bootstrap.py first, then this script from the software virtual environment.
 Only local endpoints and the fixed portfolio-software Compose project are used.
@@ -61,7 +61,26 @@ def reconcile_identity(
     scopes = {scope["name"]: scope for scope in get("/client-scopes")}
     for scope in desired["clientScopes"]:
         if (
-            scope["name"] in ("basic", "market:read", "market:write")
+            scope["name"]
+            in (
+                "basic",
+                "market:read",
+                "market:write",
+                "market:snapshot:read",
+                "quant:publish",
+                "ml:read",
+                "ml:train",
+                "ml:review",
+                "ml:model:read",
+                "chat:read",
+                "chat:write",
+                "chat:delegate",
+                "market:chat:read",
+            )
+            and (
+                scope["name"] != "market:snapshot:read"
+                or values.get("MARKET_READER_CLIENT_SECRET")
+            )
             and scope["name"] not in scopes
         ):
             post("/client-scopes", scope)
@@ -73,6 +92,13 @@ def reconcile_identity(
             "portfolio-test",
             "portfolio-web",
             "portfolio-service",
+            "quant-publisher",
+            "ml-api",
+            "ml-worker",
+            "quant-ml-reader",
+            "chat-api",
+            "chat-service",
+            "portfolio-account-reader",
         ):
             continue
         existing = get("/clients", params={"clientId": name})
@@ -81,14 +107,22 @@ def reconcile_identity(
             existing = get("/clients", params={"clientId": name})
         if len(existing) != 1:
             raise RuntimeError("Expected one local identity client")
-        if name == "market-api":
+        if name in ("market-api", "ml-api", "chat-api"):
             continue
         identity = existing[0]["id"]
         defaults = get(f"/clients/{identity}/default-client-scopes")
         attached = {scope["name"] for scope in defaults}
         required_scopes = (
-            ("basic", "market:read", "market:write")
+            ("basic", "market:read", "market:write", "chat:read", "chat:write")
             if name == "portfolio-test"
+            else ("basic", "market:snapshot:read")
+            if name in ("quant-publisher", "ml-worker")
+            else ("basic", "ml:model:read")
+            if name == "quant-ml-reader"
+            else ("basic", "chat:read", "chat:write")
+            if name == "portfolio-web"
+            else tuple(wanted["defaultClientScopes"])
+            if name in ("chat-service", "portfolio-account-reader")
             else ("basic",)
         )
         for scope_name in required_scopes:
@@ -97,19 +131,67 @@ def reconcile_identity(
                     f"{REALM}/clients/{identity}/default-client-scopes/{scopes[scope_name]['id']}"
                 )
                 response.raise_for_status()
-        if name != "portfolio-test":
+        if name == "portfolio-web":
+            attached_optional = {
+                scope["name"]
+                for scope in get(f"/clients/{identity}/optional-client-scopes")
+            }
+            for scope_name in (
+                "market:read",
+                "market:write",
+                "quant:publish",
+                "ml:read",
+                "ml:train",
+                "ml:review",
+            ):
+                if scope_name not in attached_optional:
+                    response = client.put(
+                        f"{REALM}/clients/{identity}/optional-client-scopes/{scopes[scope_name]['id']}"
+                    )
+                    response.raise_for_status()
+        if name not in (
+            "portfolio-test",
+            "quant-publisher",
+            "portfolio-web",
+            "ml-worker",
+            "quant-ml-reader",
+            "chat-service",
+            "portfolio-account-reader",
+        ):
             continue
         mappers = get(f"/clients/{identity}/protocol-mappers/models")
-        if not any(
-            mapper.get("config", {}).get("included.client.audience") == "market-api"
-            for mapper in mappers
-        ):
-            mapper = next(
-                mapper
-                for mapper in wanted["protocolMappers"]
-                if mapper["name"] == "audience-market-api"
+        for mapper in wanted["protocolMappers"]:
+            audience = mapper.get("config", {}).get("included.client.audience")
+            exists = any(
+                m.get("config", {}).get("included.client.audience") == audience
+                if audience
+                else m.get("name") == mapper["name"]
+                for m in mappers
             )
-            post(f"/clients/{identity}/protocol-mappers/models", mapper)
+            if not exists:
+                post(f"/clients/{identity}/protocol-mappers/models", mapper)
+        if name == "portfolio-account-reader":
+            reconcile_account_reader_role(client, identity)
+
+
+def reconcile_account_reader_role(client: httpx.Client, identity: str) -> None:
+    """Grant the owner account checker only Keycloak's read-only user role."""
+
+    def get(path: str, **kwargs):
+        response = client.get(REALM + path, **kwargs)
+        response.raise_for_status()
+        return response.json()
+
+    management = get("/clients", params={"clientId": "realm-management"})
+    if len(management) != 1:
+        raise RuntimeError("Expected the local realm-management client")
+    management_id = management[0]["id"]
+    account = get(f"/clients/{identity}/service-account-user")
+    role = get(f"/clients/{management_id}/roles/view-users")
+    path = f"/users/{account['id']}/role-mappings/clients/{management_id}"
+    if not any(assigned["id"] == role["id"] for assigned in get(path)):
+        response = client.post(REALM + path, json=[role])
+        response.raise_for_status()
 
 
 def upgrade_databases() -> None:

@@ -8,15 +8,25 @@ from portfolio_contracts.market import IngestCommand, IngestionRequest, Snapshot
 from market_service.api import create_app as market_app
 from portfolio_service.api import create_app as portfolio_app
 from quant_service.main import create_app as quant_app
+from ml_platform.main import create_app as ml_app
+from chat_service.api import create_app as chat_app
 
 root = Path(__file__).resolve().parents[1] / "packages/contracts"
 schemas = {
-    "openapi/market-v1.json": market_app(sessions=None, verifier=None, provider=None).openapi(),
+    "openapi/chat-v1.json": chat_app(
+        sessions=None, verifier=None, tools=None
+    ).openapi(),
+    "openapi/market-v1.json": market_app(
+        sessions=None, verifier=None, provider=None
+    ).openapi(),
     "openapi/portfolio-v1.json": portfolio_app(
         sessions=None, verifier=None, resolver=None
     ).openapi(),
     "openapi/quant-v1.json": quant_app(
         sessions=None, verifier=None, catalog=None
+    ).openapi(),
+    "openapi/ml-v1.json": ml_app(
+        sessions=None, verifier=None, directory=None
     ).openapi(),
     "events/envelope-v1.json": Envelope.model_json_schema(),
     "events/optimize-command-v1.json": OptimizeCommand.model_json_schema(),

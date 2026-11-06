@@ -23,6 +23,10 @@ class Observation(StrictModel):
     provider: str = Field(min_length=1, max_length=100)
     published_at: datetime | None = None
     price_type: Literal["close", "nav", "bid", "ask", "midpoint"] = "close"
+    data_origin: Literal["real", "synthetic", "unverified"] = "unverified"
+    price_basis: Literal["provider_adjusted", "raw_close", "nav", "unverified"] = (
+        "unverified"
+    )
 
     @model_validator(mode="after")
     def valid_observation(self):
@@ -75,6 +79,7 @@ class IngestCommand(StrictModel):
 
 
 class SnapshotRequest(StrictModel):
+    provider: str | None = Field(default=None, min_length=1, max_length=100)
     asset_ids: list[str] = Field(min_length=1, max_length=100)
     start_date: date
     end_date: date
@@ -94,3 +99,10 @@ class SnapshotRequest(StrictModel):
         if (self.end_date - self.start_date).days > 3650:
             raise ValueError("Snapshot window cannot exceed ten years")
         return self
+
+
+class DatasetRegistration(StrictModel):
+    """Only select server-owned inventory; paths and provider interpretation stay private."""
+
+    dataset_id: str = Field(pattern=r"^[A-Z0-9_-]{1,64}$")
+    expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")

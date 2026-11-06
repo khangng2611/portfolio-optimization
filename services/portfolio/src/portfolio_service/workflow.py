@@ -68,23 +68,46 @@ def consume_result(sessions, event: Envelope):
         ):
             raise ValueError("Unmatched result")
         if session.get(Inbox, event.event_id):
-            log_event("portfolio.result", job_id=job.id, event_id=str(event.event_id), outcome="duplicate_delivery")
+            log_event(
+                "portfolio.result",
+                job_id=job.id,
+                event_id=str(event.event_id),
+                outcome="duplicate_delivery",
+            )
             return
         session.add(Inbox(event_id=event.event_id))
         if job.status != "QUEUED":
-            log_event("portfolio.result", job_id=job.id, event_id=str(event.event_id), outcome="terminal_job")
+            log_event(
+                "portfolio.result",
+                job_id=job.id,
+                event_id=str(event.event_id),
+                outcome="terminal_job",
+            )
             return
+
         def fail(error, code):
-            with span("portfolio.result.persist", attributes=attributes | {"status": "FAILED", "error.code": code}):
+            with span(
+                "portfolio.result.persist",
+                attributes=attributes | {"status": "FAILED", "error.code": code},
+            ):
                 job.status, job.error = "FAILED", error
                 session.flush()
-                log_event("portfolio.result.persist", job_id=job.id, event_id=str(event.event_id), status="FAILED", error_code=code)
+                log_event(
+                    "portfolio.result.persist",
+                    job_id=job.id,
+                    event_id=str(event.event_id),
+                    status="FAILED",
+                    error_code=code,
+                )
 
         portfolio = session.scalar(
             select(Portfolio).where(Portfolio.id == job.portfolio_id).with_for_update()
         )
         if aware(job.deadline) <= utcnow():
-            fail({"code": "DEADLINE_EXCEEDED", "message": "Quá thời hạn tính toán."}, "DEADLINE_EXCEEDED")
+            fail(
+                {"code": "DEADLINE_EXCEEDED", "message": "Quá thời hạn tính toán."},
+                "DEADLINE_EXCEEDED",
+            )
             return
         if payload.status == "FAILED":
             fail(payload.error or {"code": "QUANT_FAILED"}, "QUANT_FAILED")
@@ -100,7 +123,10 @@ def consume_result(sessions, event: Envelope):
                 ):
                     raise ValueError("Input expired")
         except (ValueError, TypeError) as exc:
-            fail({"code": "INVALID_QUANT_RESULT", "message": str(exc)}, "INVALID_QUANT_RESULT")
+            fail(
+                {"code": "INVALID_QUANT_RESULT", "message": str(exc)},
+                "INVALID_QUANT_RESULT",
+            )
             return
         result = payload.result | {
             "weights": [str(w) for w in payload.result["weights"]],
@@ -114,14 +140,39 @@ def consume_result(sessions, event: Envelope):
             "as_of_date": job.input["inputs"]["as_of_date"],
             "valid_until": job.input["inputs"]["valid_until"],
             "demo": job.input["inputs"]["demo"],
+            "policy_version_id": (job.input.get("decision_context") or {}).get(
+                "policy_version_id", "manual-constraints-v1"
+            ),
+            "risk_profile": (job.input.get("decision_context") or {}).get(
+                "risk_profile"
+            ),
+            "requested_strategy": (job.input.get("decision_context") or {}).get(
+                "requested_strategy", job.input["strategy"]
+            ),
+            "fallback_reason": (job.input.get("decision_context") or {}).get(
+                "fallback_reason"
+            ),
         }
-        with span("portfolio.result.persist", attributes=attributes | {"status": "SUCCEEDED"}):
+        if job.input["inputs"].get("provenance") is not None:
+            result["inputs_provenance"] = job.input["inputs"]["provenance"]
+        with span(
+            "portfolio.result.persist", attributes=attributes | {"status": "SUCCEEDED"}
+        ):
             session.add(
                 Recommendation(
-                    id=job.id, job_id=job.id, owner_user_id=job.owner_user_id,
-                    portfolio_id=job.portfolio_id, run_id=str(payload.run_id), result=result,
+                    id=job.id,
+                    job_id=job.id,
+                    owner_user_id=job.owner_user_id,
+                    portfolio_id=job.portfolio_id,
+                    run_id=str(payload.run_id),
+                    result=result,
                 )
             )
             job.status, job.recommendation_id = "SUCCEEDED", job.id
             session.flush()
-            log_event("portfolio.result.persist", job_id=job.id, event_id=str(event.event_id), status="SUCCEEDED")
+            log_event(
+                "portfolio.result.persist",
+                job_id=job.id,
+                event_id=str(event.event_id),
+                status="SUCCEEDED",
+            )

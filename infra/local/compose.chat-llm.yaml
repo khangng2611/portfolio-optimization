@@ -1,0 +1,11 @@
+# Opt-in only. The private file is ignored by Git; never expand Compose config.
+# Apply together with compose.yaml and the existing tracing overlay if enabled.
+services:
+  chat-worker:
+    env_file:
+      - path: ./.generated/chat-openai.env
+        required: true
+    environment:
+      CHAT_LLM_PROVIDER: openai
+      CHAT_OPENAI_MODEL: gpt-6-luna
+      CHAT_LLM_DAILY_CALL_LIMIT: "20"

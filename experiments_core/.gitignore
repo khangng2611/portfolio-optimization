@@ -1,0 +1,6 @@
+runs/
+outputs
+submission/
+qa/
+*.log
+__pycache__/

@@ -38,6 +38,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
                 "directAccessGrantsEnabled": True,
             },
         },
+        "optional": {},
         "defaults": {"test-id": [{"id": "portfolio-read", "name": "portfolio:read"}]},
         "mappers": {
             "test-id": [
@@ -78,6 +79,14 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         parts = path.strip("/").split("/")
         if len(parts) >= 3 and parts[0] == "clients":
             identity = parts[1]
+            if parts[2] == "optional-client-scopes":
+                if method == "GET":
+                    return httpx.Response(200, json=state["optional"].get(identity, []))
+                scope = next(
+                    scope for scope in state["scopes"] if scope["id"] == parts[3]
+                )
+                state["optional"].setdefault(identity, []).append(scope)
+                return httpx.Response(204)
             if parts[2] == "default-client-scopes":
                 if method == "GET":
                     return httpx.Response(200, json=state["defaults"].get(identity, []))
@@ -106,6 +115,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
                 "TEST_CLIENT_SECRET": "unused-current-secret",
                 "OIDC_CLIENT_SECRET": "unused-web-secret",
                 "QUANT_CLIENT_SECRET": "unused-quant-secret",
+                "MARKET_READER_CLIENT_SECRET": "publisher-secret",
             },
             test_client=True,
         )
@@ -116,6 +126,7 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
                 "TEST_CLIENT_SECRET": "unused-current-secret",
                 "OIDC_CLIENT_SECRET": "unused-web-secret",
                 "QUANT_CLIENT_SECRET": "unused-quant-secret",
+                "MARKET_READER_CLIENT_SECRET": "publisher-secret",
             },
             test_client=True,
         )
@@ -128,6 +139,8 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
         "portfolio:read",
         "market:read",
         "market:write",
+        "chat:read",
+        "chat:write",
     }
     for client_id in ("web-id", "portfolio-service"):
         assert "basic" in {scope["name"] for scope in state["defaults"][client_id]}
@@ -140,8 +153,31 @@ def test_existing_realm_gains_market_test_access_without_changing_users_web_or_s
     assert {
         mapper["config"]["included.client.audience"]
         for mapper in state["mappers"]["test-id"]
-    } == {"portfolio-api", "market-api"}
+    } == {"portfolio-api", "market-api", "chat-api"}
+    assert {s["name"] for s in state["optional"]["web-id"]} == {
+        "market:read",
+        "market:write",
+        "quant:publish",
+        "ml:read",
+        "ml:train",
+        "ml:review",
+    }
+    assert {
+        m["config"]["included.client.audience"] for m in state["mappers"]["web-id"]
+    } == {"portfolio-api", "market-api", "quant-api", "ml-api", "chat-api"}
     assert state["clients"]["market-api"]["bearerOnly"] is True
+    publisher = state["clients"]["quant-publisher"]
+    assert publisher["secret"] == "publisher-secret"
+    assert publisher["serviceAccountsEnabled"] is True
+    assert publisher["directAccessGrantsEnabled"] is False
+    assert {s["name"] for s in state["defaults"]["quant-publisher"]} == {
+        "basic",
+        "market:snapshot:read",
+    }
+    assert {
+        m["config"]["included.client.audience"]
+        for m in state["mappers"]["quant-publisher"]
+    } == {"market-api"}
 
 
 def test_broker_upgrade_payload_does_not_replace_an_existing_owners_users():
@@ -186,8 +222,19 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             if request.method == "GET":
                 return httpx.Response(200, json=scopes)
             value = json.loads(request.content)
-            assert value["name"] == "basic"
-            scopes.append(dict(value, id="basic"))
+            assert value["name"] in {
+                "basic",
+                "quant:publish",
+                "ml:read",
+                "ml:train",
+                "ml:review",
+                "ml:model:read",
+                "chat:read",
+                "chat:write",
+                "chat:delegate",
+                "market:chat:read",
+            }
+            scopes.append(dict(value, id=value["name"]))
             return httpx.Response(201)
         if path == "/clients":
             if request.method == "GET":
@@ -202,6 +249,8 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             value = json.loads(request.content)
             assert value["clientId"] in {
                 "market-api",
+                "ml-api",
+                "chat-api",
                 "portfolio-web",
                 "portfolio-service",
             }
@@ -210,7 +259,23 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
             return httpx.Response(201)
         if path.endswith("/default-client-scopes") and request.method == "GET":
             return httpx.Response(200, json=[])
-        if path.endswith("/default-client-scopes/basic") and request.method == "PUT":
+        if path.endswith("/optional-client-scopes") and request.method == "GET":
+            return httpx.Response(200, json=[])
+        if "/optional-client-scopes/" in path and request.method == "PUT":
+            return httpx.Response(204)
+        if path.endswith("/protocol-mappers/models"):
+            return (
+                httpx.Response(200, json=[])
+                if request.method == "GET"
+                else httpx.Response(201)
+            )
+        if (
+            any(
+                path.endswith("/default-client-scopes/" + scope)
+                for scope in ("basic", "chat:read", "chat:write")
+            )
+            and request.method == "PUT"
+        ):
             return httpx.Response(204)
         raise AssertionError(
             "Disabled test-client setting caused an unexpected identity mutation"
@@ -226,6 +291,8 @@ def test_disabled_test_client_flag_never_creates_or_changes_a_password_grant_cli
         )
     assert {c["clientId"] for c in clients} == {
         "market-api",
+        "ml-api",
+        "chat-api",
         "portfolio-web",
         "portfolio-service",
     }

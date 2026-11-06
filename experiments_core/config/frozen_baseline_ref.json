@@ -1,0 +1,913 @@
+{
+  "baseline_run_id": "availability-observed-contract-20261012T233110",
+  "current_root": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/candidate_workspace",
+  "original_manifest_sha256": "3f7457ae6c56ca6e02bcae5166cd7851e9a428d6e0b6859153c34937b55aedd6",
+  "frozen_at": "2026-10-23T21:10:13.746774+07:00",
+  "baseline_files": [
+    {
+      "path": "outputs/step1/readiness_20261012/availability_ledger.csv",
+      "sha256": "92f2b885527f7e287490a7211dab37b2e97cea95d674c0851ee465763213a2b3",
+      "bytes": 11219007
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/availability_policy.json",
+      "sha256": "f8c96723fd1c18d0efd496d709c2fde95a92b22a44ced4d9c0a469a85c6a1990",
+      "bytes": 13929
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_information_prices.csv",
+      "sha256": "5802f1ea9f4d91693eaf2515c27e52adaf18fc60a2bff47aca801e166b0bc50e",
+      "bytes": 380148
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/assets_1.json",
+      "sha256": "17f8dcdc12e5bcc85636de55aace06f5ac9a438e35f130ee0718cf813f8f2a42",
+      "bytes": 8822
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/__init__.py",
+      "sha256": "2af1e1e62cd71488a24f822cbfe785e62253f4a23ae5a2181976e0147afe1c50",
+      "bytes": 1655
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/__main__.py",
+      "sha256": "f71d9757bc4ebeaaee0fce50a78720fb73174be3c75f455ecf45b520086804ce",
+      "bytes": 146
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_black_litterman.py",
+      "sha256": "838240ffaa2c01a7cb85973ce624fa716adb9891d6a645269f0145db6af33439",
+      "bytes": 1629
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_cli.py",
+      "sha256": "5bf02325f8ab8c802c10e696be12f94ee08aea588a8b41a142ea3b70ae8890bf",
+      "bytes": 1738
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_compare.py",
+      "sha256": "384fd31a455c02d350a1c3f4c2cd8951a0c6fb5fa6efcbfac480257b1bcd886d",
+      "bytes": 9591
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_compare_backtests.py",
+      "sha256": "773fe8a3de86721a6f966df1894663f98c4185b7f7c10a8201bf3d43a29e0a9b",
+      "bytes": 5182
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_compare_ranking.py",
+      "sha256": "db5561ad2036ba5dd9dc5644e62d81ee0408845e01606a8a0aeac9e2a9dcfbb8",
+      "bytes": 4613
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_data_helpers.py",
+      "sha256": "df6e0f0528cd3c2120671f2f24e11d8a7d1e0e5bd620dd7c5c3b1e15d02a6f30",
+      "bytes": 4437
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_loop.py",
+      "sha256": "87dc6fba5c278204d6c4677341e75c8d4be8e4508fc551902a0902c1fdedddfa",
+      "bytes": 12617
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_main.py",
+      "sha256": "353572eb6656ee5bd4a1088499a696fab18b297115bef41f9ffe82832693fb75",
+      "bytes": 9445
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_metrics.py",
+      "sha256": "bfefa8de0fa022bceeb8db7b292f8ead73a3520ca79791c3e18772e15834fa3d",
+      "bytes": 3027
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_optimizer.py",
+      "sha256": "65fd5b54065a6c3ecef6f64caa1665c95ec033c85003d245c81f3bdd470120a9",
+      "bytes": 11442
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_prediction.py",
+      "sha256": "b307ad8b2321ab8ba579b69c6093048f86b3718420b973f0172a4689aaa6760e",
+      "bytes": 2275
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_ranking_helpers.py",
+      "sha256": "770eb8352bee4faa7f58d5570461c169e319facb1b257ea1ee3577582c76078f",
+      "bytes": 15534
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/backtest/_views.py",
+      "sha256": "08ae22c8829986fbe4692c25b3df23d883079708121b0874c66cbacf985e52d9",
+      "bytes": 2532
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/config.py",
+      "sha256": "be34439d42aca71919c40df2d8b31dd191a0f58efad5f6ba712d29a708aa77bf",
+      "bytes": 4863
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/crawl/fund.py",
+      "sha256": "29b6cd393a6dc1e3ec11913b9f8a06083068408b01910eea93e2c0af8f4bed36",
+      "bytes": 7192
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/crawl/gold.py",
+      "sha256": "6ced33eb94af762e8ef2e9f7bd5a2bc0737aedd115c14eac83755b870353755f",
+      "bytes": 13140
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/crawl/stock.py",
+      "sha256": "248697d491acf5b3cfac6caa8c51bc9120c593a6973425357ad07e426cdc063e",
+      "bytes": 9016
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/funds/full/VFF.csv",
+      "sha256": "2f12b5c081ee0287e8d63267e969c6af0653c2b3b839e500b62791434778b025",
+      "bytes": 12402
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/gold/gold_full.csv",
+      "sha256": "90de4edde1a122d4c7003accbcaa70d1cd10b2ba8d4aa4f525c0a4a9d05e4f82",
+      "bytes": 44597
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/indices/full/VNINDEX.csv",
+      "sha256": "9b79a25bb1f0ef2fa15925cc4ec4ad7ff51ea073fcfbee0b008774af71477b23",
+      "bytes": 31128
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/ACB.csv",
+      "sha256": "79bb4fc9cb0d4e088788ecdff2bc4b42ed5022f26751831737bfc388bc16a172",
+      "bytes": 27850
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/BID.csv",
+      "sha256": "162f75fa91251dbac45e20e5dcf48b495137f09b3c0b09fa5bbbc78d058f6fbb",
+      "bytes": 28181
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/BVH.csv",
+      "sha256": "9c3fab29e597033bd7416cd6f6110e5bd1f42b2056456e8e6caececbca7d2776",
+      "bytes": 36519
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/CTG.csv",
+      "sha256": "1e93d0af30c7ce8877bde8710e818f1de702831c9278612f72450491e8e7817c",
+      "bytes": 28133
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/DGC.csv",
+      "sha256": "478405a67648ffdde7b121eb181abea172592437490805e69f7bdea19b387470",
+      "bytes": 27928
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/FPT.csv",
+      "sha256": "72c6036112ea8f06d70251f9b0d9f64dd2eee8a23f447dd90c2ccc3b92dddd85",
+      "bytes": 28386
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/GAS.csv",
+      "sha256": "9aba698a79369fd26959f75d8182608389e1bf5620b2a0c232c76ea0ea26a268",
+      "bytes": 28202
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/GVR.csv",
+      "sha256": "d11c36d292fec7ba8e7e939a9bf7c5824cae753d0316bea0d826ce0a929f657f",
+      "bytes": 36312
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/HDB.csv",
+      "sha256": "d011d40e925228e575bfef0190788b73aab611563e068b8b48af9483867a4cbe",
+      "bytes": 27182
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/HPG.csv",
+      "sha256": "ca857721eac64d2516c42df5bb12fe063706939708b4e0eba114dbb25c8ea333",
+      "bytes": 28017
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/LPB.csv",
+      "sha256": "38f64d1500c2cc44412ed52208ba7eeecc88cfebe61b70e51cd6ba8ff291473b",
+      "bytes": 27292
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/MBB.csv",
+      "sha256": "cd36bc1f156984bde11a5a0307b1744bc9869d041b223aa0ab3d66bb1eb2d186",
+      "bytes": 27465
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/MSN.csv",
+      "sha256": "d0dc18ecbc7632b1765d06a7080989ecc81b38ab80251c1df1dad66a0fa650ac",
+      "bytes": 30221
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/MWG.csv",
+      "sha256": "26ee1a0fd9c56780d771c7186d84c4cd8e6fc8791d0f696fb238f25e3be8971a",
+      "bytes": 28202
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/PLX.csv",
+      "sha256": "56f1f7b3d9f1e1867a9ccd94e2a167eec40cf21b33e7d0d3fec3281a20e878a2",
+      "bytes": 28195
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/POW.csv",
+      "sha256": "4e9c0ae6b908daeb6428ce68e36b3cd38ca48a4e0751e5c4ba7ac6102d8032cb",
+      "bytes": 27374
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/SAB.csv",
+      "sha256": "92e194ec01bc223032f80eb7654fe67f56c34a2791f55ae7cc13df4145cc8e8c",
+      "bytes": 28200
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/SHB.csv",
+      "sha256": "0e8e8351ad737c91dff5b606f61ebadc5718d07900c48c7e7ac5840c2b167a1f",
+      "bytes": 27087
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/SSI.csv",
+      "sha256": "ef96b6b9ea39acb32d57ab59f0e114082107a6877d5d17cedf738ab5a1e7caa5",
+      "bytes": 27790
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/STB.csv",
+      "sha256": "3afb86d867476d898134f7dd64842fe7bea4dc0aa7b3e0ac3b4a26d0f126742c",
+      "bytes": 25732
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/TCB.csv",
+      "sha256": "28e507087ffaccbff34c63a46094730ea9c1aa9cc0228eeaa161e0f0da80140f",
+      "bytes": 28054
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/TPB.csv",
+      "sha256": "8cf1aa765e7457d1751e37d05a310799c8b94317b638bae979a7f181c779870e",
+      "bytes": 27678
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VCB.csv",
+      "sha256": "3c05f1d5b955b7b5cfd630a17a70ba38c7d3ac975e7e046c2521307c45e07215",
+      "bytes": 28193
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VHM.csv",
+      "sha256": "99cf6962cb16d7be7a83a64814f6ce6b2d692ecffea86b1206bd56d78c23cc4e",
+      "bytes": 28177
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VIB.csv",
+      "sha256": "a7ac0c72762e75420e44cc37ee14e8a3f901c725ee2c00f0e723b7c85eb13c06",
+      "bytes": 27707
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VIC.csv",
+      "sha256": "c47af92822af2d548e77f93b9e946b457b01f3e5bd246c56892bfa33c687c501",
+      "bytes": 26779
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VJC.csv",
+      "sha256": "a1cea624efec3b7790faf25e83c1a89664a3a0e10d5b0b08dfc42c893d32b892",
+      "bytes": 28557
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VNM.csv",
+      "sha256": "e1a2302232d82d0d73e78080063ee9e48cd529cd5210f0820887714fe3c3574e",
+      "bytes": 28183
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VPB.csv",
+      "sha256": "1111c4617112c74df60f5efdf02e80a1b7c3406d45f3b99ef0ec590c4b776bbb",
+      "bytes": 27908
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/datasets/stocks/full/VRE.csv",
+      "sha256": "f296c9c41aa0b4ba14141b4b9ea15d58ecddb58fc9a0f9d81efb2eb83e0923bd",
+      "bytes": 28209
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/__init__.py",
+      "sha256": "4dba89a4ce573c360aea6526c6f142cf4145666c0406b20a5697aa786b44a324",
+      "bytes": 64
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/config.py",
+      "sha256": "fcb1f1625af1030b49808c2f87f153875be0bb0d9d80d6fd76db185b5235ab74",
+      "bytes": 1483
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/feature_engineering.py",
+      "sha256": "d68aafa1dfad9162cce2444d31a582fc2fc605032e86e3c3522ec0b6f19f046e",
+      "bytes": 6544
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/ranking_model.py",
+      "sha256": "1bde73b9d45a81a4a5f5919578fe4d701d4fa2937a73cb79b12282b1bac80118",
+      "bytes": 16552
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/relative_views.py",
+      "sha256": "4fafdef9a50cc9b5a0f3b5dc3e8e453d3f6ff4e9f761d168db04a0b049ff3391",
+      "bytes": 8647
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/risk_management.py",
+      "sha256": "fa05857a39aa76b682bc51e894bbb11f9e8ddf8f5aa45da8f0f2742a34d23743",
+      "bytes": 6124
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/ranking/stock_selection.py",
+      "sha256": "ecd8fdf4b3f42fac0dcbf4e5e93d4e8547be2860047a37dd3ed43e7edd464bc6",
+      "bytes": 5742
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/view_generators.py",
+      "sha256": "75fb710d0f6e01543678eec467ffcaa7e7dcea8df4e153bd538d4040317aa161",
+      "bytes": 15303
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/xgboost/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/xgboost/config.py",
+      "sha256": "ad3c019196db20e3638d6163e25ab52266e9a960086a428eb48286f27a8f033e",
+      "bytes": 1371
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/xgboost/model_train.py",
+      "sha256": "5fca600d0ef171604a7369ae103c966f8849fe03f224f53c1437cd4bca6c537c",
+      "bytes": 7063
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/gen_view/xgboost/xgboost_core.py",
+      "sha256": "7cf20b62613811dfd63da9d83cfcb9b0e85283d8b13c1b6a6e64de01f29956af",
+      "bytes": 28783
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/tests/test_availability.py",
+      "sha256": "7c372197a7a0401388492a9123a1df350159e862d22fe59ba9ac5775b51a41a0",
+      "bytes": 3399
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/tests/test_data.py",
+      "sha256": "f7e56bf9e7111c7dee73e51cd4c74fa8ff65de88acd809ffa883b996645d644b",
+      "bytes": 1580
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/tests/test_execution.py",
+      "sha256": "c33f4fd682232e6836bab841827c601ba1a9a7e9b46849447e2b0079b4ef69f2",
+      "bytes": 3447
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/tests/test_information_panel.py",
+      "sha256": "0906649e421251db847ffe58d2053714ce06f1906d6f1544b2fe5992f484aac8",
+      "bytes": 1781
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/tests/test_ml_integrity.py",
+      "sha256": "779dd7806d0742581ccdd7f06a472a4bfadb56b946356e2074d866ac1e5cc48c",
+      "bytes": 9075
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/tests/test_optimizer.py",
+      "sha256": "83a397945a0284ee0e790ea3c07dc2491691e9f26e701d986296712c571b5904",
+      "bytes": 4641
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/availability.py",
+      "sha256": "312b136e661d26ecdc7c4699b0ec428a2fc52b64f015cecc5aa567cb404d6ef0",
+      "bytes": 3885
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/data_loader.py",
+      "sha256": "869040738b643030f913ff12fd1522113ca93112b8f7326ad8373648a880a3de",
+      "bytes": 6322
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/indicators.py",
+      "sha256": "09ad61fc7ca52b2bc9c1a77c79f323d5337adb4e7ea92dc43215002c649d4de0",
+      "bytes": 8073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/plot_asset_returns.py",
+      "sha256": "0cf667c95eb9d01d75affc61a57d13a12f13fa3b3df83a264e99c640c24141b2",
+      "bytes": 6628
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/plot_combinatorial_selection.py",
+      "sha256": "6c7a36095f9d18cd43e625eda4d22b1fb44d0231e236f126ce49bb4e82c4158c",
+      "bytes": 8048
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/plot_timeline_is_oos.py",
+      "sha256": "2b91feb89500b4fb886b20643040e8110be8fb473b7727ce6ea7d0f78e6f735d",
+      "bytes": 7245
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/candidate_workspace/utils/view_logger.py",
+      "sha256": "4d8e718ea23bd58cd252db90847728efab9876b4c7a0343708cdbf91e6f01306",
+      "bytes": 11693
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/aligned_prices.csv",
+      "sha256": "c6789fb99526608cc0e5426de2b8ff59bee14148d908828bd72ed0d3e5814c84",
+      "bytes": 374696
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/constraint_diagnostics.csv",
+      "sha256": "872e37d9b32adf3c884017fd7408f469960ca7239d57dd561bd873f7345d9e0b",
+      "bytes": 43088
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/constraint_violations.csv",
+      "sha256": "ee496e177776a95b8ed4cefae8ce35cb7dadb9fab950c1c7b4fc6cd49b14cc07",
+      "bytes": 122
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/execution_ledger.csv",
+      "sha256": "26b2fc75465aa62c405008172a01facfb5c2a73d923ca71382c75b3d66cf5e08",
+      "bytes": 55684
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/ml_prediction_audit.csv",
+      "sha256": "edadbd2f70f553cfe15824c5e99964cfa71db4dc36c7f7dde1dc8fb1804ab617",
+      "bytes": 949580
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/ml_training_audit.csv",
+      "sha256": "fcfe2430fb724a61afd5f5030de1c1d664dc286203b14a7ca300e4728221f787",
+      "bytes": 4692674
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/selection_history.csv",
+      "sha256": "66b3a25c66cebdcc39491902da99bb08ee1691cffb5f2a84a06002879188541e",
+      "bytes": 31305
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/training_window_audit.csv",
+      "sha256": "fcfe2430fb724a61afd5f5030de1c1d664dc286203b14a7ca300e4728221f787",
+      "bytes": 4692674
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/trusted_baseline_daily_returns.csv",
+      "sha256": "3723751f83526f65e2e87b22723a0ed0398828043fc5a933b42a9b6a3617b4e2",
+      "bytes": 248604
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/trusted_baseline_metrics.csv",
+      "sha256": "99aebf6b76555be9710c9c9a6b4022b0dccdd31044532de2707b0758e8f737b5",
+      "bytes": 1788
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/trusted_baseline_nav.csv",
+      "sha256": "804bd563e83207df7d11e9de89a73775b8eba82627ab2009cb4b65ebcfc5f500",
+      "bytes": 231129
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/trusted_baseline_turnover.csv",
+      "sha256": "5a4a1e3c1a1945de84659a20e22613a9eae005994f604ed0981f5bba79b156e6",
+      "bytes": 4202242
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/trusted_baseline_weights.csv",
+      "sha256": "162ba6ed32408cbad45852dfe5c578a0d8b6c5ac2251bde4c491cc8e8c7c3c27",
+      "bytes": 1462474
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/artifacts/turnover_summary.csv",
+      "sha256": "f3ff7f7430a3da5527f7dd182d7df15769a67ad81acd16900f11dfa086002eac",
+      "bytes": 73778
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/manifest.json",
+      "sha256": "3f7457ae6c56ca6e02bcae5166cd7851e9a428d6e0b6859153c34937b55aedd6",
+      "bytes": 45787
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/ml_prediction_audit.json",
+      "sha256": "92c16104c238fca8e378771349f1afd7c177b4d247aa66e73789f89425a6d76e",
+      "bytes": 1720213
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/ml_training_audit.json",
+      "sha256": "1ad5080b13b042afb6ab06fd25fade6a449da1934360b315dea5a5bcb36b51f6",
+      "bytes": 6688452
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/result.pkl",
+      "sha256": "8f26f127ca9ae2d876ef1b3884067c4388bbaa41ac3cb69f1c735e42a0cf7839",
+      "bytes": 12436643
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/run_config.json",
+      "sha256": "aaf0c8ae895f3ff5b2534219911a8f2f22659a469cf034f26ba4ebb1e41c7504",
+      "bytes": 2550
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0000.npz",
+      "sha256": "7db8c4a82bf6ebee037310146bee79868599e45a21b9a35fdf21e56cf07e2009",
+      "bytes": 5071
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0001.npz",
+      "sha256": "831a84a190f56a9dcacc7293bac3faf95a87360f064404f13106ec588ff2dc8a",
+      "bytes": 5076
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0002.npz",
+      "sha256": "03f1383d2f305950e017b2a1fec73fc657a55f42c5b9b73fac87207c3bf4f470",
+      "bytes": 5075
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0003.npz",
+      "sha256": "11ca37400775f849eb3b749ee4fa6cbbc39fa019d85605cd4cb428b0eb798ff0",
+      "bytes": 5078
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0004.npz",
+      "sha256": "366adc6b1ee98ba5adf503ed35c03069256868c0f78ae261ddce1bcbebc4de4e",
+      "bytes": 5072
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0005.npz",
+      "sha256": "b9956b86727cfc6c8646fb4ef4444f08e6735512bca3b1b4fe784f7e6cd18714",
+      "bytes": 5073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0006.npz",
+      "sha256": "1a580051dc3cf3fb8718f842794bfaa0cb7c619058a45b32b0f5db277ef83f37",
+      "bytes": 5071
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0007.npz",
+      "sha256": "975226da3256bc0898c07218d5c5e30722b5517f8a01bd6f54912c511eeffa77",
+      "bytes": 5072
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0008.npz",
+      "sha256": "213db13170bd3de0102c860e87ead3493437ff8aa1299f0d85c805f1e76338db",
+      "bytes": 5074
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0009.npz",
+      "sha256": "ce0b300c11ec66d3a1d6f0b8c97a3523a3815c3b39cb0d05af5b7cad3d7f1539",
+      "bytes": 5074
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0010.npz",
+      "sha256": "1191a5cbdaeded153a1598b6fb363763abcb0f74f38c688b82d2f8cdb4874565",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0011.npz",
+      "sha256": "b7c3b68f50d0e59afb4640f789cdac080142ea96cdad79bfaf4910540ba95781",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0012.npz",
+      "sha256": "4d612a1cc710d64a45673349d1d4fe334f2cfccbafa1819c87cfb87dc496c52e",
+      "bytes": 5073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0013.npz",
+      "sha256": "de1ef52ccf95ba5e8eb553f4c48d77d4d2c1c16285a657a277c4164084a6a0c0",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0014.npz",
+      "sha256": "760fce77e31178033114f93c7617a328d140af8a276610364a288fa945fa2ead",
+      "bytes": 5068
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0015.npz",
+      "sha256": "0d0d0a8c903c73cae6f42e0fc2c6bfda8d5473628ce89494b91885e12106e5b5",
+      "bytes": 5057
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0016.npz",
+      "sha256": "3087ea59bfb348e80e8b3a324882606e71c666b181666bbbf68090e2046434de",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0017.npz",
+      "sha256": "a4ef3770df1898288f1074e312bda821a7f239f661e0cf2ca0a62592e2d1ffc8",
+      "bytes": 5072
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0018.npz",
+      "sha256": "a03cd0a7831d81cdbddd4a3b5f98c851e2a4fe6ed53f3480e8f1a347ef8b7153",
+      "bytes": 5068
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0019.npz",
+      "sha256": "f92b8a52a98f19347c96d447d8ca2c037fac9ab81d39ac6f20d9001cd6fda8c0",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0020.npz",
+      "sha256": "9d33ed39d89e4c1e8ef03f6f3bce966d08e7983c79f507c054581a9c77ea7c56",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0021.npz",
+      "sha256": "4e8d64c23941a72f5a15b4a997f49cf04606444e0dfdfef540fc9a7e294f7912",
+      "bytes": 5071
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0022.npz",
+      "sha256": "1ad944922f58af1675fb22e43ebdd33b2f114a530a7c54c9fc8bcf4ad617e23c",
+      "bytes": 5067
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0023.npz",
+      "sha256": "0adc37ef3e6a67fa491d8f3c4218f76104ad561ea1caedba9f258e199163a0e7",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0024.npz",
+      "sha256": "6077455f4f55db369de7307ba9ed51fa3c7c04ccaa6b9e87fe4a292c3de08001",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0025.npz",
+      "sha256": "f929afd4d98ffa66ab800e050cb73816282f28e39d4db393d29272805d89b467",
+      "bytes": 5071
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0026.npz",
+      "sha256": "154dbb010e91ea3ec5cfc69b9482b7f041136bca5ce636e3583e5e2bf2f324d4",
+      "bytes": 5060
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0027.npz",
+      "sha256": "f599aceb4c42089f69fdd86ff283bb4148c9691f1f843d9378c4cf107bfc6ad8",
+      "bytes": 5067
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0028.npz",
+      "sha256": "c8d7980b5472b60d444dcf0c2caf996647ae0142fea38e49389b5c8f52ce0121",
+      "bytes": 5069
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0029.npz",
+      "sha256": "ce7abcdef74686a48c38de48feb9b1c44a85b2c4efadad34006eb438b6e31724",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0030.npz",
+      "sha256": "64279dc2c9ce1872a4ba1c2ae0faa2bb93842e99a8f247d1ecef57dc535a39e8",
+      "bytes": 5079
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0031.npz",
+      "sha256": "6a83792f5f702ca8af9d0778d74d160d963ac4f05b5f132150406639b31666b6",
+      "bytes": 5067
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0032.npz",
+      "sha256": "5593fdf15aae93a992527be33e0dd267020bf1975cb29fc9fa3f16e0e502c654",
+      "bytes": 5073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0033.npz",
+      "sha256": "4e4b9a4c7260a520debd623492fedc9cb356450a60e08688c3d193ec2accd89a",
+      "bytes": 5069
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0034.npz",
+      "sha256": "93ba11bc5ff885977b9f4c14f15dcc0fdac6bf7237581c62cd5b9910927a628c",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0035.npz",
+      "sha256": "049b3294e2267e609eb462d5df29a27b635571d07aec7b6cb74f66c25e8310ae",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0036.npz",
+      "sha256": "659e4a3e6ad0d5059ad1d29f9c0c7ce8892fb2196e02421e984ee7f1e762bd6e",
+      "bytes": 5074
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0037.npz",
+      "sha256": "0056c84f73b3fe1da65f829b823013b36018fb3fe745473de1fc12bd1198f982",
+      "bytes": 5073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0038.npz",
+      "sha256": "56583f530e2b89fae00586ebd035df07f5b08c97f52b01877d2c035de9a803ea",
+      "bytes": 5062
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0039.npz",
+      "sha256": "f03a90bf3f7881749ce7ef7049f96b233364851bb6c478851e1e7d043161d3ff",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0040.npz",
+      "sha256": "9332b850af5b3b42ae970800777bfbfb0a97f59f13ab618b8d67c7b0db63cf06",
+      "bytes": 5069
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0041.npz",
+      "sha256": "4fcb946b6ad76abb8a891886ca2ce2a8b096b91b4c86d066aa544785f297068c",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0042.npz",
+      "sha256": "78624dd2970da86ac888bef0ebf9b8f582c453488e2200ab1825e0d0bf2633ba",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0043.npz",
+      "sha256": "45c6db43f0a07ed81d1a4f2a44698c51147f75d4ea988abb63378bc460e23bd7",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0044.npz",
+      "sha256": "e86f83027840f4f444f35b267bd1aa855727cfbe727dca46356b818caf219eea",
+      "bytes": 5073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0045.npz",
+      "sha256": "b274e67dc18a693a9d6db2cee9ecb9910c032c5193f343cc588b2180590508b1",
+      "bytes": 5062
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0046.npz",
+      "sha256": "28544ff4778ababb748169abfc0b0e12f44a5be5e9d2574f570ff3db5bfc3374",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0047.npz",
+      "sha256": "aa51e911b225c3db0bcfdb6a8070332e3a6bbae95459a0d7cbaa0c2e290541ae",
+      "bytes": 5069
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0048.npz",
+      "sha256": "5e708b36692086c8bdd05bf1160358c510653f599231b287129f133da6d28774",
+      "bytes": 5072
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0049.npz",
+      "sha256": "5c5abf858faa808c1b6f558ca6fcbf4cc496cdd1a14aaee88d004f443075f65b",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0050.npz",
+      "sha256": "075b3096a01e9bf1d8c403da8d6c81f34c22f025b087c7c84f363e6bf0304b35",
+      "bytes": 5061
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0051.npz",
+      "sha256": "931344f2d996598d3d93b1dcf5747bc42f10d5913c5a2e01b0abf902a7d6b26d",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0052.npz",
+      "sha256": "fd8d5d47937f906eba07ff29f8aed434060030f3c0650d20f5d4435112084507",
+      "bytes": 5062
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0053.npz",
+      "sha256": "821f4282449a38f5a6d9f08ef349b4948882f75f09c7bf89e520f91ac9452602",
+      "bytes": 5068
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0054.npz",
+      "sha256": "0e9d3a80aca7bc188e8a65c716b59ed01a18ff7247c9a63173ee2c37c5e1705e",
+      "bytes": 5068
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0055.npz",
+      "sha256": "2073850b1f0359e16e67b8e297db2d3f37334b60fb485ee8a4e2c01a918f1d90",
+      "bytes": 5068
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0056.npz",
+      "sha256": "823c2cd9c0ac1fc096110b08c9dbc635c138a4a7241edf973ff7e048d6325884",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0057.npz",
+      "sha256": "87aec550ce57dadc9f598877bc7993267b8b158b3c48e2a3e9b15bc396c6a60a",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0058.npz",
+      "sha256": "0c29a442d62ca79c6bd1e80a897d16491ffcf681f838a8d1bc05832e0363ea82",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0059.npz",
+      "sha256": "5521e88cdf1feab5203e7815400de16ea91b2be884cab20aa23a48bdea17ee37",
+      "bytes": 5060
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0060.npz",
+      "sha256": "ac8d47cc5eef9ab46c0d482bec1d586a3042456cc46dda45473eb979fb42a84c",
+      "bytes": 5062
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0061.npz",
+      "sha256": "2d263322de3ecada3b5753871aa5f522eaf9a8dce751e6fc7fc76eabe65b9c80",
+      "bytes": 5069
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0062.npz",
+      "sha256": "a1c354203be24520fc80eae3f129640a1797c356bb8bae690a22dc8db3ce64be",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0063.npz",
+      "sha256": "6aa3981d6726806119c45eaddae2efdc030bd6e827cbe6c031c5ca6ccc754068",
+      "bytes": 5065
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0064.npz",
+      "sha256": "be623d927b15bc3ccc481f1f88eb69a995b76f42e6c0fbe07869f4da43bc3dee",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0065.npz",
+      "sha256": "c39f7b9b6f26e162c2e7091f953d783cce81e0719977d6c0aad566f209889632",
+      "bytes": 5064
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0066.npz",
+      "sha256": "4687dc2996b9d89d28ba6bacd78f1c1e9c58db1341b97938553aa1b0efb461fe",
+      "bytes": 5060
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0067.npz",
+      "sha256": "e941a7efca2263ed7c31d76c7ebb54aa9b2951f25ba9c46997fbe3b907de5121",
+      "bytes": 5059
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0068.npz",
+      "sha256": "e7390123780ec496c020a680840242f6597a67fc415e4f4e833977b7644e268b",
+      "bytes": 5061
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0069.npz",
+      "sha256": "b01fae0c0f75ff936e5801a79613dacf536ad25d597c564940a61bc860a02843",
+      "bytes": 5073
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0070.npz",
+      "sha256": "6b91b2f87c12c52f552e396ea966637ee19cd9dbbfcc8d2306c85de10a98fdf8",
+      "bytes": 5071
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0071.npz",
+      "sha256": "20c4e85888442099bc5c08cb01d82e307c3f48e2d880249d5251561f276ade7b",
+      "bytes": 5070
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0072.npz",
+      "sha256": "53d276d5a06bbb9a4204291a4f13dfaceb19df3014eebcd5c91bdea886936e4b",
+      "bytes": 5066
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0073.npz",
+      "sha256": "166e1a77e8ff400016d649522d477dbf53d0374e522959cd482ef06f76c9df84",
+      "bytes": 5067
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0074.npz",
+      "sha256": "61571786c19066957ef689f546bfc55e046417bc4207366b9dec0fb32e8aeeab",
+      "bytes": 5059
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0075.npz",
+      "sha256": "a62d4b3c9fb40bfc57f2efad3fefbc5caff74172b75d0005511eee5e996d5766",
+      "bytes": 5067
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0076.npz",
+      "sha256": "7d203c712839fd761fd0b2e328e897833affe1e68d7864ec7d5930220b1c2849",
+      "bytes": 5062
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/selection_matrices/0077.npz",
+      "sha256": "a08fab517987edd653a85572bd0d4b410eda68b1565bbefcb4d1ecb48abfa000",
+      "bytes": 5063
+    },
+    {
+      "path": "outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/views_history.json",
+      "sha256": "29845be2b9eb0f92a57d9b74020a23520c3e145d41f4b52416e60fe762c97ae6",
+      "bytes": 182243
+    }
+  ]
+}

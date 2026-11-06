@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -40,7 +41,26 @@ MARKET_SECRET_NAMES = [
     "MARKET_PUBLISHER_PASSWORD",
     "MARKET_CONSUMER_PASSWORD",
 ]
-SECRET_NAMES = LEGACY_SECRET_NAMES + MARKET_SECRET_NAMES
+PUBLISHER_SECRET_NAMES = ["MARKET_READER_CLIENT_SECRET"]
+ML_SECRET_NAMES = [
+    "ML_MIGRATOR_PASSWORD",
+    "ML_RUNTIME_PASSWORD",
+    "ML_MARKET_READER_CLIENT_SECRET",
+    "ML_READER_CLIENT_SECRET",
+]
+CHAT_SECRET_NAMES = [
+    "CHAT_MIGRATOR_PASSWORD",
+    "CHAT_RUNTIME_PASSWORD",
+    "CHAT_CLIENT_SECRET",
+    "PORTFOLIO_ACCOUNT_READER_SECRET",
+]
+SECRET_NAMES = (
+    LEGACY_SECRET_NAMES
+    + MARKET_SECRET_NAMES
+    + PUBLISHER_SECRET_NAMES
+    + ML_SECRET_NAMES
+    + CHAT_SECRET_NAMES
+)
 
 
 def write_private(path: Path, value: str) -> None:
@@ -62,7 +82,15 @@ def create_secrets() -> dict[str, str]:
             raise SystemExit(
                 "Existing secrets are incomplete; restore secrets.json rather than silently rotating credentials."
             )
-        additions = set(MARKET_SECRET_NAMES) - values.keys()
+        additions = (
+            set(
+                MARKET_SECRET_NAMES
+                + PUBLISHER_SECRET_NAMES
+                + ML_SECRET_NAMES
+                + CHAT_SECRET_NAMES
+            )
+            - values.keys()
+        )
         if additions:
             values.update({name: secrets.token_hex(32) for name in sorted(additions)})
             write_private(path, json_text(values))
@@ -108,7 +136,7 @@ def make_database_sql(values: dict[str, str]) -> str:
         "REVOKE ALL ON DATABASE postgres FROM PUBLIC;",
         "REVOKE ALL ON DATABASE template1 FROM PUBLIC;",
     ]
-    for name in ("identity", "portfolio", "quant", "market"):
+    for name in ("identity", "portfolio", "quant", "market", "ml", "chat"):
         owner, migrator, runtime, database = [
             f"{name}_{suffix}" for suffix in ("owner", "migrator", "runtime", "db")
         ]
@@ -239,8 +267,18 @@ def make_realm(
             "portfolio:read",
             "portfolio:write",
             "quant:resolve",
+            "quant:publish",
+            "ml:read",
+            "ml:train",
+            "ml:review",
+            "ml:model:read",
             "market:read",
             "market:write",
+            "market:snapshot:read",
+            "chat:read",
+            "chat:write",
+            "chat:delegate",
+            "market:chat:read",
         ]
     ]
     web = {
@@ -267,9 +305,21 @@ def make_realm(
             "roles",
             "portfolio:read",
             "portfolio:write",
+            "chat:read",
+            "chat:write",
         ],
-        "optionalClientScopes": [],
-        "protocolMappers": [audience_mapper("portfolio-api")],
+        "optionalClientScopes": [
+            "market:read",
+            "market:write",
+            "quant:publish",
+            "ml:read",
+            "ml:train",
+            "ml:review",
+        ],
+        "protocolMappers": [
+            audience_mapper(a)
+            for a in ("portfolio-api", "market-api", "quant-api", "ml-api", "chat-api")
+        ],
     }
     service = {
         "clientId": "portfolio-service",
@@ -292,8 +342,104 @@ def make_realm(
             "protocol": "openid-connect",
             "bearerOnly": True,
         }
-        for name in ["portfolio-api", "quant-api", "market-api"]
+        for name in ["portfolio-api", "quant-api", "market-api", "ml-api", "chat-api"]
     ]
+    if values.get("MARKET_READER_CLIENT_SECRET"):
+        clients.append(
+            {
+                "clientId": "quant-publisher",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "secret": values["MARKET_READER_CLIENT_SECRET"],
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": True,
+                "defaultClientScopes": ["basic", "market:snapshot:read"],
+                "optionalClientScopes": [],
+                "protocolMappers": [audience_mapper("market-api")],
+            }
+        )
+    for client_id, secret_name, scope, audience in [
+        (
+            "ml-worker",
+            "ML_MARKET_READER_CLIENT_SECRET",
+            "market:snapshot:read",
+            "market-api",
+        ),
+        ("quant-ml-reader", "ML_READER_CLIENT_SECRET", "ml:model:read", "ml-api"),
+    ]:
+        if values.get(secret_name):
+            clients.append(
+                {
+                    "clientId": client_id,
+                    "enabled": True,
+                    "protocol": "openid-connect",
+                    "publicClient": False,
+                    "secret": values[secret_name],
+                    "standardFlowEnabled": False,
+                    "implicitFlowEnabled": False,
+                    "directAccessGrantsEnabled": False,
+                    "serviceAccountsEnabled": True,
+                    "defaultClientScopes": ["basic", scope],
+                    "optionalClientScopes": [],
+                    "protocolMappers": [audience_mapper(audience)],
+                }
+            )
+    if values.get("CHAT_CLIENT_SECRET"):
+        clients.append(
+            {
+                "clientId": "chat-service",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "secret": values["CHAT_CLIENT_SECRET"],
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": True,
+                "defaultClientScopes": ["basic", "chat:delegate", "market:chat:read"],
+                "optionalClientScopes": [],
+                "protocolMappers": [
+                    audience_mapper("portfolio-api"),
+                    audience_mapper("market-api"),
+                ],
+            }
+        )
+    if values.get("PORTFOLIO_ACCOUNT_READER_SECRET"):
+        clients.append(
+            {
+                "clientId": "portfolio-account-reader",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "secret": values["PORTFOLIO_ACCOUNT_READER_SECRET"],
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": True,
+                "defaultClientScopes": ["basic"],
+                "optionalClientScopes": [],
+                "protocolMappers": [
+                    audience_mapper("realm-management"),
+                    {
+                        "name": "account-reader-management-role",
+                        "protocol": "openid-connect",
+                        "protocolMapper": "oidc-usermodel-client-role-mapper",
+                        "consentRequired": False,
+                        "config": {
+                            "usermodel.clientRoleMapping.clientId": "realm-management",
+                            "claim.name": "resource_access.realm-management.roles",
+                            "jsonType.label": "String",
+                            "multivalued": "true",
+                            "access.token.claim": "true",
+                            "id.token.claim": "false",
+                        },
+                    },
+                ],
+            }
+        )
     if test_client:
         clients.append(
             {
@@ -317,11 +463,14 @@ def make_realm(
                     "portfolio:write",
                     "market:read",
                     "market:write",
+                    "chat:read",
+                    "chat:write",
                 ],
                 "optionalClientScopes": [],
                 "protocolMappers": [
                     audience_mapper("portfolio-api"),
                     audience_mapper("market-api"),
+                    audience_mapper("chat-api"),
                 ],
             }
         )
@@ -363,7 +512,20 @@ def make_realm(
                 ],
             }
             for account in accounts
-        ],
+        ]
+        + (
+            [
+                {
+                    "username": "service-account-portfolio-account-reader",
+                    "enabled": True,
+                    "serviceAccountClientId": "portfolio-account-reader",
+                    "realmRoles": [],
+                    "clientRoles": {"realm-management": ["view-users"]},
+                }
+            ]
+            if values.get("PORTFOLIO_ACCOUNT_READER_SECRET")
+            else []
+        ),
     }
 
 
@@ -543,25 +705,29 @@ def create_bundle(refresh: bool) -> None:
         raise SystemExit("Immutable bundle already exists. Refusing to overwrite it.")
     artifact.write_text(content)
     artifact.chmod(0o444)
-    previous = json.loads(catalog.read_text())["bundles"] if catalog.exists() else []
-    pending_catalog = directory / (".catalog-" + secrets.token_hex(8) + ".tmp")
-    pending_catalog.write_text(
-        json_text(
-            {
-                "bundles": [
-                    {
-                        "file": artifact.name,
-                        "sha256": hashlib.sha256(content.encode()).hexdigest(),
-                    }
-                ]
-                + previous
-            }
+    with (directory / ".catalog.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        previous = (
+            json.loads(catalog.read_text())["bundles"] if catalog.exists() else []
         )
-    )
-    # Keep old, still-valid identities available to jobs already accepted and
-    # switch readers atomically to the newest-first catalog.
-    pending_catalog.chmod(0o644)
-    pending_catalog.replace(catalog)
+        pending_catalog = directory / (".catalog-" + secrets.token_hex(8) + ".tmp")
+        pending_catalog.write_text(
+            json_text(
+                {
+                    "bundles": [
+                        {
+                            "file": artifact.name,
+                            "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                        }
+                    ]
+                    + previous
+                }
+            )
+        )
+        # Keep old, still-valid identities available to jobs already accepted and
+        # switch readers atomically to the newest-first catalog.
+        pending_catalog.chmod(0o644)
+        pending_catalog.replace(catalog)
 
 
 def create_market_dataset(refresh: bool) -> None:
@@ -627,7 +793,14 @@ def main() -> None:
     )
     settings["test_client"] = settings["test_client"] or args.enable_test_client
     write_private(settings_path, json_text(settings))
-    environment = dict(values, OIDC_TEST_CLIENT_SECRET=values["TEST_CLIENT_SECRET"])
+    environment = dict(
+        values,
+        OIDC_TEST_CLIENT_SECRET=values["TEST_CLIENT_SECRET"],
+        # Only the local publication worker writes this host-owned bind mount.
+        # Numeric container identity avoids world-write/chown of generated files.
+        LOCAL_BUNDLE_UID=str(os.getuid()),
+        LOCAL_BUNDLE_GID=str(os.getgid()),
+    )
     write_private(
         GENERATED / ".env",
         "# GENERATED; local development only. Do not commit.\n"
@@ -650,7 +823,13 @@ def main() -> None:
         f"bind 0.0.0.0\nprotected-mode yes\nport 6379\nrequirepass {values['REDIS_PASSWORD']}\nappendonly yes\nappendfsync everysec\ndir /data\n",
     )
     create_bundle(args.refresh_demo)
+    (GENERATED / "bundles" / "ml-models").mkdir(exist_ok=True)
+    (GENERATED / "bundles" / "ml-models").chmod(0o755)
     create_market_dataset(args.refresh_demo)
+    (GENERATED / "datasets" / "refresh").mkdir(exist_ok=True)
+    (GENERATED / "datasets" / "refresh").chmod(0o755)
+    (GENERATED / "ml-models").mkdir(exist_ok=True)
+    (GENERATED / "ml-models").chmod(0o755)
     # Bind-mounted generated config must be readable by each container's non-root uid.
     # The parent directory stays mode 0700 and never enters any build context.
     for directory in [

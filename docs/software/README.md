@@ -1,5 +1,23 @@
 # Software foundation — Identity/BFF và Portfolio/Quant
 
+**Cập nhật 07/11/2026:** Chat có API/SSE, lịch sử bền vững, worker SQL,
+delegation theo owner và xác nhận rõ ràng trước khi tạo đề xuất. LLM là tùy chọn,
+cần consent; lỗi provider dùng giải thích template từ dữ kiện canonical.
+Xem [Chat MVP](CHAT_MVP_PLAN.md), [Chat LLM](CHAT_LLM_PLAN.md) và
+[setup hiện hành](SETUP_AND_API_TESTING.md). Knowledge RAG vẫn là kế hoạch.
+
+**Cập nhật 27/10/2026:** P1 bổ sung Data Refresh từ KBS, ML Platform MVP
+(training/registry/review và publication bằng approved model ID), cùng đánh giá
+lại hồ sơ rủi ro có lịch sử phiên bản. UI và BFF nối API của từng owner.
+Phạm vi và bằng chứng hiện hành nằm trong [trạng thái hiện thực](IMPLEMENTATION_STATUS.md)
+và [hướng dẫn vận hành](../../infra/local/README.md); các mốc dưới đây giữ làm lịch sử.
+
+Luồng hiện tại gồm [wizard rủi ro, policy version, accepted target, dashboard và
+approved XGBoost inference](WEEKS_6_7.md). [Market–Quant bridge](MARKET_QUANT_BRIDGE.md)
+publish features/numerical bundle từ snapshot giá thật qua CLI riêng. UI hỗ trợ
+universe discovery, review câu trả lời, biểu đồ phân bổ và lưu target.
+Các mốc phía dưới giữ nguyên làm lịch sử.
+
 Hướng dẫn hiện hành: [Setup môi trường, Swagger và Postman](SETUP_AND_API_TESTING.md).
 Đối chiếu các mốc và bằng chứng ngày 09/10/2026 tại
 [trạng thái hiện thực](IMPLEMENTATION_STATUS.md). Phần cập nhật thêm Market Data,
@@ -17,7 +35,9 @@ Không tạo AuthService hoặc AllocationService riêng.
 apps/web/                    Next.js UI và BFF; OIDC, cookie/session, proxy
 services/portfolio/          Portfolio API, DB/migrations, job/result workers
 services/quant-serving/      Ready-input API, DB/migrations, numerical workers
-services/market-data/        CSV/normalized ingestion, revisions, immutable snapshots
+services/market-data/        Refresh/ingestion, quality, revisions, immutable snapshots
+services/ml-platform/        Training worker, candidate registry, reviewer decisions
+services/chat/               Conversations, SSE, scoped tools, durable SQL worker
 packages/portfolio-core/    Numerical package cài bằng pip; không phụ thuộc root
 packages/contracts/         Wire contracts, OpenAPI và event schemas
 packages/service-auth/      Xác thực JWT/JWKS dùng chung; không có business DB
@@ -129,9 +149,11 @@ integration trên; không cần factory reset hoặc xóa volumes.
 
 ## Phạm vi tiếp theo
 
-Chưa có crawler/live Market Data, training/promotion Model Registry, Chat/RAG,
-onboarding risk profile đầy đủ, acceptance/ledger hoặc giao dịch. Adapter input
-hiện đọc artifact được chuẩn bị phía server; chưa nối các service dữ liệu/model
-đó. Core BL_ML hiện tính từ views đã cung cấp; không khẳng định parity với toàn
-bộ pipeline `ranking_absolute` của Phase 1. Đây là phần nền tảng auth và
-recommendation đã thống nhất, không phải hoàn tất toàn bộ Phase 2.
+Onboarding, accepted target, native approved inference và Market snapshot bridge
+đã có. P0 bổ sung readiness, phân trang, lịch sử/chỉnh sửa/so sánh trên UI và
+publication jobs bền vững; hướng dẫn worker nằm trong
+[local stack](../../infra/local/README.md).
+
+Còn ledger/PAPER/rebalance, Research API và Knowledge RAG.
+Serving/core parity cùng input không chứng minh parity với toàn bộ pipeline
+`ranking_absolute` của Phase 1 hoặc hiệu quả đầu tư.

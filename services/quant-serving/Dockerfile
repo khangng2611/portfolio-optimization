@@ -1,6 +1,7 @@
 FROM python:3.12.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 COPY packages/contracts /app/packages/contracts
 COPY packages/service-auth /app/packages/service-auth
 COPY packages/service-observability /app/packages/service-observability

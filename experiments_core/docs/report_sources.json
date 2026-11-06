@@ -1,0 +1,75 @@
+{
+  "primary": "core-evidence-20261023T211011",
+  "repeat": "core-evidence-20261023T211139",
+  "report_sha256": "4fe9a25d3bc5ec68df142904c99bdd30bbe71e2133996234c3084edcf23d6b58",
+  "source_csvs": [
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/ablation_daily_returns.csv",
+      "sha256": "ae2026793ffe36200fef43295ef428db8de9b9186373a973c7608b24bf9e476f"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/ablation_weights.csv",
+      "sha256": "3d35bb7dc19b61a06f5a7d61a790db1eded6b4774e38fce325182e78ac56ec66"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/baseline_checks.csv",
+      "sha256": "de92d181ab2e8d6f75c13abdf606108e8c53ac49d7c303fb7942a8d6971951ad"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/baseline_replay_metrics.csv",
+      "sha256": "504c24b2f1cff4adb6b1b3b46376aea0c369d843e66913f2f645528df7b794e4"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/cost_sensitivity.csv",
+      "sha256": "75f7c63296306a5388fbd61231a01c1332560a0435901d23c20940ed42cefcfa"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/experiment_registry.csv",
+      "sha256": "648a9ab3172d1391df119760b7a354ad404f9420bb434722c76f85c584b7cd84"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/optimizer_ladder_metrics.csv",
+      "sha256": "bda45d6a6ad790d608c412f504dd5902efd516b0545fe27fcd556a45b611c447"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/paired_oos_returns.csv",
+      "sha256": "e8e3ec01628fcb0817eb01bfe9af26357cab2d26c14e270aed23dfc84530b157"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/primary_effect_sizes.csv",
+      "sha256": "b0b4f257193c30d4169dec4528709077528ea9890e224219bdb85196f80a69a6"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/random_seed_distribution.csv",
+      "sha256": "0e2e25e76e7de4a6d7a41acdc35d48a49be6c3856ce52b824e299d12cfac48cc"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/selection_history_comparison.csv",
+      "sha256": "fc8928c42cfb556d8f9770868f685771aeb59f091d447139846c29cc58996cf0"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/selection_optimality_audit.csv",
+      "sha256": "2ed7d9c72ea18148a82278418cdd734c9ff34dae8793904ffbdb8cf3c85aa7b5"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/selection_portfolio_metrics.csv",
+      "sha256": "5e844d889a5adf567afaff1184ee8a7bcdf42a0751d4048de356c8ae2df662fb"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/selection_portfolio_returns.csv",
+      "sha256": "9e3c2039875569018b2cc568fbe9a5a2a1e50b32d0fa92707b6061f569e4da2f"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/selection_portfolio_weights.csv",
+      "sha256": "20f614474754fcea485daff8e5706f70565d171244bf7663bf0a5471760363e0"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/selection_structure.csv",
+      "sha256": "00a8599976f25e267fa7bee8794a2d494a2e890e3b72c2d9d409f543104240b1"
+    },
+    {
+      "path": "runs/core-evidence-20261023T211011/outputs/uncertainty_intervals.csv",
+      "sha256": "f50e6bd1cf5f981589051f35dd43ac31249d97e16298e627dc99bf9eff2edfe9"
+    }
+  ]
+}

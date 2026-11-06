@@ -5,7 +5,14 @@ from sqlalchemy import select
 from portfolio_contracts import aware, canonical_hash, utcnow
 from portfolio_contracts.market import IngestCommand, IngestionRequest, UNITS
 from service_observability import link_job, log_event, span
-from .models import Asset, Inbox, IngestionJob, PriceRevision
+from .models import Asset, Inbox, IngestionJob, PriceRevision, QualityReport
+from .quality import (
+    QualityFailure,
+    finding,
+    validate_batch,
+    report_json,
+    terminal_quality,
+)
 
 
 def execute(sessions, provider, event):
@@ -18,7 +25,12 @@ def execute(sessions, provider, event):
     attributes = {"job.id": str(command.job_id), "event.id": str(event.event_id)}
     with sessions.begin() as session:
         if session.get(Inbox, event.event_id):
-            log_event("market.ingestion", job_id=str(command.job_id), event_id=str(event.event_id), outcome="duplicate_delivery")
+            log_event(
+                "market.ingestion",
+                job_id=str(command.job_id),
+                event_id=str(event.event_id),
+                outcome="duplicate_delivery",
+            )
             return
         job = session.scalar(
             select(IngestionJob)
@@ -28,34 +40,90 @@ def execute(sessions, provider, event):
         if (
             job is None
             or command.request_hash != job.request_hash
-            or job.input != command.model_dump(mode="json")
+            or job.input != command.model_dump(mode="json", exclude_unset=True)
         ):
             raise ValueError("Command does not match persisted job")
         session.add(Inbox(event_id=event.event_id))
         if job.status != "QUEUED":
-            log_event("market.ingestion", job_id=job.id, event_id=str(event.event_id), outcome="terminal_job")
+            log_event(
+                "market.ingestion",
+                job_id=job.id,
+                event_id=str(event.event_id),
+                outcome="terminal_job",
+            )
             return
         if aware(job.deadline) <= utcnow():
             job.status, job.error = (
                 "FAILED",
                 {"code": "DEADLINE_EXCEEDED", "message": "Ingestion deadline exceeded"},
             )
+            terminal_quality(session, job)
             return
         try:
             with span("market.ingestion.normalize", attributes=attributes):
                 observations = command.request.observations or provider.fetch(
                     command.dataset_spec
                 )
-                # Revalidate downloaded observations and batch duplicates before writing.
+                findings = validate_batch(observations, command.dataset_spec)
                 observations = IngestionRequest(observations=observations).observations
+                for asset_id in {row.asset_id for row in observations}:
+                    asset = session.get(Asset, asset_id)
+                    if asset and any(
+                        row.kind != asset.kind
+                        for row in observations
+                        if row.asset_id == asset_id
+                    ):
+                        raise QualityFailure(
+                            [finding("ASSET_MISMATCH")], len(observations)
+                        )
             with span("market.ingestion.persist", attributes=attributes) as current:
                 with session.begin_nested():
-                    inserted = persist_observations(session, observations, command.dataset_spec)
+                    inserted = persist_observations(
+                        session, observations, command.dataset_spec, job.id
+                    )
+                session.add(
+                    QualityReport(
+                        job_id=job.id,
+                        status="PASS",
+                        report=report_json(
+                            job.id,
+                            "PASS",
+                            len(observations),
+                            findings,
+                            observations,
+                            command.dataset_spec,
+                        ),
+                    )
+                )
                 job.status, job.inserted_count = "SUCCEEDED", inserted
                 session.flush()
                 current.set_attribute("status", "SUCCEEDED")
-                log_event("market.ingestion.persist", job_id=job.id, event_id=str(event.event_id), status="SUCCEEDED")
+                log_event(
+                    "market.ingestion.persist",
+                    job_id=job.id,
+                    event_id=str(event.event_id),
+                    status="SUCCEEDED",
+                )
         except (ValueError, KeyError, OSError, TypeError) as exc:
+            findings = (
+                exc.findings
+                if isinstance(exc, QualityFailure)
+                else [finding("INVALID_SOURCE")]
+            )
+            count = exc.row_count if isinstance(exc, QualityFailure) else 0
+            session.add(
+                QualityReport(
+                    job_id=job.id,
+                    status="QUARANTINED",
+                    report=report_json(
+                        job.id,
+                        "QUARANTINED",
+                        count,
+                        findings,
+                        spec=command.dataset_spec,
+                    ),
+                )
+            )
             job.status, job.error = (
                 "FAILED",
                 {
@@ -64,10 +132,17 @@ def execute(sessions, provider, event):
                     "reason": type(exc).__name__,
                 },
             )
-            log_event("market.ingestion", job_id=job.id, event_id=str(event.event_id), status="FAILED", error_type=type(exc).__name__, error_code="INVALID_DATASET")
+            log_event(
+                "market.ingestion",
+                job_id=job.id,
+                event_id=str(event.event_id),
+                status="FAILED",
+                error_type=type(exc).__name__,
+                error_code="INVALID_DATASET",
+            )
 
 
-def persist_observations(session, observations, spec=None):
+def persist_observations(session, observations, spec=None, job_id=None):
     count = 0
     # Asset locks serialize revisions consistently, even for concurrent datasets.
     for asset_id in sorted({row.asset_id for row in observations}):
@@ -87,16 +162,17 @@ def persist_observations(session, observations, spec=None):
         price = (
             row.price * (1000 if row.source_unit.startswith("thousand_") else 1)
         ).quantize(Decimal("0.000001"))
-        content_hash = canonical_hash(
-            {
-                "asset_id": row.asset_id,
-                "date": row.observation_date.isoformat(),
-                "price_vnd": str(price),
-                "unit": UNITS[row.kind],
-                "provider": row.provider,
-                "price_type": row.price_type,
-            }
-        )
+        content = {
+            "asset_id": row.asset_id,
+            "date": row.observation_date.isoformat(),
+            "price_vnd": str(price),
+            "unit": UNITS[row.kind],
+            "provider": row.provider,
+            "price_type": row.price_type,
+        }
+        if row.data_origin != "unverified" or row.price_basis != "unverified":
+            content |= {"data_origin": row.data_origin, "price_basis": row.price_basis}
+        content_hash = canonical_hash(content)
         key = [
             PriceRevision.asset_id == row.asset_id,
             PriceRevision.observation_date == row.observation_date,
@@ -115,6 +191,7 @@ def persist_observations(session, observations, spec=None):
         now = utcnow()
         session.add(
             PriceRevision(
+                ingestion_job_id=job_id,
                 asset_id=row.asset_id,
                 observation_date=row.observation_date,
                 price_vnd=price,
@@ -128,6 +205,8 @@ def persist_observations(session, observations, spec=None):
                 available_at=now,
                 ingested_at=now,
                 source_hash=spec["sha256"] if spec else None,
+                data_origin=row.data_origin,
+                price_basis=row.price_basis,
             )
         )
         session.flush()

@@ -44,10 +44,16 @@ def execute(sessions, catalog, event: Envelope):
                 raise ValueError("Command deadline exceeded")
             with span("quant.inputs.load", attributes=attributes):
                 numerical = catalog.load(command.inputs, command.strategy)
+                numerical = dict(numerical)
+                inference_provenance = numerical.pop("inference_provenance", None)
             with span("portfolio_core.allocate", attributes=attributes) as current:
                 result = allocate(
                     numerical | {"strategy": command.strategy, "constraints": command.constraints.model_dump()}
                 )
+                if inference_provenance:
+                    result["diagnostics"]["inference"] = inference_provenance
+                if command.inputs.provenance:
+                    result["diagnostics"]["inputs"] = command.inputs.provenance
                 current.set_attribute("status", result["status"])
             if command.deadline <= utcnow():
                 raise ValueError("Computation exceeded deadline")

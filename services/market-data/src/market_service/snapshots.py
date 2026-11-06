@@ -3,7 +3,8 @@ from datetime import datetime, time, timezone
 from sqlalchemy import select
 
 from portfolio_contracts import aware, canonical_hash, utcnow
-from .models import PriceRevision, Snapshot
+from .models import Asset, PriceRevision, Snapshot, QualityReport
+from portfolio_contracts.market import UNITS
 
 
 def observation_json(row):
@@ -24,6 +25,8 @@ def observation_json(row):
         "ingested_at": aware(row.ingested_at).isoformat(),
         "availability_basis": "ingestion",
         "source_hash": row.source_hash,
+        "data_origin": row.data_origin,
+        "price_basis": row.price_basis,
     }
 
 
@@ -40,6 +43,11 @@ def build_snapshot(session, request):
                     request.start_date, request.end_date
                 ),
                 PriceRevision.available_at <= cutoff,
+                *(
+                    [PriceRevision.provider == request.provider]
+                    if request.provider
+                    else []
+                ),
             )
             .order_by(
                 PriceRevision.available_at, PriceRevision.revision, PriceRevision.id
@@ -72,16 +80,52 @@ def build_snapshot(session, request):
             selected[0].observation_date - request.start_date
         ).days > request.max_age_days:
             raise ValueError(f"Missing start coverage for {asset_id}")
+        asset = session.get(Asset, asset_id)
+        for row in selected:
+            if (
+                not row.price_vnd.is_finite()
+                or row.price_vnd <= 0
+                or asset is None
+                or row.unit != UNITS[asset.kind]
+            ):
+                raise ValueError(f"Invalid selected price quality for {asset_id}")
+            if row.published_at and (
+                aware(row.published_at) > cutoff
+                or aware(row.published_at).date() < row.observation_date
+            ):
+                raise ValueError(f"Invalid selected availability for {asset_id}")
+            if row.ingestion_job_id:
+                report = session.get(QualityReport, row.ingestion_job_id)
+                if report is None or report.status != "PASS":
+                    raise ValueError(
+                        f"Selected observations have not passed quality for {asset_id}"
+                    )
+        if len({(row.unit, row.price_basis, row.data_origin) for row in selected}) != 1:
+            raise ValueError(
+                f"Inconsistent selected units, basis or origin for {asset_id}"
+            )
         observations.extend(observation_json(row) for row in selected)
-    manifest = request.model_dump(mode="json") | {
+    request_manifest = request.model_dump(mode="json")
+    if request.provider is None:
+        request_manifest.pop(
+            "provider", None
+        )  # Preserve historical manifest/hash semantics.
+    manifest = request_manifest | {
         "schema_version": 1,
         "status": "READY",
+        "quality_status": "PASS",
+        "quality_basis": "validated-selected-revisions",
         "calendar": "observed-sessions-only",
         "observation_count": len(observations),
         "revision_ids": [row["revision_id"] for row in observations],
         "observation_hash": canonical_hash({"observations": observations}),
         "availability_basis": "ingestion",
         "currency": "VND",
+        "data_origin": "real"
+        if all(o["data_origin"] == "real" for o in observations)
+        else "synthetic"
+        if any(o["data_origin"] == "synthetic" for o in observations)
+        else "unverified",
     }
     content_hash = canonical_hash(manifest)
     existing = session.scalar(

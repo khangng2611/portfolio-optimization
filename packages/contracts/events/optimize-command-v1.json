@@ -43,6 +43,57 @@
       "title": "Constraints",
       "type": "object"
     },
+    "DecisionContext": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_version_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Policy Version Id",
+          "type": "string"
+        },
+        "risk_profile": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Risk Profile"
+        },
+        "requested_strategy": {
+          "enum": [
+            "EW",
+            "MVO",
+            "BL_ML"
+          ],
+          "title": "Requested Strategy",
+          "type": "string"
+        },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        }
+      },
+      "required": [
+        "policy_version_id",
+        "requested_strategy"
+      ],
+      "title": "DecisionContext",
+      "type": "object"
+    },
     "ReadyInput": {
       "additionalProperties": false,
       "properties": {
@@ -95,6 +146,19 @@
           "default": false,
           "title": "Demo",
           "type": "boolean"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provenance"
         }
       },
       "required": [
@@ -155,6 +219,17 @@
     },
     "constraints": {
       "$ref": "#/$defs/Constraints"
+    },
+    "decision_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecisionContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "deadline": {
       "format": "date-time",

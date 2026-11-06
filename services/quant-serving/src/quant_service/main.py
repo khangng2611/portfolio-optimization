@@ -1,19 +1,28 @@
 import os
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 
 from service_auth import AuthError, TokenVerifier
+from portfolio_contracts import ModelUnavailable
 from service_observability import configure, install_http_tracing
+from .publication_api import install_publication_api, CredentialModelResolver
 from .runtime import catalog_from_env, sessions_from_env
 
 
-def create_app(*, sessions, verifier, catalog):
+def create_app(*, sessions, verifier, catalog, model_resolver=None):
     app = FastAPI(title="Quant Serving", version="0.1.0")
     install_http_tracing(app)
     bearer = HTTPBearer(auto_error=False)
+    install_publication_api(
+        app,
+        sessions=sessions,
+        verifier=verifier,
+        bearer=bearer,
+        model_resolver=model_resolver,
+    )
 
     @app.get("/health/live")
     def live():
@@ -27,6 +36,26 @@ def create_app(*, sessions, verifier, catalog):
         except Exception:
             raise HTTPException(503, "Database unavailable") from None
         return {"status": "ready"}
+
+    def resolver_identity(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    ):
+        try:
+            if credentials is None:
+                raise AuthError()
+            identity = verifier.verify(credentials.credentials)
+        except AuthError:
+            raise HTTPException(401, "Service identity required") from None
+        if "quant:resolve" not in identity.scopes:
+            raise HTTPException(403, "Missing quant:resolve scope")
+        return identity
+
+    @app.get("/internal/v1/inputs/universes")
+    def universes(identity=Depends(resolver_identity)):
+        try:
+            return catalog.universes()
+        except ValueError:
+            raise HTTPException(503, "Verified catalog unavailable") from None
 
     @app.get("/internal/v1/inputs/ready")
     def ready(
@@ -44,8 +73,20 @@ def create_app(*, sessions, verifier, catalog):
             raise HTTPException(403, "Missing quant:resolve scope")
         try:
             return catalog.ready(universe_id, strategy).model_dump(mode="json")
+        except ModelUnavailable:
+            raise HTTPException(409, {"code": "MODEL_UNAVAILABLE"}) from None
         except ValueError:
             raise HTTPException(503, "Compatible verified input unavailable") from None
+
+    @app.get("/internal/v1/inputs/readiness")
+    def readiness(
+        universe_id: str | None = Query(default=None, pattern=r"^[A-Z0-9_-]{1,64}$"),
+        identity=Depends(resolver_identity),
+    ):
+        try:
+            return catalog.readiness(universe_id)
+        except (ValueError, KeyError, TypeError, OSError):
+            raise HTTPException(503, "Verified catalog unavailable") from None
 
     return app
 
@@ -58,4 +99,7 @@ def app_factory():
             os.environ["OIDC_ISSUER"], "quant-api", os.environ["OIDC_JWKS_URL"]
         ),
         catalog=catalog_from_env(),
+        model_resolver=CredentialModelResolver()
+        if os.environ.get("ML_API_URL")
+        else None,
     )

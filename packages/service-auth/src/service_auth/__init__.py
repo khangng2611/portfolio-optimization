@@ -15,6 +15,7 @@ class Principal:
     subject: str
     roles: frozenset[str]
     scopes: frozenset[str]
+    client_id: str | None = None
 
 
 class TokenVerifier:
@@ -53,7 +54,8 @@ class TokenVerifier:
             ):
                 raise AuthError("Invalid access token claims")
             return Principal(
-                self.issuer, claims["sub"], frozenset(roles), frozenset(scope.split())
+                self.issuer, claims["sub"], frozenset(roles), frozenset(scope.split()),
+                claims.get("azp"),
             )
         except (jwt.PyJWTError, ValueError, TypeError, AttributeError, OSError) as exc:
             raise AuthError("Access token could not be verified") from exc

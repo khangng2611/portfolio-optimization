@@ -32,7 +32,19 @@ const mlRoutes = [
   { path: new RegExp(`^/api/v1/ml/models/${uuid}$`), template: '/api/v1/ml/models/{model_id}', methods: ['GET'], query: [], service: 'ml', roles: ['data-operator', 'model-reviewer'] },
   { path: new RegExp(`^/api/v1/ml/models/${uuid}/reviews$`), template: '/api/v1/ml/models/{model_id}/reviews', methods: ['POST'], query: [], service: 'ml', roles: ['model-reviewer'], idempotent: true },
 ] as const;
+const chatRoles = ['investor', 'researcher', 'data-operator', 'model-reviewer', 'system-admin'];
+const chatRoutes = [
+  { path: /^\/api\/v1\/conversations$/, template: '/api/v1/conversations', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/conversations/${uuid}$`), template: '/api/v1/conversations/{conversation_id}', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/conversations/${uuid}/preferences$`), template: '/api/v1/conversations/{conversation_id}/preferences', methods: ['POST'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/conversations/${uuid}/messages$`), template: '/api/v1/conversations/{conversation_id}/messages', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'chat', roles: chatRoles, idempotent: true },
+  { path: new RegExp(`^/api/v1/jobs/chat/${uuid}$`), template: '/api/v1/jobs/chat/{job_id}', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/jobs/chat/${uuid}/events$`), template: '/api/v1/jobs/chat/{job_id}/events', methods: ['GET'], query: [], service: 'chat', roles: chatRoles, stream: true },
+  { path: new RegExp(`^/api/v1/jobs/chat/${uuid}/(cancel|resume)$`), template: '/api/v1/jobs/chat/{job_id}/action', methods: ['POST'], query: [], service: 'chat', roles: chatRoles },
+  { path: new RegExp(`^/api/v1/recommendations/${uuid}/explanation$`), template: '/api/v1/recommendations/{recommendation_id}/explanation', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
+] as const;
 const routes = [
+  ...chatRoutes,
   ...operatorRoutes,
   ...mlRoutes,
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/risk-assessments/preview$`), template: '/api/v1/portfolios/{portfolio_id}/risk-assessments/preview', methods: ['POST'], query: [] },
@@ -162,10 +174,18 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
     logout: guarded(async request => {
       const { id, session } = await load(request);
       mutation(request, session);
+      let delegationRevoked = !config.chatUrl;
+      if (config.chatUrl) {
+        try {
+          const active = await fresh(id, session);
+          const revoke = await fetcher(config.portfolioUrl + '/api/v1/chat/delegations/revoke', { method: 'POST', headers: { authorization: `Bearer ${active.accessToken}`, 'content-type': 'application/json' }, body: '{}', redirect: 'manual', signal: AbortSignal.timeout(4000) });
+          delegationRevoked = revoke.ok;
+        } catch { delegationRevoked = false; }
+      }
       await store.del(`session:${id}`);
       let providerRevoked = true;
       try { await identity.revoke(session.refreshToken); } catch { providerRevoked = false; }
-      const response = json({ loggedOut: true, providerRevoked });
+      const response = json({ loggedOut: true, providerRevoked, delegationRevoked });
       response.headers.append('set-cookie', cookie(sessionName, '', 0));
       response.headers.append('set-cookie', cookie(flowName, '', 0));
       return response;
@@ -192,7 +212,15 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       } else if (isOperator && !session.user.roles.includes('data-operator')) throw new HttpError(403, 'Data operator role required');
       const mutates = !['GET', 'HEAD'].includes(request.method);
       if (mutates) mutation(request, session);
-      const headers = new Headers({ accept: 'application/json' });
+      const streaming = 'stream' in route && route.stream;
+      const headers = new Headers({ accept: streaming ? 'text/event-stream' : 'application/json' });
+      if (streaming) {
+        const cursor = request.headers.get('last-event-id');
+        if (cursor !== null) {
+          if (!/^[0-9]{1,12}$/.test(cursor)) throw new HttpError(400, 'Invalid event sequence');
+          headers.set('last-event-id', cursor);
+        }
+      }
       let body: string | undefined;
       if (mutates) {
         if (request.headers.get('content-type')?.split(';')[0] !== 'application/json') throw new HttpError(415, 'JSON required');
@@ -208,13 +236,69 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       const active = await fresh(id, session);
       headers.set('authorization', `Bearer ${active.accessToken}`);
       injectTraceHeaders(headers);
-      const serviceUrl = 'service' in route ? route.service === 'market' ? config.marketUrl : route.service === 'ml' ? config.mlUrl : config.quantUrl : config.portfolioUrl;
+      const serviceUrl = 'service' in route ? route.service === 'chat' ? config.chatUrl : route.service === 'market' ? config.marketUrl : route.service === 'ml' ? config.mlUrl : config.quantUrl : config.portfolioUrl;
       if (!serviceUrl) throw new HttpError(503, 'Operator service unavailable');
+      const disconnect = new AbortController();
+      const lifetime = streaming ? Math.max(1, Math.min(80_000, active.accessExpiresAt - Date.now(), active.expiresAt - Date.now())) : 10_000;
+      const signal = AbortSignal.any([request.signal, disconnect.signal, AbortSignal.timeout(lifetime)]);
       let upstream: Response;
-      try { upstream = await fetcher(serviceUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10_000) }); }
+      try { upstream = await fetcher(serviceUrl + url.pathname + url.search, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store', signal }); }
       catch { throw new HttpError(502, 'Backend service unavailable'); }
       if (upstream.status >= 300 && upstream.status < 400) throw new HttpError(502, 'Unexpected backend redirect');
       if (upstream.status === 204) return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+      if (streaming && upstream.ok) {
+        if (!upstream.headers.get('content-type')?.includes('text/event-stream') || !upstream.body) throw new HttpError(502, 'Unexpected stream response');
+        const reader = upstream.body.getReader();
+        const encoder = new TextEncoder();
+        let output: ReadableStreamDefaultController<Uint8Array>;
+        let closed = false;
+        let checkingSession = false;
+        let monitor: ReturnType<typeof setInterval> | undefined;
+        const onAbort = () => close();
+        function close(sessionExpired = false) {
+          if (closed) return;
+          closed = true;
+          clearInterval(monitor);
+          signal.removeEventListener('abort', onAbort);
+          try {
+            if (sessionExpired) output.enqueue(encoder.encode('event: session_expired\ndata: {}\n\n'));
+            output.close();
+          } catch { /* The downstream may already have cancelled. */ }
+          disconnect.abort();
+          void reader.cancel().catch(() => {});
+        }
+        async function sessionActive() {
+          const current = await store.get<Session>(`session:${id}`);
+          if (!current || current.expiresAt <= Date.now()) { close(true); return false; }
+          return !closed;
+        }
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            output = controller;
+            signal.addEventListener('abort', onAbort, { once: true });
+            // Session revocation and lifetime still close a silent or paused stream.
+            monitor = setInterval(async () => {
+              if (closed || checkingSession) return;
+              checkingSession = true;
+              try { await sessionActive(); } catch { close(); }
+              finally { checkingSession = false; }
+            }, 500);
+            if (signal.aborted) close();
+          },
+          async pull() {
+            try {
+              if (!await sessionActive()) return;
+              const part = await reader.read();
+              if (closed) return;
+              if (part.done || part.value.byteLength > 256 * 1024) { close(); return; }
+              if (await sessionActive()) output.enqueue(part.value);
+            } catch { close(); }
+          },
+          cancel() { close(); },
+        }, { highWaterMark: 0 });
+
+        return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store', 'x-accel-buffering': 'no', 'x-content-type-options': 'nosniff' } });
+      }
       if (!upstream.headers.get('content-type')?.includes('application/json')) throw new HttpError(502, 'Unexpected backend response');
       let data: unknown;
       try { data = await upstream.json(); } catch { throw new HttpError(502, 'Invalid backend response'); }

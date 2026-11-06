@@ -452,13 +452,15 @@ def test_expired_worker_is_fenced_and_network_holds_no_sql_transaction(market):
 
 
 def test_refresh_schedule_rejects_unbounded_or_arbitrary_source_inputs(market):
+    from market_service.refresh_provider import completed_cutoff
+
     for changes in [
         {"asset_ids": ["FPT", "FPT"]},
         {"asset_ids": ["https://evil.example"]},
         {"interval_minutes": 1},
         {"overlap_days": 0},
         {"asset_ids": ["A" + str(i) for i in range(21)]},
-        {"initial_start_date": utcnow().date().isoformat()},
+        {"initial_start_date": (completed_cutoff(NOW - timedelta(seconds=1)) + timedelta(days=1)).isoformat()},
         {"url": "https://evil.example"},
     ]:
         response = market[0].post(

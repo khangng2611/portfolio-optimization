@@ -66,6 +66,23 @@ def headers(who="operator", key=None):
     return value
 
 
+def test_dataset_metadata_is_valid_after_local_midnight(market, monkeypatch):
+    from datetime import date, datetime, timezone
+    from market_service import providers
+    from portfolio_contracts import market as contract
+
+    class LocalDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 7)
+
+    now = datetime(2026, 11, 6, 18, tzinfo=timezone.utc)
+    monkeypatch.setattr(providers, "date", LocalDate)
+    monkeypatch.setattr(providers, "utcnow", lambda: now)
+    monkeypatch.setattr(contract, "utcnow", lambda: now)
+    assert market[2].spec("DEMO_STOCK")["asset_id"] == "AAA"
+
+
 def observation(price="12500", **overrides):
     return {
         "asset_id": "AAA",

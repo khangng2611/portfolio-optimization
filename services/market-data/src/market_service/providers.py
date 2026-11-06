@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from pydantic import ValidationError
+from portfolio_contracts import utcnow
 from portfolio_contracts.market import Observation
 from .quality import QualityFailure, finding
 
@@ -33,7 +34,7 @@ class CsvProvider:
         Observation(
             asset_id=spec["asset_id"],
             kind=spec["kind"],
-            observation_date=date.today(),
+            observation_date=utcnow().date(),
             price="1",
             source_unit=spec["source_unit"],
             provider=spec["provider"],

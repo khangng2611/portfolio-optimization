@@ -1,5 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AssetSelectionEditor } from '../components/asset-picker';
+import { isSelectionReadiness, type AssetCatalog } from '../lib/selection-types';
 import { ChatWorkspace } from '../components/chat-workspace';
 import { DataRefresh } from '../components/data-refresh';
 import { ModelOperations } from '../components/model-operations';
@@ -25,8 +27,10 @@ const portfolioContextTitles: Partial<Record<WorkspaceView, string>> = { overvie
 export default function Home({ viewerBase }: { viewerBase: string | null }) {
   const [route, setRoute] = useState<WorkspaceRoute>({ view: 'overview' });
   const [session, setSession] = useState<Session | null>(null), [loaded, setLoaded] = useState(false), [expired, setExpired] = useState(false);
+  const [openFirstPortfolio, setOpenFirstPortfolio] = useState(false);
   const [inventoryEmpty, setInventoryEmpty] = useState<boolean | null>(null);
   const [selected, setSelected] = useState<Portfolio | null>(null), [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [catalog, setCatalog] = useState<AssetCatalog | null>(null);
   const [readiness, setReadiness] = useState<Readiness | null>(null), [readinessFailed, setReadinessFailed] = useState(false), [universes, setUniverses] = useState<ReadyUniverse[]>([]);
   const [detail, setDetail] = useState<Recommendation | null>(null), [comparison, setComparison] = useState<[Recommendation, Recommendation] | null>(null), [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false), [opening, setOpening] = useState(false), [proposalLoading, setProposalLoading] = useState(false), [error, setError] = useState(''), [conflict, setConflict] = useState(false);
@@ -41,7 +45,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
   const clearSession = useCallback((remember: boolean) => {
     selection.current++;
     if (remember) { try { sessionStorage.setItem(resumeKey, workspaceHash(parseWorkspaceHash(window.location.hash))); } catch { /* URL remains usable without storage. */ } }
-    setSession(null); setInventoryEmpty(null); setSelected(null); setDashboard(null); setDetail(null); setComparison(null); setReadiness(null); setJob(null); setOpening(false); setProposalLoading(false); setUniverses([]); setWizardStep(0);
+    setSession(null); setOpenFirstPortfolio(false); setInventoryEmpty(null); setSelected(null); setDashboard(null); setDetail(null); setComparison(null); setReadiness(null); setJob(null); setOpening(false); setProposalLoading(false); setUniverses([]); setCatalog(null); setWizardStep(0);
   }, []);
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const response = await fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json', ...(session ? { 'x-csrf-token': session.csrfToken } : {}), ...init.headers } });
@@ -66,17 +70,41 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
   useEffect(() => {
     let active = true;
     fetch('/auth/session', { cache: 'no-store' }).then(async response => {
-      if (response.ok) { const data = await response.json(); if (!active) return; setSession(data); try { const resume = sessionStorage.getItem(resumeKey); sessionStorage.removeItem(resumeKey); if (resume && !window.location.hash && !parseWorkspaceHash(resume).invalid) navigate(parseWorkspaceHash(resume)); } catch { /* Resume is optional. */ } }
+      if (response.ok) {
+        const data = await response.json();
+        if (!active) return;
+        setSession(data);
+        let resume: string | null = null;
+        try { resume = sessionStorage.getItem(resumeKey); sessionStorage.removeItem(resumeKey); } catch { /* Resume is optional. */ }
+        const url = new URL(window.location.href);
+        const signedIn = url.searchParams.get('signed-in') === '1';
+        url.searchParams.delete('signed-in');
+        const destination = resume && !url.hash ? parseWorkspaceHash(resume) : null;
+        if (destination && !destination.invalid) {
+          url.hash = workspaceHash(destination);
+          setRoute(destination);
+        }
+        if (signedIn || (destination && !destination.invalid)) {
+          window.history.replaceState(window.history.state, '', url);
+        }
+        if (signedIn && !url.hash) setOpenFirstPortfolio(true);
+      }
       else if (response.status === 401) { if (window.location.hash && !parseWorkspaceHash(window.location.hash).invalid) clearSession(true); }
       else throw new Error('Dịch vụ đăng nhập chưa sẵn sàng.');
     }).catch(err => { if (active) setError(err.message); }).finally(() => { if (active) setLoaded(true); });
     return () => { active = false; };
   }, [navigate, clearSession]);
+  useEffect(() => {
+    if (!openFirstPortfolio || inventoryEmpty === null) return;
+    setOpenFirstPortfolio(false);
+    if (inventoryEmpty && !window.location.hash) navigate({ view: 'create' });
+  }, [inventoryEmpty, navigate, openFirstPortfolio]);
   useEffect(() => { if (loaded) { heading.current?.focus({ preventScroll: true }); window.scrollTo(0, 0); } }, [view, loaded, route.conversationId, route.focus]);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(timer); }, []);
   useEffect(() => {
     if (!session) return; let active = true;
+    api<AssetCatalog>('/api/v1/assets/catalog').then(value => { if (active) setCatalog(value); }).catch(() => { if (active) setCatalog(null); });
     api<ReadyUniverse[]>('/api/v1/universes').then(values => { if (active) setUniverses(values); }).catch(() => { if (active) setUniverses([]); });
     return () => { active = false; };
   }, [session, api, refresh]);
@@ -113,11 +141,11 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
     setBusy(true); setError(''); try { const created = await api<Portfolio>('/api/v1/onboarding/portfolios', { method: 'POST', body: JSON.stringify(body) }); navigate({ view: 'overview', portfolioId: created.id }); return true; }
     catch (err) { setError((err as Error).message); return false; } finally { setBusy(false); }
   }
-  const currentReadiness = readiness?.valid_until && Date.parse(readiness.valid_until) <= clock ? { ...readiness, status: 'EXPIRED' } : readiness;
+  const currentReadiness = readiness && !isSelectionReadiness(readiness) && readiness.valid_until && Date.parse(readiness.valid_until) <= clock ? { ...readiness, status: 'EXPIRED' } : readiness;
   const canPropose = readinessAllows(currentReadiness, strategy, fallback);
   async function optimize() {
     if (!selected || !canPropose) return; const epoch = selection.current; setBusy(true); setError('');
-    try { const result = await api<Job>(`/api/v1/portfolios/${selected.id}/recommendations`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ strategy, ...(strategy === 'BL_ML' && fallback ? { fallback_strategy: 'EW' } : {}) }) }); if (epoch === selection.current) setJob({ ...result, status: 'QUEUED', portfolio_id: selected.id }); }
+    try { const result = await api<Job>(`/api/v1/portfolios/${selected.id}/recommendations`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID(), ...(selected.asset_selection ? { 'If-Match': `"${selected.version}"` } : {}) }, body: JSON.stringify({ strategy, ...(strategy === 'BL_ML' && fallback ? { fallback_strategy: 'EW' } : {}) }) }); if (epoch === selection.current) setJob({ ...result, status: 'QUEUED', portfolio_id: selected.id }); }
     catch (err) { if (epoch === selection.current) { setError((err as Error).message); setReadiness(null); setReadinessFailed(true); } } finally { setBusy(false); }
   }
   async function acceptTarget() {
@@ -126,7 +154,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
     catch (err) { if (epoch === selection.current) { setConflict(err instanceof ApiError && [409, 412].includes(err.status)); setError((err as Error).message); } } finally { setBusy(false); }
   }
   async function logout() {
-    setBusy(true); try { const result = await api<{ providerRevoked: boolean }>('/auth/logout', { method: 'POST' }); clearSession(false); setExpired(false); try { sessionStorage.removeItem(resumeKey); } catch { /* Optional storage. */ } navigate({ view: 'overview' }); if (!result.providerRevoked) setError('Đã đóng phiên ứng dụng; Identity chưa xác nhận thu hồi token.'); }
+    setBusy(true); try { const result = await api<{ providerRevoked: boolean }>('/auth/logout', { method: 'POST' }); clearSession(false); setExpired(false); try { sessionStorage.removeItem(resumeKey); } catch { /* Optional storage. */ } navigate({ view: 'overview' }); if (!result.providerRevoked) setError('Đã đóng phiên ứng dụng; Dịch vụ xác thực chưa xác nhận thu hồi phiên.'); }
     catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   const onChatExpired = useCallback(() => clearSession(true), [clearSession]);
@@ -139,14 +167,14 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
     <header className={`page-heading ${view === 'chat' && route.conversationId ? 'sr-only' : ''}`}>{(!session || modelView || marketView) && <p className="eyebrow">{modelView && session ? reviewer ? 'MODEL REVIEWER' : 'DATA OPERATOR' : marketView && session ? 'DATA OPERATOR' : 'KẾ HOẠCH ĐẦU TƯ CỦA BẠN'}</p>}<h1 ref={heading} tabIndex={-1}>{title}</h1>{!session && <p className="muted">Tư vấn phân bổ tài sản cuối ngày cho thị trường Việt Nam.</p>}</header>
     {error && <div ref={errorRef} tabIndex={-1} className="error" role="alert" data-testid={conflict ? 'conflict-notice' : 'request-error'}><strong>{conflict ? 'Thông tin đã thay đổi' : 'Chưa thể hoàn tất yêu cầu'}</strong><p>{error}</p>{conflict && <button className="quiet" onClick={refreshData}>Tải phiên bản mới</button>}</div>}
     {!loaded ? <section className="panel loading-state" role="status">Đang kiểm tra phiên…</section> : !session ? <>
-      {expired && <aside className="notice warning" role="alert" data-testid="session-expired-notice"><strong>Phiên đăng nhập đã hết hạn</strong><p>Đăng nhập lại để mở đúng danh mục đang xem. Yêu cầu thay đổi sẽ không tự được gửi lại.</p><a className="button" href="/auth/login">Đăng nhập lại</a></aside>}
-      <aside className="notice">Ứng dụng tư vấn phân bổ tài sản cuối ngày. Chấp nhận chỉ lưu tỷ trọng mục tiêu.</aside><section className="panel welcome-card"><p className="eyebrow">HIỂU RÕ TRƯỚC KHI QUYẾT ĐỊNH</p><h2>Từ nhu cầu của bạn<br/>đến một kế hoạch có thể theo dõi.</h2><p className="muted">Đánh giá rủi ro, xem đề xuất có nguồn và chủ động chọn mục tiêu.</p><ol className="journey-steps"><li>01 · Hiểu nhu cầu</li><li>02 · Review phương án</li><li>03 · Chủ động quyết định</li></ol></section><div className="actions"><a className="button" href="/auth/login">Đăng nhập qua Identity</a><a className="button quiet" href="#methodology" onClick={() => document.getElementById('methodology')?.setAttribute('open', '')}>Xem cách hoạt động</a></div>
+      {expired && <aside className="notice warning" role="alert" data-testid="session-expired-notice"><strong>Phiên đăng nhập đã hết hạn</strong><p>Đăng nhập lại để mở đúng danh mục đang xem. Yêu cầu thay đổi sẽ không tự được gửi lại.</p><a className="button" href="/login">Đăng nhập lại</a></aside>}
+      <aside className="notice">Ứng dụng tư vấn phân bổ tài sản cuối ngày. Chấp nhận chỉ lưu tỷ trọng mục tiêu.</aside><section className="panel welcome-card"><p className="eyebrow">HIỂU RÕ TRƯỚC KHI QUYẾT ĐỊNH</p><h2>Từ nhu cầu của bạn<br/>đến một kế hoạch có thể theo dõi.</h2><p className="muted">Đánh giá rủi ro, xem đề xuất có nguồn và chủ động chọn mục tiêu.</p><ol className="journey-steps"><li>01 · Hiểu nhu cầu</li><li>02 · Review phương án</li><li>03 · Chủ động quyết định</li></ol></section><div className="actions"><a className="button" href="/login">Đăng nhập</a><a className="button quiet" href="/register">Đăng ký</a><a className="button quiet" href="#methodology" onClick={() => document.getElementById('methodology')?.setAttribute('open', '')}>Xem cách hoạt động</a></div>
     </> : route.invalid ? <section className="panel empty-state"><h2>Đường dẫn không hợp lệ</h2><a className="button" href="#portfolios">Danh mục của bạn</a></section> : view === 'chat' ? <ChatWorkspace api={api} apiPage={fetchPage} route={route} navigate={navigate} ownerKey={session.user.sub} onSessionExpired={onChatExpired}/> : modelView ? operator || reviewer ? <ModelOperations key={view + (route.modelId ?? '')} route={route} api={api} fetchPage={fetchPage} operator={operator} reviewer={reviewer}/> : <section className="panel empty-state"><h2>Cần quyền vận hành mô hình</h2><p>Tài khoản hiện tại chưa có quyền data operator hoặc model reviewer.</p><a href="#portfolios">Về danh mục</a></section> : marketView ? operator ? view === 'market-refresh' ? <DataRefresh route={route} api={api} fetchPage={fetchPage}/> : <MarketOperations route={route} api={api} fetchPage={fetchPage}/> : <section className="panel empty-state"><h2>Cần quyền data operator</h2><p>Tài khoản hiện tại chưa được cấp quyền vận hành dữ liệu.</p><a href="#portfolios">Về danh mục của bạn</a></section> : <>
-      <div className="onboarding-workspace" hidden={view !== 'create'}><RiskWizard busy={waiting} onCreate={createPortfolio} universes={universes} onStepChange={setWizardStep} onCancel={() => navigate({ view: 'portfolios' })}/></div>
+      <div className="onboarding-workspace" hidden={view !== 'create'}><RiskWizard busy={waiting} onCreate={createPortfolio} universes={universes} catalog={catalog} onStepChange={setWizardStep} onCancel={() => navigate({ view: 'portfolios' })}/></div>
       {view === 'create' ? null : opening ? <section className="panel loading-state" role="status">Đang mở danh mục…</section> : view === 'portfolios' || !route.portfolioId ? <PortfolioList key={view} fetchPage={fetchPage} mode={view === 'portfolios' ? 'manage' : 'choose'} destination={view === 'portfolios' ? 'overview' : view} onInventoryEmpty={setInventoryEmpty}/> : !selected ? <section className="panel empty-state"><h2>Chưa mở được danh mục</h2><p>Kiểm tra quyền truy cập hoặc thử tải lại.</p><button onClick={refreshData}>Thử lại</button><a href="#portfolios">Về danh sách</a></section> : <>
         <nav className="portfolio-tabs" aria-label="Các phần của danh mục">{([['overview', 'Tổng quan'], ['proposal', 'Đề xuất'], ['history', 'Lịch sử mục tiêu'], ['edit', 'Sửa danh mục']] as const).map(([target, label]) => <a key={target} href={href(target)} aria-current={view === target ? 'page' : undefined}>{label}</a>)}</nav>
         {view === 'proposal' && !detail && !browsingProposals && <ReadinessNotice value={currentReadiness} onRefresh={refreshData} busy={opening} failed={readinessFailed}/>}
-        {view === 'risk-assessment' ? <RiskReassessment portfolio={selected} api={api} fetchPage={fetchPage} onSaved={refreshData} onReload={refreshData}/> : view === 'edit' ? <EditPortfolio key={selected.id} portfolio={selected} api={api} onReload={refreshData} onSaved={value => { setSelected(value); refreshData(); navigate({ view: 'overview', portfolioId: value.id }); }}/>
+        {view === 'risk-assessment' ? <RiskReassessment portfolio={selected} api={api} fetchPage={fetchPage} onSaved={refreshData} onReload={refreshData}/> : view === 'edit' ? <><AssetSelectionEditor portfolio={selected} catalog={catalog} api={api} onSaved={refreshData}/><EditPortfolio key={selected.id} portfolio={selected} api={api} onReload={refreshData} onSaved={value => { setSelected(value); refreshData(); navigate({ view: 'overview', portfolioId: value.id }); }}/></>
           : view === 'history' ? <TargetHistory key={selected.id + historyVersion} portfolioId={selected.id} fetchPage={fetchPage}/>
           : view === 'compare' ? proposalLoading ? <p role="status">Đang tải các phương án…</p> : comparison ? <ComparisonTable items={comparison}/> : <><aside className="notice">Chọn hai đề xuất của danh mục để so sánh.</aside><ProposalHistory portfolioId={selected.id} fetchPage={fetchPage}/></>
           : view === 'profile' ? <RiskProfileView portfolio={selected}/>

@@ -5,16 +5,18 @@ export type ChatPortfolio = Omit<Portfolio, 'constraints' | 'risk_profile'> & {
   risk_profile: { profile: string; version_id?: string; mapping_version?: string; answers?: Record<string, string | number> } | null;
 };
 export type ChatDashboard = Omit<Dashboard, 'portfolio'> & { portfolio: ChatPortfolio; holdings_status?: string };
-export type Conversation = { id: string; title: string; portfolio_id: string | null; active_job_id: string | null; created_at: string; llm_consent?: boolean };
+export type Conversation = { id: string; title: string; portfolio_id: string | null; active_job_id: string | null; created_at: string; llm_consent?: boolean; consent_version?: 1 | 2 };
 export type ProviderMetadata = { reason: string; provider?: string; model?: string; input_tokens?: number; output_tokens?: number; estimated_cost_usd?: number; prompt_version?: string };
+export type KnowledgeCitation = { chunk_id: string; document_version_id: string; document_version: number; claim_id: string; text: string; text_hash: string; source_title: string; source_url: string; locator: string; available_at: string; published_at: string | null };
+export type KnowledgeEvidence = { corpus_id: string | null; corpus_version: string | null; corpus_hash: string | null; evidence_hash: string; mode: 'LEXICAL' | 'HYBRID'; status: 'REFERENCE' | 'VERIFIED_REFERENCES' | 'MISSING'; reason: string; citations: KnowledgeCitation[] };
 export type ConfirmationCard = { type: 'confirmation'; reason: string; confirmation_message_id: string; facts_hash: string; input: { portfolio: ChatPortfolio; strategy: string } };
-export type RecommendationCard = { type: 'recommendation'; recommendation_id: string; facts: Recommendation & Record<string, unknown>; facts_hash: string; explanation_status: string; provider: ProviderMetadata; schema_version: string; prompt_version: string };
+export type RecommendationCard = { type: 'recommendation'; recommendation_id: string; facts: Recommendation & Record<string, unknown>; facts_hash: string; explanation_status: string; explanation_requested?: boolean; provider: ProviderMetadata; schema_version: string; prompt_version: string; knowledge?: KnowledgeEvidence };
 export type FactCard = { type: 'portfolio' | 'profile' | 'market'; facts: Record<string, unknown>; facts_hash: string };
 export type InputCard = { type: 'input_required'; fields: string[]; portfolio_id?: string };
-export type ChatMessage = { id: string; conversation_id: string; role: string; content: string; client_message_id: string | null; created_at: string; structured: ((ConfirmationCard | RecommendationCard | FactCard | InputCard | { type: 'help' }) & { dialogue?: ProviderMetadata }) | null };
+export type ChatMessage = { id: string; conversation_id: string; role: string; content: string; client_message_id: string | null; created_at: string; structured: ((ConfirmationCard | RecommendationCard | FactCard | InputCard | { type: 'knowledge'; knowledge: KnowledgeEvidence } | { type: 'help' }) & { dialogue?: ProviderMetadata }) | null };
 export type ChatReceipt = { message_id: string; job_id: string; conversation_id: string; status_url: string; events_url: string };
 export type ChatJob = ChatReceipt & { status: string; stage: string; error: string | null; recommendation_id: string | null; result_message_id: string | null; last_event_id: number; attempts: number };
-export type SendMessage = { content: string; client_message_id: string; portfolio_id?: string; strategy?: 'EW' | 'MVO' | 'BL_ML'; intent?: 'allocation' | 'profile' | 'portfolio' | 'market' | 'explain' | 'help'; recommendation_id?: string; confirmation?: { message_id: string; facts_hash: string } };
+export type SendMessage = { content: string; client_message_id: string; portfolio_id?: string; strategy?: 'EW' | 'MVO' | 'BL_ML'; intent?: 'allocation' | 'profile' | 'portfolio' | 'market' | 'explain' | 'help' | 'knowledge'; recommendation_id?: string; confirmation?: { message_id: string; facts_hash: string } };
 export type ChatEvent = { id: number | null; event: string; data: Record<string, unknown> };
 
 export const chatStopped = (status?: string) => !!status && ['SUCCEEDED', 'FAILED', 'WAITING_INPUT', 'AUTHORIZATION_REQUIRED', 'CANCELLED'].includes(status);
@@ -52,7 +54,7 @@ export function readPending(raw: string | null): SendMessage | null {
     if (typeof body.content !== 'string' || !body.content.trim() || body.content.length > 4000 || typeof body.client_message_id !== 'string' || !uuid.test(body.client_message_id)) return null;
     if (body.portfolio_id && !uuid.test(body.portfolio_id) || body.recommendation_id && !uuid.test(body.recommendation_id)) return null;
     if (body.strategy && !['EW', 'MVO', 'BL_ML'].includes(body.strategy)) return null;
-    if (body.intent && !['allocation', 'profile', 'portfolio', 'market', 'explain', 'help'].includes(body.intent)) return null;
+    if (body.intent && !['allocation', 'profile', 'portfolio', 'market', 'explain', 'help', 'knowledge'].includes(body.intent)) return null;
     if (body.confirmation && (!uuid.test(body.confirmation.message_id) || !/^[a-f\d]{64}$/.test(body.confirmation.facts_hash))) return null;
     return body;
   } catch { return null; }

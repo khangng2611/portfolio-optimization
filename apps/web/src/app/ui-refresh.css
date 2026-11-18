@@ -225,6 +225,11 @@
 .sidebar .brand { margin-bottom: 20px; }
 .sidebar > .eyebrow { margin-bottom: 16px; }
 .sidebar-note { margin-top: 28px; }
+@media (min-width: 1200px) {
+  html:root { scroll-padding-top: calc(var(--environment-height) + 16px); }
+  .environment-banner { position: sticky; top: 0; z-index: 10; }
+  .sidebar { position: sticky; top: var(--environment-height); align-self: start; height: calc(100dvh - var(--environment-height)); overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: var(--control) var(--surface); }
+}
 /* The dock belongs to the original form; browser validation and request gates stay intact. */
 .workspace:is(.workspace-create, .workspace-proposal, .workspace-edit, .workspace-compare, .workspace-risk-assessment) { padding-bottom: calc(116px + var(--task-action-bottom)); }
 .task-actions { position: fixed; z-index: 6; left: 208px; right: 0; bottom: var(--task-action-bottom); padding: 12px 24px; background: var(--surface); border-top: 1px solid var(--line); }
@@ -289,13 +294,8 @@ html { scroll-padding-block: 16px calc(110px + var(--task-action-bottom)); }
 .chat-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .workspace-chat .chat-composer .chat-input-row textarea { min-height: 60px; height: 60px; max-height: 120px; margin: 0; padding: 8px 10px; }
 .chat-input-row > button { min-height: 48px; padding-inline: 14px; }
-.chat-composer-tools { display: flex; align-items: start; justify-content: space-between; gap: 8px 12px; margin-top: 6px; }
-.workspace-chat .chat-consent.compact { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; border: 0; padding: 0; margin: 0; }
-.chat-consent.compact > label { min-height: 32px; font-size: 12px; gap: 8px; }
-.chat-consent.compact input { margin: 0; }
-.chat-privacy { position: relative; }
-.chat-privacy > summary, .workspace-chat .chat-composer .chat-advanced > summary { min-height: 32px; padding-block: 6px; font-size: 12px; }
-.chat-privacy > p { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 8; width: 300px; max-width: calc(100vw - 48px); padding: 14px; background: var(--surface); border: 1px solid var(--control); border-radius: 8px; }
+.chat-composer-tools { display: flex; align-items: start; justify-content: flex-end; gap: 8px 12px; margin-top: 6px; }
+.workspace-chat .chat-composer .chat-advanced > summary { min-height: 32px; padding-block: 6px; font-size: 12px; }
 .workspace-chat .chat-conversation .chat-advanced { margin: 0; padding: 0; border: 0; }
 .workspace-chat .chat-conversation .chat-composer-settings { position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 7; width: min(420px, 100%); max-height: 55dvh; overflow-y: auto; margin: 0; padding: 16px; border: 1px solid var(--control); border-radius: 8px; background: var(--surface); }
 .workspace-chat .chat-composer > label:not(.sr-only) { margin-block: 8px; }
@@ -347,8 +347,7 @@ html { scroll-padding-block: 16px calc(110px + var(--task-action-bottom)); }
   .chat-transcript { padding: 4px 4px 12px; }
   .workspace-chat .chat-conversation .chat-composer { padding: 10px; }
   .chat-composer-tools { gap: 4px; }
-  .chat-consent.compact > label { font-size: 11px; min-height: 36px; }
-  .chat-privacy > summary, .workspace-chat .chat-composer .chat-advanced > summary { font-size: 11px; min-height: 36px; }
+  .workspace-chat .chat-composer .chat-advanced > summary { font-size: 11px; min-height: 36px; }
   .chat-advanced > summary { max-width: 98px; }
   .chat-input-row { gap: 8px; }
   .chat-input-row > button { min-height: 48px; padding: 8px 12px; font-size: 13px; }
@@ -388,7 +387,6 @@ html { scroll-padding-block: 16px calc(110px + var(--task-action-bottom)); }
   .workspace-chat:has(.chat-conversation) > .mobile-menu:not([open]) > .mobile-account-actions { display: none; }
   .workspace-chat .chat-conversation .chat-topline { padding-left: 52px; min-height: 44px; }
   .workspace-chat .chat-conversation .chat-composer > .small { display: none; }
-  .chat-consent.compact > label { font-size: 12px; }
 }
 
 /* V2.1 · Contextual filters and consistent table gutters — Figma 97:194420. */
@@ -450,7 +448,6 @@ html { scroll-padding-block: 16px calc(110px + var(--task-action-bottom)); }
 /* Operate polish: retain the established system, adapt the short-height task surface. */
 .pagination-summary { margin: 16px 0 0; color: var(--muted); font-size: 12px; }
 .workspace .empty-state.compact { min-height: 160px; padding: 24px 16px; gap: 12px; }
-.chat-consent-status { color: var(--muted); font-size: 12px; }
 @media (min-width: 601px) and (max-width: 1199px) and (max-height: 560px) {
   .workspace-chat .chat-conversation .chat-layout { grid-template-columns: minmax(0, 1fr) 220px; grid-template-rows: minmax(0, 1fr); }
   /* The same list remains accessible through the visible header link. */
@@ -595,8 +592,7 @@ html { scroll-padding-block: 16px calc(110px + var(--task-action-bottom)); }
 .workspace-chat .chat-focused .chat-job { border: 0; border-block: 1px solid var(--line); border-radius: 0; padding: 12px 0; background: transparent; }
 .chat-focused .chat-turn-complete { padding-block: 8px; }
 .workspace-chat .chat-focused .chat-composer { max-width: 784px; border: 1px solid var(--line); padding: 12px; }
-.chat-focused .chat-consent.compact > label { min-height: 44px; }
-.chat-focused .chat-privacy > summary, .workspace-chat .chat-focused .chat-advanced > summary { min-height: 44px; }
+.workspace-chat .chat-focused .chat-advanced > summary { min-height: 44px; }
 .chat-focused .chat-message-source + :is(.chat-confirmation, .chat-recommendation) { margin-top: 12px; }
 @media (max-width: 1023px) {
   .workspace-chat:has(.chat-focused) > .methodology > .methodology-body { left: 0; width: 100%; }
@@ -691,8 +687,50 @@ html { scroll-padding-block: 16px calc(110px + var(--task-action-bottom)); }
  .workspace .mobile-menu[open] > .mobile-account-actions { display: flex; padding: 8px 12px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); }
 }
 /* Keep controls clear when a popup overlaps the portfolio context strip. */
-.workspace-chat .chat-focused .chat-composer:has(.chat-advanced[open], .chat-privacy[open]) { z-index: 8; }
+.workspace-chat .chat-focused .chat-composer:has(.chat-advanced[open]) { z-index: 8; }
 .workspace .portfolio-list .portfolio-toolbar > label > :is(input, select) { padding-left: 40px; }
 .workspace .chat-navigation .pagination > span { grid-column: 1; grid-row: 1; }
 .workspace .chat-navigation .pagination > .icon-button:first-child { grid-column: 2; grid-row: 1; }
 .workspace .chat-navigation .pagination > .icon-button:last-child { grid-column: 3; grid-row: 1; }
+
+.form-grid > .asset-picker { grid-column: 1 / -1; min-width: 0; }
+.asset-picker > legend { font-weight: 600; margin-bottom: 4px; }
+.asset-picker-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-top: 16px; padding-block: 12px; border-block: 1px solid var(--line); }
+.asset-picker-toolbar strong { color: var(--green); }
+.asset-picker-toolbar .small { display: block; }
+.asset-picker-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.asset-picker-actions button { min-height: 44px; padding: 8px 12px; }
+.asset-picker-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); margin: 16px 0; }
+.asset-picker-options .risk-choice { align-items: flex-start; }
+.asset-picker-options input { margin-top: 2px; }
+.asset-picker-options small { display: block; color: var(--muted); margin-top: 4px; }
+.asset-picker-name { display: block; font-weight: 400; }
+.asset-picker:disabled .risk-choice { cursor: not-allowed; }
+
+.allocation-selection-details { margin-top: 16px; }
+.allocation-selection-details summary { min-height: 44px; align-content: center; font-weight: 600; }
+.allocation-selection-details[open] summary { margin-bottom: 12px; }
+.allocation-table .allocation-sort { width: 100%; min-height: 44px; padding: 8px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; justify-content: flex-end; text-align: inherit; }
+.allocation-table th:first-child .allocation-sort { justify-content: flex-start; }
+.allocation-table .allocation-sort:hover { background: var(--soft); color: var(--green); }
+.allocation-table [aria-sort]:not([aria-sort="none"]) .allocation-sort { color: var(--green); font-weight: 600; }
+.allocation-sort .action-icon { width: 16px; height: 16px; flex-shrink: 0; }
+.workspace .readiness.selection-readiness { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; padding: 16px 20px; gap: 12px; }
+.readiness.selection-readiness > .readiness-summary { display: block; grid-column: 1 / -1; grid-row: 1; min-width: 0; overflow-wrap: anywhere; }
+.selection-readiness .readiness-summary > strong { display: block; font-size: 16px; }
+.selection-readiness .readiness-summary > :is(strong, strong + p) { padding-right: 56px; }
+.readiness.selection-readiness p { margin-top: 6px; font-size: 13px; }
+.selection-readiness .capability-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; margin-block: 12px; }
+.selection-readiness .badge { white-space: normal; }
+.selection-readiness .readiness-detail { border-top: 1px solid var(--line); padding-top: 8px; }
+.selection-readiness .readiness-detail > summary { min-height: 44px; font-size: 13px; }
+.readiness-asset-table { width: 100%; table-layout: fixed; margin-top: 12px; font-size: 13px; }
+.readiness-asset-table :is(th, td) { padding: 10px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.readiness-asset-table th:first-child { width: 22%; }
+.workspace .readiness.selection-readiness > button { grid-column: 2; grid-row: 1; z-index: 1; min-height: 44px; min-width: 44px; }
+@media (max-width: 600px) {
+  .allocation-table thead { display: block; background: var(--bg); }
+  .allocation-table thead tr { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .allocation-table thead th { flex: 1 1 auto; }
+  .allocation-table .allocation-sort, .allocation-table th:first-child .allocation-sort { justify-content: center; }
+}

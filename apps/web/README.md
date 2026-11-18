@@ -4,28 +4,18 @@ Vietnamese Next.js application and Node.js BFF. Browser cookies contain only opa
 
 ## Run
 
-Node.js 22.12+ is required. From `apps/web`:
-
-```sh
-npm ci
-cp .env.example .env.local
-# Set the real Keycloak client secret and a random SESSION_ENCRYPTION_KEY.
-npm run dev
-```
-
-The local stack and its bootstrap script are in `infra/local`. For a container, use `apps/web` as the build context (`docker build -t portfolio-web apps/web` from the repository root). Inject secrets at runtime, never as `NEXT_PUBLIC_*` variables or build arguments.
+Run `python3 scripts/setup_software.py up` from the repository root. Open
+`/register` or `/login` on localhost:3000. The BFF runs on the same Compose
+network as Auth and Redis. The sample environment uses the private Auth hostname.
 
 ## Environment contract
 
 | Variable | Meaning |
 | --- | --- |
 | `APP_ORIGIN` | Exact public origin, e.g. `http://localhost:3000`; never inferred from request Host headers. HTTPS required except explicit localhost mode. |
-| `OIDC_ISSUER` | Exact public Keycloak issuer, local `http://localhost:8080/realms/portfolio`. Tokens and discovery must use this value. |
-| `OIDC_INTERNAL_ORIGIN` | Optional origin, e.g. `http://keycloak:8080`, used only for the server's discovery/token/JWKS/revocation network requests. Public metadata and issuer validation stay unchanged. |
-| `OIDC_CLIENT_ID` | Confidential authorization-code client, default `portfolio-web`. |
-| `OIDC_CLIENT_SECRET` | Required secret provisioned in Keycloak. |
-| `OIDC_AUDIENCE` | Required access-token audience, default `portfolio-api`. |
-| `OIDC_SCOPE` | Default `openid profile email portfolio:read portfolio:write`; provision matching scopes in Keycloak. |
+| `OIDC_ISSUER` | Exact JWT issuer, locally `http://auth-api:8000`. |
+| `AUTH_API_URL` | Private Auth origin, locally `http://auth-api:8000`. |
+| `AUTH_WEB_SECRET` | Dedicated BFF credential for registration, login and session operations. |
 | `REDIS_URL` | Required dedicated session Redis URL; Docker `redis://redis:6379/0`, production `rediss://...` with credentials. |
 | `SESSION_ENCRYPTION_KEY` | Required base64-encoded 32 random bytes (`openssl rand -base64 32`). Rotating invalidates existing sessions. |
 | `SESSION_TTL_SECONDS` | Absolute session lifetime, default 28800; 60–86400. Cookie, Redis TTL and server expiry are all bounded. |
@@ -34,27 +24,28 @@ The local stack and its bootstrap script are in `infra/local`. For a container, 
 | `QUANT_API_URL` | Fixed Quant origin, local `http://quant-api:8000`; allowlisted publication operations. |
 | `ML_API_URL` | Fixed ML origin, local `http://ml-api:8000`; training/model/review routes. |
 | `CHAT_API_URL` | Fixed Chat origin, local `http://chat-api:8000`; conversation/message/job/SSE/explanation routes. |
-| `ALLOW_INSECURE_HTTP` | Set exactly `true` only for local HTTP Keycloak and localhost browser access. Otherwise secure cookies and HTTPS OIDC are required. |
+| `ALLOW_INSECURE_HTTP` | Set exactly `true` only for local HTTP Auth and localhost browser access. Otherwise use secure cookies and HTTPS Auth. |
 | `OTEL_TRACES_ENABLED` | Set exactly `true` to enable manual BFF tracing; default disabled. |
 | `OTEL_SERVICE_NAME` | Trace process resource name, local `web-bff`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | OTLP HTTP endpoint, local container `http://jaeger:4318/v1/traces`. |
 | `TRACE_VIEWER_URL` | Trusted server-configured Jaeger base, local `http://localhost:16686`; never taken from caller input or build-time public env. |
 
-Keycloak must allow exactly `${APP_ORIGIN}/auth/callback`, require PKCE S256, enable standard flow, disable implicit/direct grants, and map the configured service audiences (`portfolio-api`, `market-api`, `quant-api`, `ml-api`, `chat-api`) and `realm_access.roles` into RS256 access tokens. Five supported application roles are investor, researcher, data-operator, model-reviewer, system-admin. Backend services remain authoritative for scope, RBAC and record ownership.
+Auth issues RS256 access tokens with per-service audiences and role-derived scopes.
+Backends remain authoritative for RBAC and ownership.
 
 ## Routes and session behavior
 
-- `GET /auth/login`: random server-stored state, nonce, PKCE verifier and five-minute transaction cookie; redirect to public issuer.
-- `GET /auth/callback`: consumes transaction once, validates state/nonce/code, verifies RS256 access token issuer/audience/expiry, rotates application session.
+- `POST /auth/register` creates an investor account and returns 201. The UI opens /login.
+- `POST /auth/login` verifies credentials and returns 204 with an opaque cookie. The workspace opens the risk wizard after a successful empty portfolio read.
 - `GET /auth/session`: returns `{authenticated:true,user:{sub,name,roles},csrfToken}` only. Responses disable caching.
-- `POST /auth/logout`: requires exact Origin and `X-CSRF-Token`; deletes Redis session before provider revocation. Clears cookies; reports `providerRevoked:false` if Keycloak cannot confirm revocation. This closes the application session; the separate Identity browser SSO cookie may remain.
+- `POST /auth/logout`: requires exact Origin and `X-CSRF-Token`; deletes Redis session before provider revocation. Clears cookies; reports `providerRevoked:false` if Auth cannot confirm revocation.
 - `/api/v1/portfolios` GET/POST, `/api/v1/portfolios/{uuid}` GET/PATCH, `/api/v1/portfolios/{uuid}/recommendations` GET/POST, `/api/v1/recommendations/{uuid}` GET, `/api/v1/jobs/portfolio/{uuid}` GET: fixed allowlist to Portfolio. No internal/admin or arbitrary upstream URL routes.
 - G2 adds `/api/v1/onboarding/portfolios` POST, `/api/v1/portfolios/{uuid}/dashboard` GET, `/api/v1/portfolios/{uuid}/targets` GET and `/api/v1/recommendations/{uuid}/accept` POST. Accept preserves `If-Match`, checks CSRF and only saves a target.
 - Readiness reads are `/api/v1/universes/readiness` and owner-scoped `/api/v1/portfolios/{uuid}/readiness`. These expose data expiry and per-strategy capability without artifact paths. Publication has a separate operator-only allowlist.
 - List routes support bounded integer `limit`/`offset`; portfolio lists also accept validated `q`, `risk_profile` and `sort`. JSON bodies remain arrays, with `X-Total-Count`, `X-Limit`, `X-Offset` passed through by BFF. Mutations require JSON, exact Origin, session CSRF token and at most 64 KiB body; recommendation creation additionally requires `Idempotency-Key` (8–128 URL-safe characters). Version preconditions (`If-Match`) and backend version tags (`ETag`) pass through for owner-scoped PATCH. Cookies, caller Authorization, identity headers, upstream redirects and Set-Cookie are never forwarded.
 - `GET /health/live` is process liveness, not a claim that dependencies are healthy.
 
-HTTPS cookies are `__Host-portfolio_session` and `__Host-portfolio_login`, with Secure, HttpOnly, SameSite=Lax and Path=/. Local HTTP has explicitly unprefixed, non-Secure cookies. Tokens refresh under Redis NX locks; Lua checks the current lock owner and session existence before storing rotated tokens, preventing expired lock holders or concurrent logout from resurrecting sessions. Redis failures fail closed without queuing requests. Established clients reconnect with a capped delay (at most 2.1 seconds); initial connection setup has a four-second deadline. If Redis restarts without saved sessions, old cookies remain invalid and users must sign in again. Protect Redis with authentication/TLS and no eviction; only trusted BFF instances should access it. Provider revocation failure does not restore a deleted session.
+The HTTPS cookie is `__Host-portfolio_session`, with Secure, HttpOnly, SameSite=Lax and Path=/. Local HTTP has explicitly unprefixed, non-Secure cookies. Tokens refresh under Redis NX locks; Lua checks the current lock owner and session existence before storing rotated tokens, preventing expired lock holders or concurrent logout from resurrecting sessions. Redis failures fail closed without queuing requests. Established clients reconnect with a capped delay (at most 2.1 seconds); initial connection setup has a four-second deadline. If Redis restarts without saved sessions, old cookies remain invalid and users must sign in again. Protect Redis with authentication/TLS and no eviction; only trusted BFF instances should access it. Provider revocation failure does not restore a deleted session.
 
 The wizard loads ready universes from `/api/v1/universes`, prefers a verified real-price universe and labels demo data separately. It uses backend policy v1 (risk aversion 6/3/1.5, max position 0.5) and user-entered capital. Each recommendation gets an idempotency UUID, polls the owner-scoped job and displays weights, planned capital and provenance. Target acceptance never changes holdings. The UI ignores superseded portfolio/proposal responses. Same-step serving/core parity does not establish equivalence to the legacy research pipeline.
 
@@ -93,21 +84,15 @@ checks the same saved target, including after a stack restart. Receipts stay in
 `infra/local/.generated/`; screenshots and browser logs stay in ignored `output/`.
 
 The reproducible browser CI gate uses the pinned Playwright dependency and
-server-registered synthetic DEMO inputs with the real Keycloak/BFF/DB/broker.
+server-registered synthetic DEMO inputs with the real Auth/BFF/DB/broker.
 See [browser gate commands and artifact policy](tests/browser/README.md).
 
-Tests cover encrypted records/tampering, secure cookies, one-time login state, CSRF/origin, proxy allowlists/header isolation/redirect rejection, concurrent refresh, expiry, unavailable Redis and logout races. OIDC tests use the real openid-client/Jose libraries against a deterministic issuer transport with actual RSA-signed tokens, including forged signatures, nonce/state, issuer, audience and expiry rejection. When `redis-server` is on PATH (or set `REDIS_TEST_BINARY`), the suite also runs an isolated nonpersistent Redis process, stops/restarts it, and checks failure during outage, invalidation of lost sessions and successful reauthentication on the same BFF. This test is skipped if the binary is unavailable. A complete Keycloak/Redis/browser stack is a separate integration gate; see the local stack verification record.
+Tests cover registration without a session, login throttling, RS256 validation,
+encrypted Redis records, CSRF/origin, refresh races, logout and Redis recovery.
+The Playwright gate exercises the full local stack.
 
-This is a runnable foundation, not production certification: deployment still needs TLS ingress, secret rotation, dependency/image scanning, centralized rate limits, operational observability, administrative MFA policy and staging load/security checks. Next's static page CSP permits inline hydration; private mutations remain CSRF protected and the application never renders untrusted HTML.
-
-Library references: [openid-client](https://github.com/panva/openid-client), [Next.js security advisories](https://github.com/vercel/next.js/security/advisories), [Keycloak OIDC](https://www.keycloak.org/securing-apps/oidc-layers).
-
-Market Data Operations chạy tại `/#market` với tài khoản có role `data-operator`.
-BFF chuyển các endpoint đã allowlist tới `MARKET_API_URL` và `QUANT_API_URL`;
-access token chỉ ở server. Client Identity cần audience `portfolio-api`, `market-api`,
-`quant-api`, `ml-api` và scopes `market:read market:write quant:publish ml:read ml:train ml:review` được request
-qua `OIDC_SCOPE`; API vẫn bắt buộc role/scope tương ứng. Local `upgrade.py` thêm
-cấu hình này mà không thay users hoặc secrets; đăng nhập lại để lấy claims mới.
+Market Data Operations runs at `/#market` with the `data-operator` role.
+Auth derives Market, Quant and ML scopes from the stored role.
 
 Luồng: đăng ký hash nguồn tin cậy → tạo ingestion → xem chất lượng → tạo snapshot
 → xác nhận phát hành EW/MVO. Báo cáo lỗi lưu trên backend, lô không đạt bị cách ly.
@@ -202,8 +187,8 @@ lists paginate through the real API. Confirmation cards pin backend facts and
 versions before allocation; opening a recommendation and accepting its target
 remain explicit actions. Chat cannot accept, trade, promote or edit weights.
 
-Configure `CHAT_API_URL`, the `chat-api` audience and `chat:read chat:write` scopes
-in `OIDC_SCOPE`; local setup/upgrade provisions these additively. Provider secrets
+Configure `CHAT_API_URL`. Auth grants the `chat-api` audience and
+`chat:read`/`chat:write` to human accounts. Provider secrets
 belong only to the backend worker. BFF routes conversations/messages/chat jobs,
 cancel/resume and recommendation explanations through an explicit allowlist.
 The backend checks JWT, role/scope and ownership, including every SSE reconnect.
@@ -226,3 +211,14 @@ these commands. See [Chat real-stack gates](tests/browser/README.md#chat-mvp-rea
 for real input preparation, outage/restart commands, receipt isolation and
 artifact policy. Current evidence and remaining limits are in
 [implementation status](../../docs/software/IMPLEMENTATION_STATUS.md#chat-mvp--kiểm-chứng-local-04112026).
+
+## Knowledge references
+
+Chat adds a **Kiến thức** purpose, versioned source excerpts and a separate
+reference section on canonical recommendations. Legacy LLM consent remains
+visible; the user must explicitly renew to consent v2 for query embeddings.
+Consent-off blocks new outbound requests. Lexical/template references remain
+usable at budget zero and are not labelled financially verified. Source links
+are escaped HTTPS links with opener isolation. No corpus admin UI or automatic
+allocation/acceptance is added. Run the real Knowledge browser and persistence
+gates described in [the Knowledge runbook](../../docs/software/KNOWLEDGE_RAG.md).

@@ -48,10 +48,6 @@
 .chat-job > p { margin: 12px 0 0; }
 .chat-job > button { margin-top: 16px; }
 .chat-composer { margin-top: 20px; padding: 20px; }
-.chat-consent { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
-.chat-consent > label { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
-.chat-consent input[type="checkbox"] { width: 20px; height: 20px; min-height: 20px; min-width: 20px; flex-shrink: 0; accent-color: var(--green); }
-.chat-consent > p { margin: 4px 0 0; }
 .chat-composer-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .chat-composer label { font-size: 13px; }
 .chat-composer > label { margin-top: 16px; }
@@ -100,3 +96,8 @@
   .chat-workspace .pagination { flex-wrap: wrap; }
   .chat-starters { flex-direction: column; }
 }
+
+.chat-knowledge :is(ul, ol), .chat-knowledge-sources ol { padding-inline-start: 24px; margin-block: 12px; }
+.chat-knowledge li + li, .chat-knowledge-sources li + li { margin-top: 16px; }
+.chat-knowledge-sources blockquote { margin: 8px 0 16px; color: var(--ink); font-size: inherit; }
+.chat-knowledge-sources a { display: inline-block; padding-block: 10px; text-underline-offset: 3px; }

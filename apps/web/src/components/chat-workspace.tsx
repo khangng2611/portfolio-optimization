@@ -9,7 +9,7 @@ import { ApiError, dateTime, type Api, type Page, type PageApi, type Portfolio, 
 import { transcriptScrollAction, type TranscriptPosition } from '../lib/chat-scroll';
 import { LatestRequest } from '../lib/latest-request';
 import { workspaceHash, type WorkspaceRoute } from '../lib/workspace-state';
-import { chatError, chatStage, chatStatus, chatStopped, createSseParser, readPending, sameFacts, storageKey, type ChatDashboard, type ChatJob, type ChatMessage, type ChatPortfolio, type ChatReceipt, type ConfirmationCard, type Conversation, type FactCard, type RecommendationCard, type SendMessage } from '../lib/chat-types';
+import { chatError, chatStage, chatStatus, chatStopped, createSseParser, readPending, sameFacts, storageKey, type ChatDashboard, type ChatJob, type ChatMessage, type ChatPortfolio, type ChatReceipt, type ConfirmationCard, type Conversation, type FactCard, type KnowledgeEvidence, type RecommendationCard, type SendMessage } from '../lib/chat-types';
 import './chat-workspace.css';
 
 export type ChatWorkspaceProps = { api: Api; apiPage: PageApi; route: WorkspaceRoute; navigate: (route: WorkspaceRoute) => void; ownerKey: string; onSessionExpired: () => void };
@@ -19,9 +19,17 @@ const statusOf = (error: unknown) => error instanceof ApiError ? error.status : 
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const save = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); } catch { /* Explicit retry remains possible in this tab without storage. */ } };
 
-export function ChatConsent({ checked, disabled, onChange, compact = false, saving = false }: { checked: boolean; disabled: boolean; onChange: (value: boolean) => void; compact?: boolean; saving?: boolean }) {
-  const privacy = <p className="muted small">Gửi nội dung, ngữ cảnh ngắn và dữ liệu danh mục cần thiết đến OpenAI. Bạn vẫn xác nhận mọi đề xuất. Tắt để ngừng các lời gọi LLM mới.</p>;
-  return <div className={`chat-consent${compact ? ' compact' : ''}`}><label aria-busy={saving || undefined}><input data-testid="chat-llm-consent" type="checkbox" checked={checked} disabled={disabled} onChange={event => onChange(event.target.checked)}/><span>Cho phép OpenAI hỗ trợ hội thoại này</span></label>{saving && <span className="chat-consent-status" role="status">Đang lưu lựa chọn…</span>}{compact ? <details className="chat-privacy"><summary>Dữ liệu gửi tới OpenAI</summary>{privacy}</details> : privacy}</div>;
+export function KnowledgeSources({ evidence }: { evidence: KnowledgeEvidence }) {
+  if (!evidence.citations.length) return null;
+  return <details className="chat-message-source chat-knowledge-sources"><summary>Nguồn tham khảo · {evidence.citations.length}</summary><p className="muted small">Kiến thức phương pháp từ {evidence.corpus_version}. Các nguồn này bổ sung giải thích; tỷ trọng và kết quả danh mục lấy từ dữ liệu định lượng.</p><ol>{evidence.citations.map(citation => {
+    let safe = false;
+    try { const url = new URL(citation.source_url); safe = url.protocol === 'https:' && !url.username && !url.password; } catch { /* Invalid references remain readable without a link. */ }
+    return <li key={citation.chunk_id}>{safe ? <a href={citation.source_url} target="_blank" rel="noopener noreferrer">{citation.source_title}<span className="sr-only"> (mở tab mới)</span></a> : <strong>{citation.source_title}</strong>}<p className="muted small">{citation.locator} · Tài liệu v{citation.document_version}{citation.published_at ? ` · Xuất bản ${dateTime(citation.published_at)}` : ''}<br/>Có trong corpus từ {dateTime(citation.available_at)}</p><blockquote>{citation.text}</blockquote></li>;
+  })}</ol><details className="chat-audit"><summary>Mã đối chiếu nguồn</summary><p>{evidence.evidence_hash}</p></details></details>;
+}
+
+export function ChatKnowledge({ evidence }: { evidence: KnowledgeEvidence }) {
+  return <section className="chat-knowledge" data-testid="chat-knowledge" aria-label="Kiến thức tham khảo">{evidence.status !== 'MISSING' && <><p className="muted small">{evidence.status === 'REFERENCE' ? 'Đoạn tham khảo' : 'Trích đoạn được chọn từ corpus'} · {evidence.mode === 'LEXICAL' ? 'Tìm theo từ khóa' : 'Tìm kiếm kết hợp'}</p><ul>{evidence.citations.map(citation => <li key={citation.chunk_id}>{citation.text}</li>)}</ul></>}<KnowledgeSources evidence={evidence}/></section>;
 }
 
 export function ChatOptions({ intent, strategy, disabled, onIntent, onStrategy }: {
@@ -30,7 +38,7 @@ export function ChatOptions({ intent, strategy, disabled, onIntent, onStrategy }
 }) {
  const purposes: { value: SendMessage['intent'] | ''; label: string; icon: ActionIconName }[] = [
   {value:'',label:'Tự động',icon:'auto'}, {value:'portfolio',label:'Tóm tắt',icon:'portfolio'}, {value:'profile',label:'Hồ sơ',icon:'profile'},
-  {value:'market',label:'Thị trường',icon:'market'}, {value:'allocation',label:'Tạo đề xuất',icon:'allocation'}, {value:'explain',label:'Giải thích',icon:'explain'}, {value:'help',label:'Trợ giúp',icon:'help'},
+  {value:'market',label:'Thị trường',icon:'market'}, {value:'allocation',label:'Tạo đề xuất',icon:'allocation'}, {value:'explain',label:'Giải thích',icon:'explain'}, {value:'knowledge',label:'Kiến thức',icon:'help'}, {value:'help',label:'Trợ giúp',icon:'help'},
  ];
  return <div className="chat-composer-settings"><fieldset disabled={disabled}><legend>Mục đích</legend><div className="purpose-choices">{purposes.map(item=><label className="option-chip" key={item.value}><input type="radio" name="chat-intent" value={item.value} checked={intent===item.value} onChange={()=>onIntent(item.value)}/><ActionIcon name={item.icon}/><span>{item.label}</span></label>)}</div></fieldset>
  <fieldset disabled={disabled}><legend>Chiến lược khi tạo đề xuất</legend><div className="strategy-choices">{(['','EW','MVO','BL_ML'] as const).map(value=><label className="option-chip" key={value}><input type="radio" name="chat-strategy" data-testid={'chat-strategy-'+(value || 'auto')} value={value} checked={strategy===value} onChange={()=>onStrategy(value)}/><span>{value===''?'Tự động':value==='BL_ML'?'BL + ML':value}</span></label>)}</div><p className="muted small">Tự động: trợ lý sẽ hỏi thêm nếu chưa rõ lựa chọn. Chọn ở đây chưa gửi yêu cầu.</p></fieldset></div>;
@@ -130,7 +138,8 @@ export function ChatRecommendation({ card, canonical, content }: { card: Recomme
   if (!canonical) return <div role="status" className="muted">Đang đối chiếu đề xuất với Portfolio…</div>;
   if (!sameFacts(card.facts, canonical)) return <div className="notice warning" role="alert">Nội dung đã lưu chưa khớp dữ liệu đề xuất hiện tại. Tải lại trạng thái để đối chiếu trước khi tiếp tục.</div>;
   return <section data-testid="chat-result" className="chat-recommendation" aria-label="Đề xuất từ kết quả định lượng"><div className="allocation-tags"><span className="badge success">Đề xuất đã lưu</span><span className="badge">{card.explanation_status === 'TEMPLATE' ? 'Giải thích theo mẫu dữ liệu' : 'Giải thích đã đối chiếu dữ liệu'}</span></div>
-    <AllocationView allocation={canonical} compact metadata={false}/><details className="chat-explanation"><summary>Đọc giải thích phân bổ</summary><p className="chat-message-text">{content}</p></details><a data-testid="chat-open-recommendation" className="button" href={workspaceHash({ view: 'proposal', portfolioId: canonical.portfolio_id, proposalId: canonical.id })}>Xem đề xuất và quyết định</a>
+    <AllocationView allocation={canonical} compact metadata={false}/><details className="chat-explanation" open={card.explanation_requested === true}><summary>Đọc giải thích phân bổ</summary><p className="chat-message-text">{content}</p></details><a data-testid="chat-open-recommendation" className="button" href={workspaceHash({ view: 'proposal', portfolioId: canonical.portfolio_id, proposalId: canonical.id })}>Xem đề xuất và quyết định</a>
+    {card.knowledge && <KnowledgeSources evidence={card.knowledge}/>}
     <p className="muted small">Chấp nhận chỉ lưu tỷ trọng mục tiêu. Chưa có giao dịch được thực hiện.</p>
     <details className="chat-audit"><summary>Nguồn và mã đối chiếu kết quả</summary><dl><div><dt>Facts hash</dt><dd>{card.facts_hash}</dd></div><div><dt>Input hash</dt><dd>{String((canonical as Recommendation & { input_hash?: string }).input_hash ?? '—')}</dd></div><div><dt>Snapshot</dt><dd>{canonical.data_snapshot_id}</dd></div><div><dt>Bundle hash</dt><dd>{canonical.bundle_hash}</dd></div><div><dt>Giải thích</dt><dd>{card.provider.model ?? 'Template'} · {card.provider.reason}</dd></div>{card.provider.input_tokens !== undefined && <div><dt>Token input / output</dt><dd>{card.provider.input_tokens} / {card.provider.output_tokens}</dd></div>}</dl></details>
   </section>;
@@ -166,11 +175,17 @@ export function ChatTurnStatus({ job, resultVisible, connection, disabled, onRes
   // turn is not a receipt for saving a proposal or accepting a portfolio target.
   if (resultVisible && ['SUCCEEDED', 'WAITING_INPUT'].includes(job.status)) return null;
   if (job.status === 'SUCCEEDED') return <p className="chat-turn-complete muted small" data-testid="chat-job" role="status">Đã xử lý lượt trao đổi.</p>;
+  const inputFailures: Record<string, string> = {
+    INPUT_EXPIRED: 'Dữ liệu đầu vào đã hết hạn nên chưa thể tạo đề xuất. Nhờ người vận hành làm mới và phát hành dữ liệu, sau đó tạo yêu cầu mới, xem lại đầu vào và xác nhận lại.',
+    VFF_STALE: 'NAV của quỹ VFF đủ điều kiện sử dụng đã quá cũ so với giới hạn 7 ngày. Nhờ người vận hành kiểm tra và cập nhật nguồn; khi có dữ liệu đủ mới, hãy tạo yêu cầu mới và xác nhận lại.',
+    GOLD_STALE: 'Dữ liệu giá vàng đủ điều kiện sử dụng đã quá cũ so với giới hạn 7 ngày. Nhờ người vận hành cập nhật nguồn, sau đó tạo yêu cầu mới và xác nhận lại.',
+    ASSET_DATA_STALE: 'Dữ liệu của một hoặc nhiều tài sản đã quá cũ để tính toán. Nhờ người vận hành cập nhật dữ liệu, sau đó tạo yêu cầu mới và xác nhận lại.',
+  };
   const running = !chatStopped(job.status);
   return <section className="chat-job" data-testid="chat-job" aria-label="Trạng thái lượt trao đổi" role="status">
     <strong>{chatStatus(job.status)}</strong>{(running || job.status === 'WAITING_INPUT') && <p>{chatStage(job.stage)}</p>}
     {running && <p className="muted small">{connection === 'connected' ? 'Đang cập nhật tiến trình.' : connection === 'retrying' ? 'Đang kết nối lại. Trạng thái vẫn được kiểm tra.' : 'Đang kết nối tiến trình…'}</p>}
-    {job.status === 'FAILED' && <p>Yêu cầu chưa hoàn tất. Xem lại dữ liệu và đầu vào trước khi gửi một lượt mới.</p>}
+    {job.status === 'FAILED' && <p>{inputFailures[job.error ?? ''] ?? 'Yêu cầu chưa hoàn tất. Xem lại dữ liệu và đầu vào trước khi gửi một lượt mới.'}</p>}
     {job.status === 'AUTHORIZATION_REQUIRED' && <><p>Quyền của lượt này đã hết hạn. Cấp lại quyền để tiếp tục cùng yêu cầu.</p><button className="quiet" onClick={onResume} disabled={disabled}>Cấp lại quyền và tiếp tục</button></>}
   </section>;
 }
@@ -182,7 +197,6 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
   const [portfolioId, setPortfolioId] = useState(route.portfolioId ?? ''), [dashboard, setDashboard] = useState<ChatDashboard | null>(null), [contextRevision, setContextRevision] = useState(0);
   const [contextOpen, setContextOpen] = useState(false);
   const [content, setContent] = useState(''), [strategy, setStrategy] = useState<SendMessage['strategy'] | ''>(''), [intent, setIntent] = useState<SendMessage['intent'] | ''>(''), [recommendationId, setRecommendationId] = useState('');
-  const [consentSaving, setConsentSaving] = useState(false);
   const [pending, setPending] = useState<SendMessage | null>(null), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [connection, setConnection] = useState<'connecting' | 'connected' | 'retrying' | 'saved'>('connecting'), [announcement, setAnnouncement] = useState('');
   const transientError = useRef(false);
@@ -346,18 +360,9 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
     } finally { sending.current = false; if (mounted.current) setBusy(false); }
   }
   function send(event?: FormEvent) {
-    event?.preventDefault(); if (!content.trim() || busy || loading || consentSaving || pending || job && !chatStopped(job.status)) return;
+    event?.preventDefault(); if (!content.trim() || busy || loading || pending || job && !chatStopped(job.status)) return;
     const body: SendMessage = { content: content.trim(), client_message_id: crypto.randomUUID(), ...(portfolioId ? { portfolio_id: portfolioId } : {}), ...(strategy ? { strategy } : {}), ...(intent ? { intent } : {}), ...(intent === 'explain' && recommendationId ? { recommendation_id: recommendationId } : {}) };
     void submitBody(body);
-  }
-  async function changeConsent(value: boolean) {
-    if (consentSaving) return;
-    setConsentSaving(true); setError(''); snapshots.current.invalidate();
-    try {
-      const updated = await api<Conversation>(`/api/v1/conversations/${cid}/preferences`, { method: 'POST', body: JSON.stringify({ llm_consent: value }) });
-      if (mounted.current) { setConversation(updated); setAnnouncement(value ? 'Đã cho phép LLM hỗ trợ hội thoại.' : 'Đã tắt các lời gọi LLM mới.'); }
-    } catch (cause) { fail(cause); }
-    finally { if (mounted.current) { setConsentSaving(false); void refreshSnapshot(); } }
   }
   function confirm(card: ConfirmationCard) {
     if (busy || pending || !job || job.status !== 'WAITING_INPUT' || job.result_message_id !== card.confirmation_message_id) return;
@@ -386,6 +391,7 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
         return <li className={`chat-message ${message.role === 'user' ? 'chat-user' : 'chat-assistant'}`} key={message.id} data-message-id={message.id}><div className="chat-message-byline"><strong>{message.role === 'user' ? 'Bạn' : 'Trợ lý danh mục'}</strong><time dateTime={message.created_at}>{dateTime(message.created_at)}</time></div>
           {card?.type !== 'recommendation' && <p className="chat-message-text">{message.content}</p>}
           {card?.dialogue?.reason === 'VERIFIED' && <details className="chat-message-source"><summary>Nguồn hỗ trợ trả lời</summary><p className="muted small">OpenAI hỗ trợ hiểu yêu cầu. Hệ thống kiểm tra dữ liệu và quyền thực hiện.</p></details>}
+          {card?.type === 'knowledge' && <ChatKnowledge evidence={card.knowledge}/>}
           {card?.type === 'confirmation' && <ChatConfirmation card={card} disabled={blocked || job?.status !== 'WAITING_INPUT' || job.result_message_id !== message.id} onConfirm={() => confirm(card)}/>}
           {card?.type === 'recommendation' && <ChatRecommendation card={card} canonical={recommendations[card.recommendation_id]} content={message.content}/>}
           {(card?.type === 'portfolio' || card?.type === 'profile' || card?.type === 'market') && <ReadFacts card={card}/>}
@@ -397,9 +403,9 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
       {pending && <aside className="notice warning chat-pending" role="alert"><strong>Yêu cầu chưa rõ trạng thái tiếp nhận</strong><p>{pending.confirmation ? 'Yêu cầu xác nhận đang được giữ nguyên để tránh tạo trùng. Chỉ gửi lại khi bạn chủ động xác nhận lần nữa.' : 'Nội dung và mã yêu cầu được giữ nguyên khi thử lại. Kết nối lại không tự gửi tin nhắn.'}</p><button data-testid="chat-retry" className="quiet" onClick={() => void submitBody(pending)} disabled={busy}>{pending.confirmation ? 'Xác nhận lại & gửi' : 'Gửi lại cùng yêu cầu'}</button></aside>}
       </div>{showScrollEnd && <button type="button" className="quiet chat-scroll-end" aria-label="Cuộn đến cuối vùng trao đổi" onClick={() => { if (transcript.current) { followLatest.current = true; nearTranscriptEnd.current = true; transcript.current.scrollTop = transcript.current.scrollHeight; setShowScrollEnd(false); const latestOffset = Math.floor(Math.max(0, history.total - 1) / history.limit) * history.limit; if (latestOffset !== offset) setOffset(latestOffset); else void refreshSnapshot(); } }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 5v14m-5-5 5 5 5-5"/></svg>Xuống cuối</button>}
-      <form ref={composer} className="panel chat-composer" onSubmit={send} aria-label="Soạn tin nhắn"><label className="sr-only" htmlFor="chat-message-input">Tin nhắn của bạn</label><div className="chat-input-row"><textarea ref={input} id="chat-message-input" data-testid="chat-input" value={content} onChange={event => setContent(event.target.value)} maxLength={4000} rows={2} disabled={blocked || consentSaving} placeholder="Hỏi về danh mục hoặc yêu cầu một phương án phân bổ…" aria-describedby="chat-composer-help" onKeyDown={event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}/><IconButton icon="send" label={busy ? 'Đang gửi tin nhắn' : 'Gửi tin nhắn'} data-testid="chat-send" type="submit" className="send-button" disabled={blocked || consentSaving || !content.trim()}/></div>
+      <form ref={composer} className="panel chat-composer" onSubmit={send} aria-label="Soạn tin nhắn"><label className="sr-only" htmlFor="chat-message-input">Tin nhắn của bạn</label><div className="chat-input-row"><textarea ref={input} id="chat-message-input" data-testid="chat-input" value={content} onChange={event => setContent(event.target.value)} maxLength={4000} rows={2} disabled={blocked} placeholder="Hỏi về danh mục hoặc yêu cầu một phương án phân bổ…" aria-describedby="chat-composer-help" onKeyDown={event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}/><IconButton icon="send" label={busy ? 'Đang gửi tin nhắn' : 'Gửi tin nhắn'} data-testid="chat-send" type="submit" className="send-button" disabled={blocked || !content.trim()}/></div>
         {intent === 'explain' && <label>Mã đề xuất<input value={recommendationId} onChange={event => setRecommendationId(event.target.value)} disabled={blocked} pattern="[a-fA-F0-9-]{36}" required autoComplete="off"/></label>}
-        <div className="chat-composer-tools"><ChatConsent compact saving={consentSaving} checked={conversation?.llm_consent === true} disabled={!conversation || consentSaving || busy} onChange={value => void changeConsent(value)}/><details className="chat-advanced" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}><summary aria-label="Tùy chọn hội thoại"><ActionIcon name="options"/><span className="control-tooltip" aria-hidden="true">Tùy chọn hội thoại</span></summary><ChatOptions intent={intent} strategy={strategy} disabled={blocked || consentSaving} onIntent={setIntent} onStrategy={setStrategy}/></details></div>
+        <div className="chat-composer-tools"><details className="chat-advanced" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}><summary aria-label="Tùy chọn hội thoại"><ActionIcon name="options"/><span className="control-tooltip" aria-hidden="true">Tùy chọn hội thoại</span></summary><ChatOptions intent={intent} strategy={strategy} disabled={blocked} onIntent={setIntent} onStrategy={setStrategy}/></details></div>
         <p className="muted small" id="chat-composer-help">Ctrl / ⌘ + Enter để gửi · Chấp nhận mục tiêu tại màn hình đề xuất</p>
       </form>
     </section></div>

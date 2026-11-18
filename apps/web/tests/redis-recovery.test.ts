@@ -6,7 +6,7 @@ import { createClient, type RedisClientType } from 'redis';
 import { handler } from '../src/server/runtime';
 import { createBff } from '../src/server/bff';
 import { connectStore } from '../src/server/store';
-import { config, provider, request } from './helpers';
+import { config, loginRequest, provider, request } from './helpers';
 
 // Keep the actual Redis client/network behavior; retain clients only for test cleanup.
 const clients = vi.hoisted(() => [] as RedisClientType[]);
@@ -46,7 +46,7 @@ describe.skipIf(!redisAvailable)('real Redis outage recovery', () => {
     await startRedis(port);
     const observer = createClient({ url: `redis://127.0.0.1:${port}/0` });
     await observer.connect();
-    for (const [key, value] of Object.entries({ APP_ORIGIN: config.origin, OIDC_ISSUER: config.issuer, OIDC_CLIENT_SECRET: config.clientSecret, PORTFOLIO_API_URL: config.portfolioUrl, SESSION_ENCRYPTION_KEY: config.key.toString('base64'), REDIS_URL: `redis://127.0.0.1:${port}/0` })) vi.stubEnv(key, value);
+    for (const [key, value] of Object.entries({ APP_ORIGIN: config.origin, OIDC_ISSUER: config.issuer, OIDC_CLIENT_SECRET: config.authWebSecret, PORTFOLIO_API_URL: config.portfolioUrl, SESSION_ENCRYPTION_KEY: config.key.toString('base64'), REDIS_URL: `redis://127.0.0.1:${port}/0` })) vi.stubEnv(key, value);
     vi.stubGlobal('fetch', async () => { throw new Error('Identity discovery unavailable'); });
     const response = await handler('login')(request('/auth/login'));
     expect(response.status).toBe(503);
@@ -61,19 +61,16 @@ describe.skipIf(!redisAvailable)('real Redis outage recovery', () => {
     const store = await connectStore(`redis://127.0.0.1:${port}/0`, config.key);
     const bff = createBff(config, store, provider());
     async function signIn() {
-      const login = await bff.login(request('/auth/login'));
-      expect(login.status).toBe(302);
-      const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
-      const callback = await bff.callback(request(`/auth/callback?code=test&state=${state}`, { cookie: login.headers.get('set-cookie')! }));
-      expect(callback.status).toBe(303);
-      return callback.headers.get('set-cookie')!.match(/__Host-portfolio_session=[^,]+/)![0];
+      const login = await bff.login(loginRequest());
+      expect(login.status).toBe(204);
+      return login.headers.get('set-cookie')!;
     }
     const cookie = await signIn();
     expect((await bff.session(request('/auth/session', { cookie }))).status).toBe(200);
     await stopRedis();
     expect(await eventually(async () => (await bff.session(request('/auth/session', { cookie }))).status, status => status === 503)).toBe(503);
     const started = Date.now();
-    expect((await bff.login(request('/auth/login'))).status).toBe(503);
+    expect((await bff.login(loginRequest())).status).toBe(503);
     expect(Date.now() - started).toBeLessThan(1000);
     await startRedis(port);
     // Session was lost with the nonpersistent server, never trust the old cookie.

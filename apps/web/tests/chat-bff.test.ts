@@ -13,11 +13,11 @@ describe('Chat BFF authorization and streaming', () => {
       calls++;
       expect(String(url)).toBe(`http://chat-api:8000/api/v1/conversations/${cid}/preferences`);
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer access-alice');
-      return Response.json({ llm_consent: false });
+      return Response.json({ detail: "PROVIDER_SETTINGS_MANAGED_BY_DEVELOPER" }, { status: 403 });
     });
     const path = `/api/v1/conversations/${cid}/preferences`;
     expect((await bff.proxy(request(path, { method: 'POST', cookie, headers: { origin: config.origin, 'content-type': 'application/json' }, body: '{"llm_consent":false}' }))).status).toBe(403);
-    expect((await bff.proxy(request(path, { method: 'POST', cookie, headers: { origin: config.origin, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: '{"llm_consent":false}' }))).status).toBe(200);
+    expect((await bff.proxy(request(path, { method: 'POST', cookie, headers: { origin: config.origin, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: '{"llm_consent":false}' }))).status).toBe(403);
     expect(calls).toBe(1);
   });
   it('routes investor chat to a fixed owner and isolates replay/auth headers', async () => {

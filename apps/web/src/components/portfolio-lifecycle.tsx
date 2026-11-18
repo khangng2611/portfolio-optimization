@@ -1,21 +1,40 @@
 'use client';
+import { isSelectionReadiness } from '../lib/selection-types';
 import { ActionIcon, IconButton } from './action-controls';
 import { TaskActions } from './task-actions';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AllocationView, money, percentage, profileName, strategyName } from './allocation-view';
 import { ApiError, dateTime, type Api, type Page, type PageApi, type Portfolio, type Recommendation, type Target } from '../lib/portfolio-types';
-import { comparisonDifferences, workspaceHash, type Readiness, type WorkspaceView } from '../lib/workspace-state';
+import { comparisonDifferences, readinessReason, workspaceHash, type Readiness, type WorkspaceView } from '../lib/workspace-state';
 
 export function Pagination({ total, offset, limit = 10, onChange, busy = false }: { total: number; offset: number; limit?: number; onChange: (offset: number) => void; busy?: boolean }) {
   if (offset === 0 && total <= limit) return total ? <p className="pagination-summary" role="status">{total} kết quả</p> : null;
   return <nav className="pagination" aria-label="Phân trang"><IconButton icon="previous" label="Trang trước" disabled={busy || offset === 0} onClick={() => onChange(Math.max(0, offset - limit))}/><span role="status">Trang {Math.floor(offset / limit) + 1} · {total} kết quả</span><IconButton icon="next" label="Trang sau" disabled={busy || offset + limit >= total} onClick={() => onChange(offset + limit)}/></nav>;
 }
 export function ReadinessNotice({ value, onRefresh, busy = false, failed = false }: { value: Readiness | null; onRefresh: () => void; busy?: boolean; failed?: boolean }) {
+  if (isSelectionReadiness(value)) return <aside className={`readiness notice selection-readiness ${value.can_submit ? '' : 'warning'}`} data-testid="readiness-notice" aria-label="Tình trạng dữ liệu và model">
+    <div className="readiness-summary">
+      <strong>{value.can_submit ? 'Sẵn sàng tạo đề xuất' : 'Lựa chọn chưa đủ điều kiện tính toán'}</strong>
+      <p>{value.candidate_asset_ids.length} tài sản được cân nhắc · {value.strategies.filter(item => item.can_submit).length}/{value.strategies.length} phương pháp sẵn sàng</p>
+      <p>{readinessReason[value.reason_code] ?? (value.reason_code === 'READY' ? 'Dữ liệu được kiểm tra lại khi gửi yêu cầu. Kết quả phân bổ phụ thuộc phương pháp và giới hạn của danh mục.' : 'Cần kiểm tra dữ liệu và model hiện hành.')}</p>
+      <ul className="capability-list" aria-label="Trạng thái từng phương pháp">{value.strategies.map(item => <li key={item.strategy}><span className={`badge ${item.can_submit ? 'success' : ''}`}>{strategyName(item.strategy)} · {item.can_submit ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span>{!item.can_submit && <p>{readinessReason[item.reason_code] ?? item.reason_code}</p>}</li>)}</ul>
+      <details className="readiness-detail"><summary>Xem chi tiết dữ liệu và tài sản</summary>
+        <p>Tài sản được cân nhắc: {value.candidate_asset_ids.join(' · ')}</p>
+        {value.asset_status.length > 0 && <table className="readiness-asset-table"><caption className="sr-only">Dữ liệu từng tài sản</caption><thead><tr><th scope="col">Tài sản</th><th scope="col">Ngày dữ liệu</th><th scope="col">Độ trễ dữ liệu</th></tr></thead><tbody>{value.asset_status.map((item, index) => <tr key={String(item.asset_id ?? index)}><th scope="row">{String(item.asset_id ?? '—')}</th><td>{String(item.eligible_observation_date ?? item.observation_date ?? 'Chưa có dữ liệu')}</td><td>{item.age_days != null ? `tuổi ${String(item.age_days)} ngày / tối đa 7 ngày` : 'Chưa xác minh'}</td></tr>)}</tbody></table>}
+        {value.selection_valid_until && <p>Hiệu lực đến {dateTime(value.selection_valid_until)} · GMT+7</p>}
+        {value.checked_at && <p className="muted small">Đã kiểm tra {dateTime(value.checked_at)} · GMT+7</p>}
+      </details>
+    </div>
+    <IconButton icon="refresh" label={busy ? 'Đang kiểm tra dữ liệu' : 'Kiểm tra lại'} onClick={onRefresh} disabled={busy} aria-busy={busy}/>
+  </aside>;
   const expired = value?.status === 'EXPIRED';
   return <aside className={`readiness notice ${value?.status !== 'READY' ? 'warning' : ''}`} data-testid={expired ? 'expired-input-notice' : 'readiness-notice'} aria-label="Tình trạng dữ liệu và model">
     <div><strong>{!value ? failed ? 'Chưa kiểm tra được dữ liệu' : 'Đang kiểm tra dữ liệu' : expired ? 'Dữ liệu đã hết hiệu lực' : value.status !== 'READY' ? 'Dữ liệu chưa sẵn sàng' : 'Dữ liệu sẵn sàng'}</strong>
       <p>{value ? `${value.demo ? 'Dữ liệu minh họa' : value.data_origin === 'real' ? 'Giá thị trường' : 'Nguồn chưa xác minh'}${value.as_of_date ? ` · Ngày dữ liệu ${value.as_of_date}` : ''}` : 'Kiểm tra bộ dữ liệu trước khi gửi yêu cầu.'}</p>
+      {value && readinessReason[value.reason_code] && <p role="status">{readinessReason[value.reason_code]}</p>}
+      {value?.strategies.filter(s => !s.available && readinessReason[s.reason_code] && s.reason_code !== value.reason_code).map(s => <p key={s.strategy} role="status">{readinessReason[s.reason_code]}</p>)}
       <details className="readiness-detail"><summary>Điều kiện & hiệu lực dữ liệu</summary>{value && <p>Bộ tài sản: {value.universe_id}</p>}{value?.valid_until && <p>Hiệu lực đến {dateTime(value.valid_until)} · GMT+7</p>}
+      {value?.provenance?.phase1_full && <><p>K5: {value.provenance.phase1_full.selected_equity_ids.join(' · ')} · GOLD · VFF</p>{Object.entries(value.provenance.phase1_full.availability ?? {}).map(([asset, item]) => <p key={asset}>{asset === 'VFF' ? 'NAV VFF' : asset}: ngày {item.observation_date} · tuổi {item.age_days} ngày · khả dụng từ {dateTime(item.policy_available_at)} · GMT+7</p>)}</>}
       {value?.checked_at && <p className="muted small">Đã kiểm tra {dateTime(value.checked_at)} · GMT+7</p>}
       {value?.status === 'READY' && <ul className="capability-list">{value.strategies.map(s => <li key={s.strategy}><span className={`badge ${s.available ? 'success' : ''}`}>{s.strategy === 'BL_ML' ? 'BL + ML' : s.strategy} · {s.available ? 'Sẵn sàng' : s.reason_code === 'MODEL_UNAVAILABLE' ? 'Chờ model được duyệt' : 'Chưa sẵn sàng'}</span></li>)}</ul>}
       </details>{value?.status !== 'READY' && <p>{expired ? 'Cần bản dữ liệu mới. Mục tiêu đã lưu vẫn được giữ trong lịch sử.' : 'Thử kiểm tra lại. Nếu tình trạng chưa thay đổi, cần người vận hành cập nhật dữ liệu.'}</p>}

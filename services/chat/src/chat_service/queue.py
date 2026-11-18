@@ -2,7 +2,7 @@ from datetime import timedelta
 from uuid import uuid4
 from sqlalchemy import and_, or_, select, update
 from portfolio_contracts import utcnow
-from .models import Event, Job, Message
+from .models import Event, Job, Message, KnowledgeEvidence
 
 TERMINAL = {
     "SUCCEEDED",
@@ -113,6 +113,15 @@ class Queue:
             if attempts is not None:
                 current.attempts = attempts
             if message:
+                evidence = message.get("structured", {}).get("knowledge")
+                if evidence:
+                    s.add(
+                        KnowledgeEvidence(
+                            job_id=current.id,
+                            evidence_hash=evidence["evidence_hash"],
+                            evidence=evidence,
+                        )
+                    )
                 s.add(
                     Message(
                         **message,

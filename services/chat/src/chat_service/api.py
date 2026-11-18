@@ -36,10 +36,12 @@ class NewConversation(StrictModel):
     )
     portfolio_id: UUID | None = None
     llm_consent: bool = False
+    consent_version: Literal[1, 2] = 1
 
 
 class ConversationPreferences(StrictModel):
     llm_consent: bool
+    consent_version: Literal[1, 2] = 1
 
 
 class Confirmation(StrictModel):
@@ -59,7 +61,15 @@ class NewMessage(StrictModel):
     )
     portfolio_id: UUID | None = None
     intent: (
-        Literal["allocation", "profile", "portfolio", "market", "explain", "help"]
+        Literal[
+            "allocation",
+            "profile",
+            "portfolio",
+            "market",
+            "explain",
+            "help",
+            "knowledge",
+        ]
         | None
     ) = None
     strategy: Literal["EW", "MVO", "BL_ML"] | None = None
@@ -74,6 +84,7 @@ def conversation_json(c):
         "portfolio_id": c.portfolio_id,
         "active_job_id": c.active_job_id,
         "llm_consent": c.llm_consent,
+        "consent_version": c.consent_version,
         "created_at": aware(c.created_at).isoformat(),
     }
 
@@ -200,12 +211,15 @@ def create_app(*, sessions, verifier, tools, stream_seconds=85):
 
     @app.post("/api/v1/conversations", status_code=201)
     def create(body: NewConversation, owner=Depends(principal)):
+        if body.llm_consent or body.consent_version != 1:
+            raise HTTPException(403, "PROVIDER_SETTINGS_MANAGED_BY_DEVELOPER")
         with sessions.begin() as s:
             c = Conversation(
                 owner_key=owner,
                 title=body.title.strip(),
                 portfolio_id=str(body.portfolio_id) if body.portfolio_id else None,
                 llm_consent=body.llm_consent,
+                consent_version=body.consent_version,
             )
             s.add(c)
             s.flush()
@@ -237,11 +251,9 @@ def create_app(*, sessions, verifier, tools, stream_seconds=85):
 
     @app.post("/api/v1/conversations/{cid}/preferences")
     def preferences(cid: UUID, body: ConversationPreferences, owner=Depends(principal)):
-        with sessions.begin() as s:
-            c = owned(s, cid, owner)
-            c.llm_consent = body.llm_consent
-            s.flush()
-            return conversation_json(c)
+        with sessions() as s:
+            owned(s, cid, owner)
+        raise HTTPException(403, "PROVIDER_SETTINGS_MANAGED_BY_DEVELOPER")
 
     @app.get("/api/v1/conversations/{cid}/messages")
     def messages(

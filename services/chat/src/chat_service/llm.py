@@ -2,19 +2,26 @@
 
 import os
 import re
+from decimal import Decimal
+from uuid import UUID
 from sqlalchemy import select, update, func
 
 from portfolio_contracts import utcnow
 from .models import Conversation, Job, Message, ProviderInvocation
 from .openai_provider import OpenAIProvider, redact
+from .embeddings import Embeddings, approved_budget
+
+
+def developer_enabled():
+    return os.environ.get("CHAT_LLM_ENABLED") == "1"
 
 
 class InvocationLedger:
     def __init__(self, sessions):
         self.sessions = sessions
 
-    def invoke(self, job, purpose, call):
-        if purpose not in ("intent", "explanation"):
+    def invoke(self, job, purpose, call, *, rag=False):
+        if purpose not in ("intent", "explanation", "query_embedding", "response"):
             return None, {"reason": "INVALID_PURPOSE"}
         now = utcnow()
         with self.sessions.begin() as s:
@@ -40,17 +47,48 @@ class InvocationLedger:
             if fenced.rowcount != 1:
                 return None, {"reason": "LEASE_LOST"}
             conversation = s.get(Conversation, job.conversation_id)
+            if not conversation or conversation.owner_key != job.owner_key:
+                return None, {"reason": "OWNER_REQUIRED"}
+            if not developer_enabled():
+                return None, {"reason": "DEVELOPER_DISABLED"}
             if (
-                not conversation
-                or conversation.owner_key != job.owner_key
-                or not conversation.llm_consent
+                purpose == "query_embedding"
+                and os.environ.get("CHAT_QUERY_EMBEDDINGS_ENABLED") != "1"
             ):
-                return None, {"reason": "CONSENT_REQUIRED"}
+                return None, {"reason": "EMBEDDINGS_DISABLED"}
+            budget = approved_budget() if rag or purpose == "query_embedding" else None
+            if (rag or purpose == "query_embedding") and not budget:
+                return None, {"reason": "BUDGET_NOT_APPROVED"}
             old = s.get(ProviderInvocation, (job.id, purpose))
             if old:
                 return old.output, old.details or {
                     "reason": "PROVIDER_BUDGET_EXHAUSTED"
                 }
+            reserved = Decimal("0")
+            if budget:
+                try:
+                    text_limit = min(
+                        100,
+                        max(
+                            0, int(os.environ.get("CHAT_LLM_APPROVAL_CALL_LIMIT", "20"))
+                        ),
+                    )
+                except ValueError:
+                    text_limit = 0
+                embedding = purpose == "query_embedding"
+                reserved = Decimal("0.00016" if embedding else "0.0017")
+                previous = s.scalars(
+                    select(ProviderInvocation).where(
+                        ProviderInvocation.budget_id == budget[0]
+                    )
+                ).all()
+                group = [
+                    r for r in previous if (r.purpose == "query_embedding") == embedding
+                ]
+                if len(group) >= (50 if embedding else text_limit) or sum(
+                    (Decimal(r.reserved_usd) for r in group), Decimal("0")
+                ) + reserved > budget[1] * Decimal("0.2" if embedding else "0.6"):
+                    return None, {"reason": "ACCEPTANCE_BUDGET_EXHAUSTED"}
             try:
                 limit = min(
                     100, max(0, int(os.environ.get("CHAT_LLM_DAILY_CALL_LIMIT", "20")))
@@ -61,23 +99,31 @@ class InvocationLedger:
             used = s.scalar(
                 select(func.count())
                 .select_from(ProviderInvocation)
-                .where(ProviderInvocation.created_at >= day)
+                .where(
+                    ProviderInvocation.created_at >= day,
+                    (ProviderInvocation.purpose == "query_embedding")
+                    if purpose == "query_embedding"
+                    else (ProviderInvocation.purpose != "query_embedding"),
+                )
             )
-            if used >= limit:
+            if used >= (50 if purpose == "query_embedding" else limit):
                 return None, {"reason": "DAILY_BUDGET_EXHAUSTED"}
             s.add(
                 ProviderInvocation(
                     job_id=job.id,
                     purpose=purpose,
                     owner_key=job.owner_key,
+                    budget_id=budget[0] if budget else None,
+                    reserved_usd=str(reserved),
                     created_at=now,
                 )
             )
-            s.execute(
-                update(Job)
-                .where(Job.id == job.id)
-                .values(provider_calls=Job.provider_calls + 1)
-            )
+            if purpose != "query_embedding":
+                s.execute(
+                    update(Job)
+                    .where(Job.id == job.id)
+                    .values(provider_calls=Job.provider_calls + 1)
+                )
         # Reservation survives crashes and uncertain HTTP outcomes. Never retry it.
         value, metadata = call()
         with self.sessions.begin() as s:
@@ -94,13 +140,50 @@ class Dialogue:
     @property
     def enabled(self):
         return (
-            os.environ.get("CHAT_LLM_PROVIDER") == "openai" and self.provider.configured
+            developer_enabled()
+            and os.environ.get("CHAT_LLM_PROVIDER") == "openai"
+            and self.provider.configured
         )
+
+    @property
+    def contextual(self):
+        return self.enabled and os.environ.get("CHAT_CONTEXTUAL_REPLIES") == "1"
+
+    def recommendation_reference(self, job):
+        with self.sessions() as s:
+            conversation = s.get(Conversation, job.conversation_id)
+            current = s.get(Message, job.message_id)
+            portfolio_id = job.request.get("portfolio_id")
+            if (
+                not conversation
+                or conversation.owner_key != job.owner_key
+                or not current
+                or current.conversation_id != conversation.id
+                or not portfolio_id
+            ):
+                return None
+            reference = s.scalar(
+                select(Message.structured["recommendation_id"].as_string())
+                .where(
+                    Message.conversation_id == conversation.id,
+                    Message.role == "assistant",
+                    Message.created_at < current.created_at,
+                    Message.structured["type"].as_string() == "recommendation",
+                    Message.structured["facts"]["portfolio_id"].as_string()
+                    == str(portfolio_id),
+                )
+                .order_by(Message.created_at.desc(), Message.id.desc())
+                .limit(1)
+            )
+        try:
+            return str(UUID(reference)) if reference else None
+        except (ValueError, TypeError, AttributeError):
+            return None
 
     def context(self, job):
         with self.sessions() as s:
             c = s.get(Conversation, job.conversation_id)
-            if not c or c.owner_key != job.owner_key or not c.llm_consent:
+            if not c or c.owner_key != job.owner_key or not developer_enabled():
                 return None, None
             current = s.get(Message, job.message_id)
             rows = s.scalars(
@@ -117,16 +200,7 @@ class Dialogue:
                 (m.structured for m in rows if m.role == "assistant" and m.structured),
                 {},
             )
-            last_result = next(
-                (
-                    m.structured.get("recommendation_id")
-                    for m in rows
-                    if m.role == "assistant"
-                    and m.structured
-                    and m.structured.get("type") == "recommendation"
-                ),
-                None,
-            )
+            last_result = self.recommendation_reference(job)
             context = {
                 "content": redact(job.request["content"]),
                 "previous": {
@@ -147,9 +221,12 @@ class Dialogue:
             return request, None
         context, last_result = self.context(job)
         if context is None:
-            return request, {"reason": "CONSENT_REQUIRED"}
+            return request, {"reason": "DEVELOPER_DISABLED"}
         plan, meta = self.ledger.invoke(
-            job, "intent", lambda: self.provider.interpret(context)
+            job,
+            "intent",
+            lambda: self.provider.interpret(context),
+            rag=self.contextual or bool(approved_budget()),
         )
         if plan:
             request["intent"] = plan["intent"]
@@ -172,13 +249,58 @@ class Dialogue:
                 )
         return request, meta
 
-    def explain(self, job, facts, digest):
+    def respond(self, job, state):
+        if not self.contextual or not approved_budget():
+            return None, {"reason": "BUDGET_NOT_APPROVED"}
+        context, _ = self.context(job)
+        if context is None:
+            return None, {"reason": "DEVELOPER_DISABLED"}
+        safe_state = {k: state[k] for k in ("type", "fields") if k in state}
+        if state.get("knowledge"):
+            safe_state["has_sources"] = bool(state["knowledge"]["citations"])
+        return self.ledger.invoke(
+            job,
+            "response",
+            lambda: self.provider.respond(context | {"state": safe_state}),
+            rag=True,
+        )
+
+    def explain(self, job, facts, digest, knowledge_data=None):
         if not self.enabled:
             return None, {"reason": "NOT_CONFIGURED"}
+        if knowledge_data and approved_budget():
+            return self.ledger.invoke(
+                job,
+                "explanation",
+                lambda: self.provider.explain_with_knowledge(
+                    facts, digest, knowledge_data, question=job.request["content"]
+                ),
+                rag=True,
+            )
         return self.ledger.invoke(
             job,
             "explanation",
             lambda: self.provider.explain(
                 facts, digest, question=job.request["content"]
             ),
+        )
+
+    def select_knowledge(self, job, data):
+        if not self.enabled:
+            return None, {"reason": "NOT_CONFIGURED"}
+        # New RAG spending never inherits old Chat approval or a configured key.
+        if not approved_budget():
+            return None, {"reason": "BUDGET_NOT_APPROVED"}
+        return self.ledger.invoke(
+            job,
+            "explanation",
+            lambda: self.provider.select_knowledge(
+                data, question=job.request["content"]
+            ),
+            rag=True,
+        )
+
+    def embed_query(self, job, query):
+        return self.ledger.invoke(
+            job, "query_embedding", lambda: Embeddings().embed(query)
         )

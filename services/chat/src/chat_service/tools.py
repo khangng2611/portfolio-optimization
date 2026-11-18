@@ -26,7 +26,7 @@ class Tools:
                         "grant_type": "client_credentials",
                         "client_id": "chat-service",
                         "client_secret": os.environ["CHAT_CLIENT_SECRET"],
-                        "scope": "chat:delegate market:chat:read",
+                        "scope": "chat:delegate market:chat:read knowledge:retrieve",
                     },
                     timeout=3,
                 )
@@ -44,6 +44,30 @@ class Tools:
             raise ToolError("AUTHORIZATION_REQUIRED", permanent=True)
         if r.status_code == 404:
             raise ToolError("RESOURCE_UNAVAILABLE", permanent=True)
+        if r.status_code == 409:
+            try:
+                body = r.json()
+            except ValueError:
+                body = None
+            detail = (
+                body.get("error", body.get("detail"))
+                if isinstance(body, dict)
+                else None
+            )
+            code = detail.get("code") if isinstance(detail, dict) else None
+            if detail == "Dữ liệu đầu vào đã hết hạn." or (
+                isinstance(detail, dict)
+                and detail.get("code") == "CONFLICT"
+                and detail.get("message") == "Dữ liệu đầu vào đã hết hạn."
+            ):
+                code = "INPUT_EXPIRED"
+            if isinstance(code, str) and code in {
+                "INPUT_EXPIRED",
+                "VFF_STALE",
+                "GOLD_STALE",
+                "ASSET_DATA_STALE",
+            }:
+                raise ToolError(code, permanent=True)
         if r.status_code in (409, 412, 422):
             raise ToolError("STALE_OR_INVALID_INPUT", permanent=True)
         r.raise_for_status()
@@ -91,6 +115,15 @@ class Tools:
             "X-Chat-Job": job.id,
             "X-Chat-Conversation": job.conversation_id,
         }
+        if tool == "retrieve_knowledge":
+            return self.checked(
+                httpx.post(
+                    os.environ["KNOWLEDGE_API_URL"] + "/internal/v1/knowledge/retrieve",
+                    headers=self.service_headers(),
+                    json=args,
+                    timeout=3,
+                )
+            )
         if tool == "get_market_facts":
             return self.checked(
                 httpx.get(

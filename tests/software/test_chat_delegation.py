@@ -174,38 +174,21 @@ def test_identity_status_fails_closed_and_checks_role(monkeypatch):
     from portfolio_service.runtime import IdentityStatus
 
     monkeypatch.setenv("OIDC_ISSUER", "https://identity")
-    monkeypatch.setenv(
-        "OIDC_TOKEN_URL",
-        "https://identity/realms/portfolio/protocol/openid-connect/token",
-    )
-    monkeypatch.setenv("OIDC_ACCOUNT_READER_SECRET", "private")
-    monkeypatch.setattr(
-        httpx,
-        "post",
-        lambda *a, **kw: httpx.Response(
-            200,
-            json={"access_token": "service-private", "expires_in": 60},
-            request=httpx.Request("POST", a[0]),
-        ),
-    )
-    state = {"enabled": True, "roles": ["investor"]}
+    monkeypatch.setenv("AUTH_ACCOUNT_STATUS_URL", "https://identity/internal/v1/accounts")
+    monkeypatch.setenv("AUTH_ACCOUNT_READER_SECRET", "private")
+    uid = str(uuid4())
+    state = {"active": True}
 
-    def get(url, **kw):
-        value = (
-            [{"name": r} for r in state["roles"]]
-            if url.endswith("/composite")
-            else {"enabled": state["enabled"]}
-        )
-        return httpx.Response(200, json=value, request=httpx.Request("GET", url))
+    def get(url, **kwargs):
+        assert url == "https://identity/internal/v1/accounts/" + uid
+        assert kwargs["headers"] == {"Authorization": "Bearer private"}
+        assert kwargs["follow_redirects"] is False
+        return httpx.Response(200, json=state, request=httpx.Request("GET", url))
 
     monkeypatch.setattr(httpx, "get", get)
     check = IdentityStatus()
-    uid = str(uuid4())
     assert check("https://identity", uid)
-    state["enabled"] = False
-    assert not check("https://identity", uid)
-    state["enabled"] = True
-    state["roles"] = []
+    state["active"] = False
     assert not check("https://identity", uid)
     assert not check("https://other", uid)
 

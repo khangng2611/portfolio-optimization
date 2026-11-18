@@ -1,4 +1,7 @@
 from datetime import timedelta
+import re
+import unicodedata
+import hashlib
 import time
 from uuid import uuid4
 import httpx
@@ -9,6 +12,34 @@ from .provider import Provider, render
 from .queue import Queue
 from .tools import ToolError
 from .llm import Dialogue
+from .knowledge import (
+    Retrieval,
+    previous_knowledge_topic,
+    render_evidence,
+    save_checkpoint,
+)
+from .openai_provider import redact
+
+
+BLOCKED_INTENT = re.compile(
+    r"bo qua .*huong dan|ignore .*instructions|system prompt|api key|bearer |tu .*chap nhan|tu .*promote"
+)
+
+
+def normalize_intent(text):
+    return "".join(
+        c
+        for c in unicodedata.normalize("NFKD", text.casefold().replace("đ", "d"))
+        if not unicodedata.combining(c)
+    )
+
+
+def is_knowledge_followup(text):
+    text = normalize_intent(text).strip()
+    return text.endswith("?") and re.match(
+        r"(?:(?:vay|the|con)\s+)?(?:no|cai nay|cai do|phuong phap nay|phuong phap do|cach nay|cach do)\b",
+        text,
+    )
 
 
 def intent_of(request):
@@ -17,10 +48,39 @@ def intent_of(request):
     if request.get("intent"):
         return request["intent"]
     text = request["content"].casefold()
-    if any(s in text for s in ("phân bổ", "allocation", "tối ưu")):
-        return "allocation"
-    if any(s in text for s in ("giải thích", "explain")):
+    normalized = normalize_intent(text)
+    if BLOCKED_INTENT.search(normalized):
+        return "help"
+    if re.search(
+        r"la gi|nghia la|kien thuc|khai niem|da dang hoa|hiep phuong sai|covariance|black.?litterman|backtest|turnover",
+        normalized,
+    ) or (
+        re.search(r"\b(ew|mvo|bl_ml)\b", normalized)
+        and re.search(r"giai thich|tai sao|nhuoc diem|uu diem", normalized)
+    ):
+        return "knowledge"
+    if (
+        "giai thich" in normalized
+        or "explain" in normalized
+        or normalized.strip(" ?!.")
+        in {"de xuat nao", "de xuat nao vay", "ban dang noi de xuat nao"}
+        or (
+            re.search(r"\b(vi sao|tai sao)\b", normalized)
+            and re.search(r"phan bo|ty trong|quyet dinh|de xuat", normalized)
+        )
+    ):
         return "explain"
+    if any(
+        s in normalized
+        for s in (
+            "phan bo",
+            "allocation",
+            "toi uu",
+            "tao de xuat",
+            "lap phuong an dau tu",
+        )
+    ):
+        return "allocation"
     if any(s in text for s in ("thị trường", "market")):
         return "market"
     if "hồ sơ" in text:
@@ -31,10 +91,19 @@ def intent_of(request):
 
 
 class Worker:
-    def __init__(self, sessions, tools, provider=None, clock=utcnow):
+    def __init__(
+        self, sessions, tools, provider=None, clock=utcnow, *, query_rewriter=None
+    ):
         self.sessions, self.tools, self.clock = sessions, tools, clock
         self.q, self.provider = Queue(sessions), provider or Provider()
         self.dialogue = Dialogue(sessions)
+        # In-process experiment only. The adapter owns its one-second deadline.
+        self.query_rewriter = query_rewriter
+        self.started, self.tool_count = time.monotonic(), 0
+
+    def has_time(self, seconds, *, reserve=7):
+        # Reserve the final 3s corpus recheck and 4s owner authorization read.
+        return 20 - (time.monotonic() - self.started) >= seconds + reserve
 
     def call(self, job, name, args):
         if time.monotonic() - self.started > 20 or self.tool_count >= 6:
@@ -78,6 +147,22 @@ class Worker:
         error=None,
     ):
         mid = str(uuid4())
+        if (
+            self.dialogue.contextual
+            and self.query_rewriter is None
+            and structured.get("type")
+            in {"help", "input_required", "knowledge", "profile", "portfolio", "market"}
+            and self.has_time(9, reserve=1)
+        ):
+            # Authorization is refreshed before even a conversational model call.
+            self.call(job, "get_profile", {})
+            generated, response_meta = self.dialogue.respond(job, structured)
+            structured["response"] = response_meta
+            if generated and (
+                structured.get("fields") != ["strategy"]
+                or all(label in generated for label in ("EW", "MVO", "ML"))
+            ):
+                text = generated
         if getattr(self, "dialogue_metadata", None):
             structured["dialogue"] = self.dialogue_metadata
         if structured.get("type") == "confirmation":
@@ -183,6 +268,20 @@ class Worker:
                     ],
                     now=self.clock(),
                 )
+            deterministic = intent_of(r)
+            if deterministic == "explain" and not r.get("confirmation"):
+                r = r | {"intent": "explain"}
+            topic = None
+            if (
+                self.query_rewriter is not None
+                and (
+                    deterministic == "knowledge"
+                    or (deterministic == "help" and not r.get("intent"))
+                )
+                and is_knowledge_followup(r["content"])
+                and not BLOCKED_INTENT.search(normalize_intent(r["content"]))
+            ):
+                topic = previous_knowledge_topic(self.sessions, job)
             profile = None
             if (
                 self.dialogue.enabled
@@ -193,8 +292,22 @@ class Worker:
                 # Validate current account/role/grant at its owner before sending
                 # even bounded prior conversation context to an external model.
                 profile = self.call(job, "get_profile", {})
-            r, self.dialogue_metadata = self.dialogue.interpret(job)
+            if deterministic == "knowledge" or topic:
+                r = r | {"intent": "knowledge"}
+            elif deterministic != "explain":
+                r, self.dialogue_metadata = self.dialogue.interpret(job)
             intent = intent_of(r)
+            if intent == "knowledge":
+                if profile is None:
+                    self.call(job, "get_profile", {})
+                evidence = self.knowledge(job, previous_topic=topic)
+                return self.reply(
+                    job,
+                    "Các đoạn tham khảo từ corpus đã duyệt."
+                    if evidence["citations"]
+                    else "Chưa có nguồn phù hợp trong corpus để trả lời câu hỏi này.",
+                    {"type": "knowledge", "knowledge": evidence},
+                )
             if intent in ("help", "clarify", "unsupported"):
                 return self.reply(
                     job,
@@ -242,10 +355,14 @@ class Worker:
                     {"type": "portfolio", "facts": p, "facts_hash": canonical_hash(p)},
                 )
             if intent == "explain":
+                r = r | {
+                    "recommendation_id": r.get("recommendation_id")
+                    or self.dialogue.recommendation_reference(job),
+                }
                 if not r.get("recommendation_id"):
                     return self.reply(
                         job,
-                        "Chọn đề xuất cần giải thích.",
+                        "Mình chưa tìm thấy đề xuất của danh mục đang chọn trong cuộc trao đổi này. Bạn muốn mở một đề xuất đã có hay chuẩn bị đề xuất mới?",
                         {"type": "input_required", "fields": ["recommendation_id"]},
                         status="WAITING_INPUT",
                         stage="COLLECT",
@@ -257,6 +374,7 @@ class Worker:
                         "get_recommendation",
                         {"resource_id": r["recommendation_id"]},
                     ),
+                    requested=True,
                 )
             if not p.get("risk_profile") or not p["risk_profile"].get("version_id"):
                 return self.reply(
@@ -340,15 +458,41 @@ class Worker:
                 now=self.clock(),
             )
 
-    def explain(self, job, facts):
+    def explain(self, job, facts, *, requested=False):
         digest = canonical_hash(facts)
-        if self.dialogue.enabled:
-            sections, metadata = self.dialogue.explain(job, facts, digest)
+        knowledge = self.knowledge(
+            job, select_claims=False, strategy=facts.get("strategy")
+        )
+        if not self.has_time(8):
+            sections, metadata = None, {"reason": "TURN_BUDGET_EXHAUSTED"}
+        elif self.dialogue.enabled:
+            sections, metadata = self.dialogue.explain(
+                job, facts, digest, self.knowledge_data
+            )
         elif self.q.reserve_provider(job, now=self.clock()):
             sections, metadata = self.provider.explain(facts, digest)
         else:
             sections, metadata = None, {"reason": "PROVIDER_BUDGET_EXHAUSTED"}
         text = render(facts, sections)
+        if metadata.get("knowledge_plan"):
+            knowledge = render_evidence(
+                self.knowledge_data,
+                metadata["knowledge_plan"],
+                query_hash=knowledge["query_hash"],
+                metadata={k: v for k, v in metadata.items() if k != "knowledge_plan"},
+            )
+        knowledge = self.validate_knowledge(job, knowledge)
+        if requested:
+            method = "\n\n".join(p["text"] for p in knowledge["citations"])
+            text = "\n\n".join(
+                part
+                for part in (
+                    "Mình đang giải thích đề xuất này dựa trên kết quả định lượng và hồ sơ đã xác nhận.",
+                    method,
+                    text,
+                )
+                if part
+            )
         rid = facts["id"]
         mid = str(uuid4())
         return self.q.finish(
@@ -364,9 +508,11 @@ class Worker:
                     "recommendation_id": rid,
                     "facts": facts,
                     "facts_hash": digest,
+                    "knowledge": knowledge,
                     "explanation_status": "VERIFIED" if sections else "TEMPLATE",
+                    "explanation_requested": requested,
                     "provider": metadata,
-                    "schema_version": "fact-plan-v1",
+                    "schema_version": metadata.get("schema_version", "fact-plan-v1"),
                     "prompt_version": metadata.get("prompt_version", "chat-v1"),
                     "template_version": "chat-template-v2",
                 },
@@ -384,6 +530,144 @@ class Worker:
             ],
             now=self.clock(),
         )
+
+    def rewrite_knowledge(self, job, args, baseline, topic):
+        query = args["query"]
+        if (
+            not baseline.corpus_id
+            or not baseline.corpus_hash
+            or baseline.reason != "NO_EVIDENCE"
+            or BLOCKED_INTENT.search(normalize_intent(job.request["content"]))
+            or (is_knowledge_followup(query) and not topic)
+            or not self.has_time(4)
+        ):
+            return None
+        try:
+            rewritten = self.query_rewriter(
+                query[:800], redact(topic) if topic else None
+            )
+            if not isinstance(rewritten, str):
+                return None
+            rewritten = rewritten.strip()
+            if (
+                not re.fullmatch(r"[^\W\d_][\w -]{0,159}", rewritten)
+                or rewritten.casefold() == query.strip().casefold()
+                or redact(rewritten) != rewritten
+                or not self.has_time(3)
+            ):
+                return None
+            result = self.call(
+                job,
+                "retrieve_knowledge",
+                args | {"query": rewritten, "corpus_id": str(baseline.corpus_id)},
+            )
+            parsed = Retrieval.model_validate(result)
+            if (
+                parsed.corpus_id == baseline.corpus_id
+                and parsed.corpus_hash == baseline.corpus_hash
+                and parsed.retrieval_version == baseline.retrieval_version
+                and parsed.mode == "LEXICAL"
+                and parsed.reason == "MATCH"
+                and parsed.passages
+                and all(
+                    p.available_at <= aware(job.created_at) for p in parsed.passages
+                )
+            ):
+                return result | {
+                    "rewritten_query_hash": hashlib.sha256(
+                        rewritten.encode()
+                    ).hexdigest()
+                }
+        except (TimeoutError, httpx.HTTPError, ValueError, ToolError):
+            pass
+        return None
+
+    def knowledge(self, job, select_claims=True, *, previous_topic=None, strategy=None):
+        # Never retry a paid call or switch corpora after the first checkpoint.
+        query = redact(job.request["content"])
+        if strategy in ("EW", "MVO", "BL_ML"):
+            query = f"{query} {strategy}"
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
+        args = {"query": query, "as_of": aware(job.created_at).isoformat()}
+        try:
+            data = job.knowledge_checkpoint
+            if data is None:
+                if not self.has_time(3):
+                    raise ValueError("retrieval deadline budget")
+                vector, embedding_meta = (
+                    self.dialogue.embed_query(job, query)
+                    if self.query_rewriter is None and self.has_time(8)
+                    else (None, {"reason": "TURN_BUDGET_EXHAUSTED"})
+                )
+                if vector:
+                    args |= {
+                        "embedding": vector["embedding"],
+                        "embedding_model": "text-embedding-3-small",
+                        "index_version": "openai-small-1536-v1",
+                    }
+                data = self.call(job, "retrieve_knowledge", args)
+                parsed = Retrieval.model_validate(data)
+                if any(p.available_at > aware(job.created_at) for p in parsed.passages):
+                    raise ValueError("cutoff mismatch")
+                if (
+                    self.query_rewriter is not None
+                    and select_claims
+                    and not parsed.passages
+                ):
+                    data = (
+                        self.rewrite_knowledge(job, args, parsed, previous_topic)
+                        or data
+                    )
+                data = save_checkpoint(self.sessions, job, data)
+            plan, metadata = None, None
+            if (
+                select_claims
+                and self.query_rewriter is None
+                and "rewritten_query_hash" not in data
+                and data["passages"]
+                and self.has_time(8)
+            ):
+                plan, metadata = self.dialogue.select_knowledge(job, data)
+            evidence = render_evidence(
+                data, plan, query_hash=query_hash, metadata=metadata
+            )
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, ToolError):
+            data = {
+                "corpus_id": None,
+                "corpus_version": None,
+                "corpus_hash": None,
+                "index_version": "openai-small-1536-v1",
+                "retrieval_version": "knowledge-retrieval-v1",
+                "mode": "LEXICAL",
+                "reason": "KNOWLEDGE_UNAVAILABLE",
+                "passages": [],
+            }
+            evidence = render_evidence(data, None, query_hash=query_hash)
+        self.knowledge_data = data
+        return self.validate_knowledge(job, evidence) if select_claims else evidence
+
+    def validate_knowledge(self, job, evidence):
+        try:
+            if evidence.get("corpus_id"):
+                active = self.call(
+                    job,
+                    "retrieve_knowledge",
+                    {
+                        "query": redact(job.request["content"]),
+                        "as_of": aware(job.created_at).isoformat(),
+                        "corpus_id": evidence["corpus_id"],
+                    },
+                )
+                if active.get("corpus_hash") != evidence.get("corpus_hash"):
+                    raise ValueError("deactivated corpus")
+        except (httpx.HTTPError, ValueError, ToolError, KeyError):
+            data = self.knowledge_data | {
+                "passages": [],
+                "reason": "CORPUS_UNAVAILABLE",
+            }
+            evidence = render_evidence(data, None, query_hash=evidence["query_hash"])
+        self.call(job, "get_profile", {})
+        return evidence
 
     def prune_events(self):
         with self.sessions.begin() as s:

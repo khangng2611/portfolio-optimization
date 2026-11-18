@@ -643,6 +643,15 @@
           "llm_consent": {
             "type": "boolean",
             "title": "Llm Consent"
+          },
+          "consent_version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Consent Version",
+            "default": 1
           }
         },
         "additionalProperties": false,
@@ -691,6 +700,15 @@
             "type": "boolean",
             "title": "Llm Consent",
             "default": false
+          },
+          "consent_version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Consent Version",
+            "default": 1
           }
         },
         "additionalProperties": false,
@@ -735,7 +753,8 @@
                   "portfolio",
                   "market",
                   "explain",
-                  "help"
+                  "help",
+                  "knowledge"
                 ]
               },
               {

@@ -89,3 +89,28 @@ gates and original-receipt browser verification cover the final changes.
 Final grounding check: explanation planner also receives the redacted current
 question; a schema/transport regression verifies question focus without exposing
 email/keys. No additional paid call was made for this final change.
+
+## Contextual replies — 18/11/2026
+
+The user authorized contextual OpenAI replies and a total live-test budget of
+USD 0.50. Reuse Responses transport, the existing private key, consent, the
+invocation ledger and numerical/evidence cards. Prompt chat-response-v3 produces
+a short conversational reply after the backend knows the actual response state.
+It may introduce capabilities, ask for missing fields, or direct the user to the
+source/fact card. Knowledge claims continue to use immutable approved excerpts.
+Confirmation and recommendation cards continue to render backend facts.
+
+CHAT_CONTEXTUAL_REPLIES=1 opts in. New responses and contextual intent calls
+require a fresh approval via the existing bounded budget mechanism. Purpose
+response shares the 20-call text reservation group and the global daily quota.
+It has the same per-call USD 0.0017 reservation, no retry on uncertain results,
+600-character schema limit and existing 384-output-token transport cap.
+The renderer rejects numeric claims, URLs, common PII and action receipts.
+Prompt constraints and these checks do not constitute complete semantic
+verification of arbitrary prose.
+
+Offline fixtures live in tests/fixtures/knowledge/eval-chat-context-vi-v1.jsonl.
+The live runner defaults to dry-run and creates only new eval conversations.
+It reuses a confirmed, owner-scoped portfolio without computing or accepting
+allocations. It records message hashes and actual job usage, and offers
+--verify-receipt for the same saved resources after restart.

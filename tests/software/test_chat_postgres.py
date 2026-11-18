@@ -41,6 +41,7 @@ def test_provider_budget_is_atomic_across_postgres_workers(monkeypatch):
     engine = admin.execution_options(schema_translate_map={None: schema})
     sessions = sessionmaker(engine, expire_on_commit=False)
     Base.metadata.create_all(engine)
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
     monkeypatch.setenv("CHAT_LLM_DAILY_CALL_LIMIT", "1")
     tools, calls = Tools(), []
     try:
@@ -49,14 +50,6 @@ def test_provider_budget_is_atomic_across_postgres_workers(monkeypatch):
         ) as c:
             for _ in range(4):
                 cid = conversation(c, tools.summary["id"])
-                assert (
-                    c.post(
-                        f"/api/v1/conversations/{cid}/preferences",
-                        headers=headers(),
-                        json={"llm_consent": True},
-                    ).status_code
-                    == 200
-                )
                 assert send(c, cid).status_code == 202
             jobs = [Queue(sessions).claim() for _ in range(4)]
 

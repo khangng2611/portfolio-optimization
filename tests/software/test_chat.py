@@ -60,6 +60,17 @@ class Tools:
             from chat_service.tools import ToolError
 
             raise ToolError("AUTHORIZATION_REQUIRED", permanent=True)
+        if tool == "retrieve_knowledge":
+            return {
+                "corpus_id": None,
+                "corpus_version": None,
+                "corpus_hash": None,
+                "index_version": "openai-small-1536-v1",
+                "retrieval_version": "knowledge-retrieval-v1",
+                "mode": "LEXICAL",
+                "reason": "NO_EVIDENCE",
+                "passages": [],
+            }
         if tool == "get_profile":
             return {"portfolio": self.summary}
         if tool == "get_portfolio_summary":
@@ -89,7 +100,10 @@ class Tools:
 
 
 @pytest.fixture
-def chat(tmp_path):
+def chat(tmp_path, monkeypatch):
+    # Tests which inject a provider explicitly enable it as developer config.
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
+    monkeypatch.setenv("CHAT_QUERY_EMBEDDINGS_ENABLED", "0")
     sessions = sessionmaker(
         create_engine(
             f"sqlite:///{tmp_path}/chat.db", connect_args={"check_same_thread": False}

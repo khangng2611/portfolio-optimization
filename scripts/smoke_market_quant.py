@@ -17,6 +17,8 @@ from uuid import uuid4
 
 import httpx
 
+from local_auth import service_token
+
 from portfolio_contracts import canonical_hash, utcnow
 from portfolio_core import allocate
 from quant_service.artifacts import ArtifactCatalog
@@ -29,7 +31,6 @@ from smoke_software import (
     GENERATED,
     MARKET,
     PORTFOLIO,
-    IDENTITY,
     SmokeFailure,
     login,
     request,
@@ -151,13 +152,7 @@ def main():
     parser.add_argument("--universe-id", default="VN_EQUITY_REAL")
     parser.add_argument("--verify-receipt", action="store_true")
     args = parser.parse_args()
-    accounts = json.loads((GENERATED / "accounts.json").read_text())
-    settings = dict(
-        line.split("=", 1)
-        for line in (GENERATED / ".env").read_text().splitlines()
-        if line and not line.startswith("#")
-    )
-    alice, bob = login("alice", accounts, settings), login("bob", accounts, settings)
+    alice, bob = login("alice"), login("bob")
     receipt_file = GENERATED / "market-quant-receipt.json"
     if args.verify_receipt:
         verify(json.loads(receipt_file.read_text()), alice, bob)
@@ -170,7 +165,7 @@ def main():
         "Source pack and explicit reviewer required",
     )
     manifest, imports = register_pack(args.source_directory)
-    operator = login("data-operator", accounts, settings)
+    operator = login("data-operator")
     for identity, _ in imports:
         status, job = request(
             "POST",
@@ -206,18 +201,9 @@ def main():
         f"Real snapshot failed ({status})",
     )
     with httpx.Client(timeout=15, follow_redirects=False) as client:
-        token = client.post(
-            IDENTITY,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": "quant-publisher",
-                "client_secret": settings["MARKET_READER_CLIENT_SECRET"],
-                "scope": "market:snapshot:read",
-            },
-        )
-        token.raise_for_status()
+        token = service_token("quant-publisher", "market:snapshot:read")
         source, rows = MarketReader(
-            "http://localhost:8003", token.json()["access_token"], client=client
+            "http://localhost:8003", token, client=client
         ).load(snapshot["id"], snapshot["content_hash"])
     panel = SnapshotPanel(source, rows, expected_hash=snapshot["content_hash"])
     directory = GENERATED / "bundles"

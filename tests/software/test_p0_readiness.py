@@ -55,6 +55,7 @@ def test_catalog_readiness_explains_missing_model_without_disabling_market_strat
         "valid_until",
         "demo",
         "data_origin",
+        "provenance",
         "status",
         "reason_code",
         "strategies",

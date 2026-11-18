@@ -41,7 +41,7 @@ services/chat/               Conversations, SSE, scoped tools, durable SQL worke
 packages/portfolio-core/    Numerical package cài bằng pip; không phụ thuộc root
 packages/contracts/         Wire contracts, OpenAPI và event schemas
 packages/service-auth/      Xác thực JWT/JWKS dùng chung; không có business DB
-infra/local/                Compose, bootstrap Keycloak/DB/broker, demo artifacts
+infra/local/                Compose, bootstrap Auth/DB/broker, demo artifacts
 tests/software/             API, auth, workflows và integration bằng SQLite
 scripts/                    Xuất contracts, constraints và smoke test local stack
 ```
@@ -53,10 +53,9 @@ chuyển toàn bộ Phase 1 vào một thư mục mới.
 
 ## Đã hiện thực
 
-- Keycloak realm với năm role: `investor`, `researcher`, `data-operator`,
-  `model-reviewer`, `system-admin`. BFF dùng authorization code + PKCE, state,
-  nonce; token được mã hóa trong Redis, browser giữ cookie HttpOnly. Có CSRF,
-  refresh lock, logout và khôi phục kết nối Redis.
+- Auth nội bộ hỗ trợ đăng ký và đăng nhập riêng, cấp JWT cho BFF và các service.
+  Token lưu trong Redis mã hóa, browser giữ cookie HttpOnly. Người dùng mới được
+  đưa vào wizard sau khi đăng nhập và hệ thống xác nhận chưa có danh mục.
 - Portfolio xác thực issuer/audience/signature/expiry và scope. Tất cả dữ liệu
   riêng được giới hạn theo owner lấy từ JWT; admin cũng không tự động được đọc
   danh mục của người khác. Các role dành cho quản trị dữ liệu/model đã được khai
@@ -89,15 +88,14 @@ consumer → recommendation lưu bền vững. Browser poll job rồi đọc k�
 Yêu cầu Docker Desktop có đủ dung lượng trống và đang chạy. Từ repo root:
 
 ```sh
-python3 scripts/setup_software.py up --enable-test-client
+python3 scripts/setup_software.py up
 ```
 
 Mở <http://localhost:3000>. Tài khoản local nằm trong file ignored
 `infra/local/.generated/accounts.json`; bootstrap không in password ra log và
-giữ nguyên secret khi chạy lại. `--enable-test-client` phục vụ smoke test; setup
-bật trước khi import realm mới hoặc bổ sung qua upgrade cho realm local cũ.
-Client dùng cho browser không bật password
-grant. Xem [hướng dẫn stack](../../infra/local/README.md) và
+giữ nguyên secret khi chạy lại. Người dùng tự tạo tài khoản ở /register và
+đăng nhập ở /login. Smoke test lấy JWT qua Auth nội bộ bằng Compose exec.
+Xem [hướng dẫn stack](../../infra/local/README.md) và
 [cấu hình BFF](../../apps/web/README.md).
 
 Demo chỉ có EW/MVO trên ba tài sản giả định, hết hạn sau một ngày. Muốn cập nhật
@@ -131,7 +129,7 @@ docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yam
 python3 scripts/smoke_software.py --verify-receipt
 ```
 
-Smoke test dùng JWT thật từ Keycloak, tạo một danh mục local, chạy MVO qua broker,
+Smoke test dùng JWT thật từ Auth nội bộ, tạo một danh mục local, chạy MVO qua broker,
 kiểm tra idempotency/ownership/provenance và lưu receipt không chứa token để
 kiểm tra sau restart. Script boundary kiểm tra quyền DB/broker và web password
 grant bị tắt. Workflow GitHub Actions chứa cả unit/build và local-stack gate;
@@ -142,7 +140,7 @@ workflow chưa được chạy trên GitHub trong lần thực hiện này.
 typecheck và production build; có thử Redis thật bị dừng/khởi động lại. Compose
 config hợp lệ; PostgreSQL/RabbitMQ/Redis từng healthy, nhưng Docker sau đó lỗi
 `overlay2`/BuildKit I/O do ổ dữ liệu host đầy (còn khoảng 220 MiB lúc lỗi). Do đó **chưa
-xác nhận toàn bộ luồng Keycloak → BFF → PostgreSQL/RabbitMQ bằng stack thật**,
+xác nhận toàn bộ luồng Auth → BFF → PostgreSQL/RabbitMQ bằng stack thật**,
 chưa xác nhận migration/quyền runtime của tất cả service bằng PostgreSQL thật.
 Cần giải phóng dung lượng, khởi động lại Docker bình thường và chạy các lệnh
 integration trên; không cần factory reset hoặc xóa volumes.
@@ -157,3 +155,11 @@ publication jobs bền vững; hướng dẫn worker nằm trong
 Còn ledger/PAPER/rebalance, Research API và Knowledge RAG.
 Serving/core parity cùng input không chứng minh parity với toàn bộ pipeline
 `ranking_absolute` của Phase 1 hoặc hiệu quả đầu tư.
+
+## Knowledge/RAG lexical MVP
+
+The Knowledge owner service has its own PostgreSQL/pgvector cluster, curated PUBLIC
+Markdown corpus, operator CLI, and read-only Chat integration with immutable
+sources and explicit consent v2. New paid calls default to zero budget. See the
+[Knowledge runbook](KNOWLEDGE_RAG.md) for setup, lifecycle, separate eval layers,
+receipt verification, paid dry-run and current release limits.

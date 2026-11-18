@@ -1,0 +1,6 @@
+# Public HTTPS is terminated by tailscaled on the VPS; Docker stays loopback-only.
+services:
+  web:
+    environment:
+      APP_ORIGIN: ${DEMO_PUBLIC_ORIGIN:?Set the HTTPS Tailscale Funnel origin}
+      # Internal Auth still uses HTTP; secure cookies follow the HTTPS APP_ORIGIN.

@@ -8,11 +8,11 @@ application messages or alter application records.
 
 from __future__ import annotations
 
-import base64
 import json
 from pathlib import Path
 import re
 import secrets
+import sys
 
 from amqp.exceptions import AccessRefused
 from kombu import Connection
@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def verify_databases(values: dict[str, str]) -> None:
-    for service in ("portfolio", "quant", "identity", "market", "ml", "chat"):
+    for service in ("portfolio", "quant", "auth", "market", "ml", "chat"):
 
         def connect(kind: str, database: str | None = None):
             return psycopg.connect(
@@ -91,7 +91,7 @@ def verify_databases(values: dict[str, str]) -> None:
             for other in (
                 "portfolio_db",
                 "quant_db",
-                "identity_db",
+                "auth_db",
                 "market_db",
                 "ml_db",
                 "chat_db",
@@ -259,151 +259,40 @@ def verify_broker(values: dict[str, str]) -> None:
     )
 
 
-def verify_identity(values: dict[str, str]) -> None:
-    accounts = json.loads((ROOT / ".generated" / "accounts.json").read_text())["users"]
-    alice = next(account for account in accounts if account["username"] == "alice")
-    issuer = "http://localhost:8080/realms/portfolio"
-    with httpx.Client(timeout=10) as client:
-        response = client.get(issuer + "/.well-known/openid-configuration")
-        response.raise_for_status()
-        assert response.json()["issuer"] == issuer
-        response = client.post(
-            issuer + "/protocol/openid-connect/token",
-            data={
-                "grant_type": "password",
-                "client_id": "portfolio-web",
-                "client_secret": values["OIDC_CLIENT_SECRET"],
-                "username": alice["username"],
-                "password": alice["password"],
-                "scope": "openid",
-            },
-        )
-        assert (
-            response.status_code == 400
-            and response.json().get("error") == "unauthorized_client"
-        ), "Normal web client's password grant must be disabled"
-        settings = json.loads((ROOT / ".generated/settings.json").read_text())
-        if settings["test_client"]:
-            operator = next(
-                account for account in accounts if "data-operator" in account["roles"]
-            )
-            response = client.post(
-                issuer + "/protocol/openid-connect/token",
-                data={
-                    "grant_type": "password",
-                    "client_id": "portfolio-test",
-                    "client_secret": values["TEST_CLIENT_SECRET"],
-                    "username": operator["username"],
-                    "password": operator["password"],
-                    "scope": "openid market:read market:write chat:read chat:write",
-                },
-            )
-            response.raise_for_status()
-            # Claims come directly from the issuer; the smoke API separately
-            # verifies JWT signature/issuer/audience. Never print the token.
-            segment = response.json()["access_token"].split(".")[1]
-            claims = json.loads(
-                base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
-            )
-            audiences = claims.get("aud", [])
-            if isinstance(audiences, str):
-                audiences = [audiences]
-            assert "market-api" in audiences, "Test client lacks Market audience"
-            assert "chat-api" in audiences, "Test client lacks Chat audience"
-            assert {"market:read", "market:write"} <= set(
-                claims.get("scope", "").split()
-            ), "Test client lacks Market scopes"
-            assert {"chat:read", "chat:write"} <= set(
-                claims.get("scope", "").split()
-            ), "Test client lacks Chat scopes"
-            assert "data-operator" in claims.get("realm_access", {}).get("roles", []), (
-                "Test identity lacks operator role"
-            )
+def verify_identity() -> None:
+    sys.path.insert(0, str(ROOT.parents[1] / "scripts"))
+    from local_auth import auth_request, claims, login, service_token
 
-        def machine_claims(client_id: str, secret_name: str) -> tuple[dict, str]:
-            response = client.post(
-                issuer + "/protocol/openid-connect/token",
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": values[secret_name],
-                },
-            )
-            response.raise_for_status()
-            token = response.json()["access_token"]
-            segment = token.split(".")[1]
-            claims = json.loads(
-                base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
-            )
-            assert not set(claims.get("realm_access", {}).get("roles", [])) & {
-                "investor",
-                "researcher",
-                "data-operator",
-                "model-reviewer",
-                "system-admin",
-            }, "Machine identity has a human role"
-            return claims, token
-
-        claims, _ = machine_claims("chat-service", "CHAT_CLIENT_SECRET")
-        audience = claims.get("aud", [])
-        if isinstance(audience, str):
-            audience = [audience]
-        assert {"portfolio-api", "market-api"} <= set(audience), (
-            "Chat machine audiences missing"
-        )
-        assert set(claims.get("scope", "").split()) == {
-            "chat:delegate",
-            "market:chat:read",
-        }, "Chat machine scopes exceed its tool boundary"
-        claims, token = machine_claims(
-            "portfolio-account-reader", "PORTFOLIO_ACCOUNT_READER_SECRET"
-        )
-        reader_roles = set(
-            claims.get("resource_access", {})
-            .get("realm-management", {})
-            .get("roles", [])
-        )
-        # Keycloak's built-in view-users composite expands to these read-only
-        # query roles in access tokens; no manage/impersonation role is allowed.
-        assert "view-users" in reader_roles and reader_roles <= {
-            "view-users",
-            "query-users",
-            "query-groups",
-        }, "Account reader must have only view-users and read-only composites"
-        headers = {"Authorization": "Bearer " + token}
-        admin = "http://localhost:8080/admin/realms/portfolio"
-        response = client.get(
-            admin + "/users",
-            headers=headers,
-            params={"username": alice["username"], "exact": "true"},
-        )
-        response.raise_for_status()
-        users = response.json()
-        assert len(users) == 1, "Expected one local owner identity"
-        subject = users[0]["id"]
-        response = client.get(admin + "/users/" + subject, headers=headers)
-        response.raise_for_status()
-        assert response.json()["enabled"], "Local owner account is disabled"
-        response = client.get(
-            admin + "/users/" + subject + "/role-mappings/realm/composite",
-            headers=headers,
-        )
-        response.raise_for_status()
-        assert set(alice["roles"]) <= {role["name"] for role in response.json()}, (
-            "Account reader cannot read owner role mappings"
-        )
-    print(
-        "PASS: public OIDC issuer, normal web grant denial, Chat machine boundary and read-only owner identity checks"
-        + (
-            "; enabled test-client Market/Chat claims"
-            if settings["test_client"]
-            else ""
-        )
-    )
+    alice = claims(login("alice"))
+    operator = claims(login("data-operator"))
+    assert alice["iss"] == operator["iss"] == "http://auth-api:8000"
+    assert alice["realm_access"]["roles"] == ["investor"]
+    assert "market:write" not in alice["scope"].split()
+    assert "data-operator" in operator["realm_access"]["roles"]
+    assert {"market-api", "chat-api", "knowledge-api"} <= set(operator["aud"])
+    assert {"market:write", "chat:write", "knowledge:write"} <= set(operator["scope"].split())
+    for client_id, policy in {
+        "portfolio-service": {"quant:resolve": "quant-api"},
+        "quant-publisher": {"market:snapshot:read": "market-api"},
+        "ml-worker": {"market:snapshot:read": "market-api"},
+        "quant-ml-reader": {"ml:model:read": "ml-api"},
+        "chat-service": {
+            "chat:delegate": "portfolio-api",
+            "market:chat:read": "market-api",
+            "knowledge:retrieve": "knowledge-api",
+        },
+    }.items():
+        machine = claims(service_token(client_id))
+        assert machine["azp"] == client_id
+        assert set(machine["scope"].split()) == set(policy)
+        assert set(machine["aud"]) == set(policy.values())
+        assert machine["realm_access"]["roles"] == []
+    assert auth_request("account", {"subject": alice["sub"]}) == [200, {"active": True}]
+    print("PASS: Auth user roles, scoped service audiences and private account status")
 
 
 if __name__ == "__main__":
     credentials = json.loads((ROOT / ".generated" / "secrets.json").read_text())
     verify_databases(credentials)
     verify_broker(credentials)
-    verify_identity(credentials)
+    verify_identity()

@@ -1,6 +1,6 @@
 """Real localhost delegation authorization gate, separate from Chat lifecycle receipts.
 
-Requires E2E_DISPOSABLE_STACK=1. Uses actual Keycloak JWTs and owner APIs only.
+Requires E2E_DISPOSABLE_STACK=1. Uses actual Auth JWTs and owner APIs only.
 Creates Bob-owned disposable portfolios and one allocation intent; never accepts a
 recommendation. Bob's enabled state is restored in finally. Credentials and opaque
 grants remain in memory; this script writes no receipts or other files. The actual
@@ -18,13 +18,12 @@ from uuid import uuid4
 
 import httpx
 
+from local_auth import auth_request, claims, login, service_token
+
 from smoke_chat import select_real_universe
 
 GENERATED = Path(__file__).resolve().parents[1] / "infra/local/.generated"
 PORTFOLIO = "http://localhost:8001"
-IDENTITY = "http://localhost:8080"
-TOKEN = IDENTITY + "/realms/portfolio/protocol/openid-connect/token"
-ADMIN = IDENTITY + "/admin/realms/portfolio"
 ANSWERS = {
     "questionnaire_version": "risk-v1",
     "horizon_months": 60,
@@ -75,40 +74,25 @@ def select_expired_real(catalog):
 
 
 @contextmanager
-def temporarily_disabled(admin, subject):
-    path = "/users/" + subject
-    status, user = admin("GET", path)
-    require(
-        status == 200 and isinstance(user.get("enabled"), bool),
-        "Cannot read Bob's original enabled state.",
-    )
-    original = user["enabled"]
+def temporarily_disabled(auth, subject):
+    account = {"subject": subject}
+    status, user = auth("account", account)
+    require(status == 200 and user.get("active") is True, "Bob is not active.")
     try:
-        status, _ = admin("PUT", path, {"enabled": False})
-        require(
-            status == 204,
-            "Cannot temporarily disable Bob for the active-account probe.",
-        )
+        status, _ = auth("set-enabled", {**account, "enabled": False})
+        require(status == 204, "Cannot temporarily disable Bob.")
         yield
     finally:
-        status, _ = admin("PUT", path, {"enabled": original})
-        require(
-            status == 204,
-            "Bob enabled-state restoration failed; restore Bob before further tests.",
-        )
-        status, user = admin("GET", path)
-        require(
-            status == 200 and user.get("enabled") == original,
-            "Bob enabled-state restoration could not be verified.",
-        )
+        status, _ = auth("set-enabled", {**account, "enabled": True})
+        require(status == 204, "Bob enabled-state restoration failed.")
+        status, user = auth("account", account)
+        require(status == 200 and user.get("active") is True, "Bob restoration could not be verified.")
 
 
 class Gate:
     def __init__(self, client):
         self.client = client
         self.deadline = time.monotonic() + 360
-        self.values = json.loads((GENERATED / "secrets.json").read_text())
-        self.accounts = json.loads((GENERATED / "accounts.json").read_text())["users"]
         self.cached = {}
         self.checks = []
         self.statuses = Counter()
@@ -157,68 +141,12 @@ class Gate:
         self.checks.append(label)
         return value
 
-    def login(self, username):
-        user = next(
-            (user for user in self.accounts if user["username"] == username), None
-        )
-        require(user is not None, "Required existing local test account is missing.")
-        status, data = self.request(
-            "POST",
-            TOKEN,
-            form={
-                "grant_type": "password",
-                "client_id": "portfolio-test",
-                "client_secret": self.values["TEST_CLIENT_SECRET"],
-                "username": username,
-                "password": user["password"],
-                "scope": "openid portfolio:read portfolio:write chat:read chat:write",
-            },
-        )
-        require(
-            status == 200 and data.get("access_token"),
-            "Existing local test-client login failed.",
-        )
-        return data["access_token"]
-
     def machine(self):
-        return self.cached_token(
-            "chat",
-            TOKEN,
-            {
-                "grant_type": "client_credentials",
-                "client_id": "chat-service",
-                "client_secret": self.values["CHAT_CLIENT_SECRET"],
-                "scope": "chat:delegate market:chat:read",
-            },
-        )
-
-    def cached_token(self, name, url, form):
-        token, until = self.cached.get(name, (None, 0))
+        token, until = self.cached.get("chat", (None, 0))
         if until <= time.monotonic():
-            status, data = self.request("POST", url, form=form, cleanup=name == "admin")
-            require(
-                status == 200 and data.get("access_token"),
-                "Existing local machine/admin identity login failed.",
-            )
-            token = data["access_token"]
-            self.cached[name] = (
-                token,
-                time.monotonic() + max(0, data["expires_in"] - 30),
-            )
+            token = service_token("chat-service", "chat:delegate market:chat:read")
+            self.cached["chat"] = token, time.monotonic() + 270
         return token
-
-    def admin(self, method, path, body=None):
-        token = self.cached_token(
-            "admin",
-            IDENTITY + "/realms/master/protocol/openid-connect/token",
-            {
-                "grant_type": "password",
-                "client_id": "admin-cli",
-                "username": "local-admin",
-                "password": self.values["KEYCLOAK_ADMIN_PASSWORD"],
-            },
-        )
-        return self.request(method, ADMIN + path, token=token, body=body, cleanup=True)
 
     def onboard(self, token, universe, suffix):
         value = self.expect(
@@ -293,7 +221,7 @@ class Gate:
         }
 
     def run(self):
-        bob, other = self.login("bob"), self.login("researcher")
+        bob, other = login("bob"), login("researcher")
         catalog = self.expect(
             "owner_readiness_catalog",
             200,
@@ -492,12 +420,7 @@ class Gate:
             not rejected.get("job_id"),
             "Expired input unexpectedly returned an accepted allocation.",
         )
-        status, users = self.admin("GET", "/users?username=bob&exact=true")
-        require(
-            status == 200 and len(users) == 1,
-            "Could not locate exactly one existing Bob identity.",
-        )
-        with temporarily_disabled(self.admin, users[0]["id"]):
+        with temporarily_disabled(auth_request, claims(bob)["sub"]):
             self.expect("disabled_owner_rejected", 403, self.invoke(grant))
         self.expect("restored_owner_allowed", 200, self.invoke(grant))
         self.expect(

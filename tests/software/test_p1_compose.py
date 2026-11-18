@@ -51,7 +51,6 @@ def test_ml_owner_has_separate_database_and_single_artifact_writer():
     assert "ML_API_URL: http://ml-api:8000" in source
     assert "ML_READER_CLIENT_SECRET" in source
     assert "ML_API_URL: http://ml-api:8000" in service("web")
-    assert "ml:read ml:train ml:review" in service("web")
 
 
 def test_quant_model_resolver_has_client_credentials_token_endpoint():
@@ -60,6 +59,18 @@ def test_quant_model_resolver_has_client_credentials_token_endpoint():
         "x-market-environment:", 1
     )[0]
     assert (
-        "OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token"
+        "OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token"
         in quant_environment
     )
+
+
+def test_auth_is_private_and_web_depends_on_ready_seeded_auth():
+    auth = service("auth-api")
+    migration = service("auth-migrate")
+    assert "auth_runtime:" in auth and "/auth_db" in auth
+    assert "auth_migrator:" in migration and "/auth_db" in migration
+    assert "auth-migrate: {condition: service_completed_successfully}" in auth
+    assert "ports:" not in auth
+    assert "AUTH_SIGNING_KEY_B64:" in auth and "AUTH_SIGNING_KEY_B64:" not in service("web")
+    assert "auth-api: {condition: service_healthy}" in service("web")
+    assert "keycloak:" not in (Path(__file__).resolve().parents[2] / "infra/local/compose.yaml").read_text()

@@ -476,3 +476,31 @@ def test_swagger_advertises_bearer_authorize(market):
         {"HTTPBearer": []}
     ]
     assert not schema["paths"]["/health/live"]["get"].get("security")
+
+
+def test_refreshed_csv_uses_new_registry_pin_without_rebinding_old_dataset(market):
+    client, sessions, provider, directory = market
+    old_date = (utcnow() - timedelta(days=2)).date()
+    old_content = f'date,price,symbol\n{old_date},12.5,AAA\n'
+    (directory / 'stock.csv').write_text(old_content)
+    registry = json.loads((directory / 'catalog.json').read_text())
+    registry['DEMO_STOCK']['sha256'] = hashlib.sha256(old_content.encode()).hexdigest()
+    (directory / 'catalog.json').write_text(json.dumps(registry))
+    submit(market)
+    old_pin = dict(registry['DEMO_STOCK'])
+    current = f'date,price,symbol\n{utcnow().date()},13,AAA\n'
+    (directory / 'current.csv').write_text(current)
+    spec = old_pin | {'path': 'current.csv', 'sha256': hashlib.sha256(current.encode()).hexdigest()}
+    key = 'DEMO_STOCK_' + spec['sha256'][:32].upper()
+    registry.update(DEMO_STOCK=spec)
+    registry[key] = spec
+    (directory / 'catalog.json').write_text(json.dumps(registry))
+    submit(market)  # The legacy registry ID intentionally stays pinned to the old CSV.
+    assert client.post('/api/v1/market/snapshots', json=snapshot_body(), headers=headers()).status_code == 409
+    submit(market, {'dataset_id': key})
+    fresh = client.post('/api/v1/market/snapshots', json=snapshot_body(), headers=headers())
+    assert fresh.status_code == 201
+    from market_service.models import RegisteredDataset
+    with sessions() as session:
+        assert session.get(RegisteredDataset, 'DEMO_STOCK').spec == old_pin
+        assert session.get(RegisteredDataset, key).spec == spec

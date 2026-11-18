@@ -106,7 +106,7 @@ def test_legacy_command_hash_is_stable_when_context_is_absent():
     # Normalize timestamps and numerical types exactly like the original command contract.
     normalized = OptimizeCommand.model_validate(
         old | {"input_hash": "0" * 64}
-    ).model_dump(mode="json", exclude={"input_hash", "decision_context"})
+    ).model_dump(mode="json", exclude={"input_hash", "decision_context", "selection_context"})
     normalized["inputs"].pop("provenance", None)  # Absent in the legacy wire contract.
     hashed = canonical_hash(normalized)
     assert (

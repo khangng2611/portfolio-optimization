@@ -1,5 +1,425 @@
 # Tiến độ software app
 
+Cập nhật cấu hình dev 18/11/2026 theo yêu cầu mới nhất. Budget hiện tại 1,00 USD,
+quota 100 lượt/approval và 100 lượt/ngày UTC. Giữ approval ID và usage đã ghi nhận,
+không reset bộ đếm. Các mức 0,50 USD và quota thấp hơn bên dưới là lịch sử kiểm thử.
+
+## Giải thích đề xuất nối tiếp — 18/11/2026
+
+Đã tái hiện hai câu trong ảnh rơi về input_required/help khi quota nhóm hiện tại
+đạt 20 calls. Tham chiếu đề xuất trước đây chỉ được gắn từ LLM intent plan và
+bị giới hạn trong 4 tin nhắn. Backend nay tự tìm recommendation card gần nhất
+trong đúng owner/conversation/portfolio và trước thời điểm câu hỏi hiện tại.
+ID đã chọn rõ ràng vẫn ưu tiên. Lịch sử gửi cho LLM vẫn tối đa 4 tin; chỉ giữ
+tham chiếu nội bộ và cờ has_recommendation. Câu hỏi giải thích rõ ràng bỏ qua paid
+intent. “Đề xuất nào?” và “Vì sao phân bổ như vậy?” vào luồng giải thích.
+
+Phần giải thích mở sẵn khi được yêu cầu, vẫn đối chiếu canonical facts. Request
+không có kết quả phù hợp hỏi mở kết quả hoặc chuẩn bị đề xuất, không trả menu
+chung. Thêm CHAT_LLM_APPROVAL_CALL_LIMIT (mặc định 20, chặn khi không hợp lệ,
+trần 100). Demo dùng 40 calls/approval, 60 calls/ngày trong budget 0,50 USD đã
+phê duyệt. Reservation tiền và kiểm tra owner/grant vẫn giữ hiệu lực.
+
+Offline Chat/Knowledge regression 156 passed, 4 opt-in skips. Các test bổ sung
+về quota lỗi và fallback khi hết quota đã chạy cùng bộ test tham chiếu/managed
+policy, 20 passed. Web 151 tests và TypeScript đạt. Build Chat/Web đạt.
+Luồng thật đọc một recommendation có sẵn, tạo hội thoại thử riêng và đi qua
+năm turns. Sau hai turns xen giữa, cả hai câu trong ảnh đều trả đúng ID và
+canonical facts/hash, không có allocation mới. Có thêm truy xuất kiến thức theo strategy trong canonical facts và đưa đúng
+các đoạn đã cite vào phần giải thích sau khi recheck corpus/quyền. Bản bổ sung
+đạt 161 backend tests, 4 opt-in skips. Hai lượt smoke tổng 10 turns dùng 10
+provider calls, chi phí ước tính 0.001540250 USD trong budget 0,50 USD đã duyệt.
+Receipt ở ignored output/knowledge-rag/followup-receipt.json và
+followup-grounded-receipt.json. Chi tiết script/runbook ở KNOWLEDGE_RAG.md. Sau restart
+thật Chat API/worker/Web, cả hai receipt mới và 14 receipt cũ đều khớp, usage
+không tăng. Browser desktop/mobile mở sẵn phần giải thích từ đúng receipt sau
+restart.
+
+## Point-in-time audit model v5 — 18/11/2026
+
+Đã audit read-only model70716105-ef74-4203-bfa6-9657f756e0b6 và đúng receipt
+BL_ML f1a6761b-01da-42be-8258-2ecdf1eb3242. Chi tiết và lệnh chạy ở
+[POINT_IN_TIME_AUDIT.md](POINT_IN_TIME_AUDIT.md). Không train/approve/publish
+lại hoặc đổi model/result/point_in_time_certified; cờ vẫn false.
+
+Hai snapshot training v1/serving v2, mỗi snapshot54.325observation, khớp Market
+ledger qua transaction READ ONLY. Không thấy revision/quality đã ghim có
+timestamp sau snapshot hoặc decision thật. 99normalized CSV,64metadata sidecar
+và120raw references kiểm hash đạt. 35job thiếu sidecar riêng nhưng32job còn
+legacy provenance;3job thiếu fetch receipt. Ledger chỉ revision1, published_at
+trống cho toàn54.325observations; không chứng minh provider chưa từng sửa giá
+trước first-seen. Historical publication/vintages vẫn NOT_EVIDENCED.
+
+Training prefix1.700phiên×30equity có51.000ô:50.963observation nguồn và37carry
+theo missing-session declarations. Toàn dependency biết trước epoch16/11 và
+trước train thật. Toàn snapshot có96observation first-seen sau epoch, nhưng
+ngoài prefix06/11. Model/snapshot artifacts thực sự tạo18/11; không coi chúng
+đã sẵn sàng16/11. Chronology thật train/approve/publish/decision18/11 đạt.
+Adjustment factors, universe/calendar/tradability chưa kiểm chứng. MAE/RMSE
+dùng cùng validation fold với early stopping; chưa phải independent test.
+
+Thêm CLI scripts/audit_model_point_in_time.py và16regression: future revision,
+features/labels/hash, scaler validation/purge, K5/features/covariance future
+tail, model tương lai và artifact bị thay. Audit logic có red/green; legacy raw
+adapter sửa bằng regression, không sửa dữ liệu. Native boundary được inject
+trong unit tests liên quan. Full source cuối861Python/core passed,6skipped;
+Ruff/diff đạt. Lượt đầu843passed; một lượt giữa có1failure ở test Chat
+test_requested_explanation_uses_method_from_canonical_facts_and_cited_passage
+đang cập nhật đồng thời, isolated/full chạy lại trên source hiện tại đã đạt;
+giữ log và không sửa Chat trong audit này. Browser/RAG eval/backtest/forward
+test not run trong audit này.
+
+Original BL_ML và training/review/publication/model receipts kiểm lại đạt;
+model/result mục tiêu nguyên vẹn. Preservation tổng quát FAIL riêng bảng
+portfolio: log ghi nhận accept200 lúc16:03:09 UTC+7 cho recommendationfafbc9fc
+trên portfolio khác (c7a7d035...), cùng accepted_target mới sau capture. Audit
+không gọi accept, không xác định actor từ log, không rollback/thay baseline.
+Các bảng khác, file hashes, volumes/catalog history đạt. Không đánh dấu toàn bộ
+preservation PASS. Giữ nguyên các thay đổi Chat/UI đồng thời trong workspace.
+
+Evidence ngoài Git: output/point-in-time-v5/report.json, market-evidence.json.gz,
+verification.json và preservation-diagnostic.json. Chưa commit/push/merge,
+sửa Google Sheet hoặc bật certification flag.
+
+## BL_ML v5 epoch16/11 — 18/11/2026, positive gate đạt
+
+User đã duyệt huấn luyện/review model và cho phép provider trong trần tổng
+0,50USD đã cấp. Train qua operator HTTP API/ML SQL queue/worker hiện tại,
+job3a002f05-cf29-4406-8653-75e04b23bd68 SUCCEEDED sau1attempt, epoch16/11,
+training_cutoff06/11, đủ30equity/150native members. Dùng snapshot v1
+6aa157bf-aa7d-4b71-bd24-d3d0717ccd21; toàn prefix1700giá/30equity, calendar,
+validity mask và từng training-prefix hash khớp chính xác snapshot live v2
+8c2dc496-7d83-4cb2-bc3f-aee78732ee73. Không giả hai snapshot cùng ID/hash,
+không cần thay NAV policy hoặc rebuild ML worker để train equity.
+
+Model70716105-ef74-4203-bfa6-9657f756e0b6 được kiểm native hashes/load,
+runtime/source code hashes, seeds/best_iteration, coverage và chronological
+80/20 validation/purge5labels. 39.810 train rows, 10.020 validation rows;
+train_label_end30/06/2025 < validation_start01/07/2025; MAE0.0378128444,
+RMSE0.0535328016 cho return5phiên. Vẫn point_in_time_certified=false;
+đây là operational acceptance, không chứng nhận hiệu quả backtest/đầu tư.
+
+Reviewer dùng identity model-reviewer riêng, API If-Match version1 và
+Idempotency-Key; retry giữ đúng review ID/version2. Đã đợi APPROVED và
+artifact_ready=true. Approved manifest hash
+d511678a0626d8a749b4e4dbd36cc58114702212fa9ba171d180403ecd1cca89;
+payload candidate ngoài status/approval metadata nguyên vẹn. Quant resolver
+kiểm production input-prefix cả30asset đạt trước publication. Bundle mới
+e7587ecf33fe46c7aff88770b2a4d47d51fa90e71d875e8e233c57f4e880e92d
+ghim approved model và snapshot live v2, publication SUCCEEDED qua worker.
+
+**BL_ML thật PASS**: danh mục kiểm thử riêng10candidate (8equity+GOLD/VFF),
+Chat hiển thị canonical input và nhận confirmation, Portfolio/RabbitMQ/Quant
+chạy native inference/CLARABEL. K5 chọn CTG,DGC,FPT,GAS,GVR, active thêm GOLD/
+VFF; GOLD có trọng số0, 6tài sản có trọng số dương. Strategy/requested_strategy
+đều BL_ML, fallback_reason=null, sum/bounds/defensive đạt (VFF khoảng30%).
+Recommendationf1a6761b-01da-42be-8258-2ecdf1eb3242; facts hash
+cb8735214a29ffd1c2328a695aca2e25a19d2da75bda7328b4aba6613b16953f
+khớp Chat/Portfolio. Inference pin đúng model7071/manifestd511 và epoch16/11.
+Chỉ lưu đề xuất, không accept target.
+
+OpenAI explanation VERIFIED: đúng1call, 688input/107output tokens, estimate
+0,0001395USD; tracked project estimate sau lượt này0,002791625USD, dưới0,50USD.
+Đây là ước tính ledger, không phải hóa đơn provider. Không gọi embedding/hybrid
+mới hoặc đổi Auto Recharge. Provider usage nằm trong chính receipt Chat.
+
+Đã restart ML API/worker, Quant API/publication/consume/dispatch, Portfolio
+API/consume/dispatch, Chat API/worker và Web. Verify **chính** receipt BL_ML mới
+đạt facts/hash/messages/usage/portfolio unchanged; không gửi luồng thay thế.
+Training/review/publication receipts, approved manifest hash/150native members,
+30prefix, receipt MVO cũ và publication bị từ chối cũ đều khớp sau restart.
+Preservation receipt xác nhận rows/models/artifacts/accounts/volumes/catalog
+cũ nguyên vẹn. Browser desktop1440/mobile390 đọc cùng đề xuất trước/sau restart
+đạt, không tạo job khác. 827 Python/core tests passed, 6 skipped; 8harness tests
+mới có red/green, Ruff/diff check đạt. Không đổi API runtime/migration/thuật toán;
+script smoke thêm --strategy BL_ML và guard không fallback/native pins; receipt
+MVO cũ vẫn verify được. RAG eval/research backtest/web build not run đợt này.
+
+Runbook có request train/review/publication và lệnh smoke/verify. Evidence ngoài
+Git: output/bl-ml-epoch-20261116/report.json, chat-flow-receipt.json,
+pipeline-receipt.json, audit/log/screenshot cùng thư mục. Chưa commit/push/merge
+hoặc sửa Google Sheet; trạng thái gate dưới đây là mốc kiểm tra trước khi train.
+
+## BL_ML live acceptance — 18/11/2026, blocked bởi model epoch
+
+Đã đọc toàn registry thật: đúng3 model, đều APPROVED/artifact_ready. Qua ML
+service resolver thật, manifest/native hashes và XGBoost load đều đạt. Model
+schema5 duy nhất `34fc4b8d-debe-4986-ab2a-e18b60e1e5f3` phủ30equity/150member,
+manifest hash09115d2210636e4b92c2626b0b1d159f82ef7444d4a9a1b679ab107e2942e143.
+Model fit_epoch02/11, training_cutoff23/10. Panel hiện tại decision17/11 yêu cầu
+fit_epoch16/11, training price end06/11; production check trả
+MODEL_EPOCH_MISMATCH. FPT training-prefix hash cũng khác. Model schema4
+81449d2a-2e38-4e01-b695-cdac4a4bbb57 và schema3
+47f3981b-268f-44c7-b508-c5458ee90331 không dùng cho selected schema5.
+Không có CANDIDATE khác hoặc model đã duyệt phù hợp trong registry lúc kiểm tra.
+
+Đã probe publication qua operator HTTP API/SQL queue/worker thật, dùng current
+live snapshot và model v5 APPROVED cũ. Job6a9a1884-8114-450b-a1dc-93e82b1ebdb1
+bị FAILED/PUBLICATION_INVALID sau1attempt; compatibility audit chỉ rõ epoch
+không khớp. Không tạo bundle mới hoặc đổi con trỏ publication hiện tại.
+Bundle live b2a2d5c87dfa5d6d129f9341b3a6b641274d8a38a662936dc8b5ffc4e9d77946
+giữ nguyên; EW/MVO READY, BL_ML MODEL_UNAVAILABLE vì chưa gắn model tương thích.
+
+Sau restart Quant API/publication worker, đúng job/hash từ chối vẫn khớp.
+Receipt đề xuất MVO cũ vẫn khớp nguyên IDs/facts/messages/usage; preservation
+receipt xác nhận rows/models/artifacts/accounts/volumes/catalog giữ nguyên.
+5 offline readiness/publication/worker gate tests đạt. Không đổi runtime code,
+train/review model, chỉnh epoch, lùi clock hoặc gọi provider trả phí (0 USD).
+
+**Chưa đạt positive BL_ML gate:** chưa chạy native inference/Chat allocation
+BL_ML, chưa có receipt đề xuất BL_ML mới để verify sau restart; browser/eval
+not run. Receipt publication thất bại chỉ là negative gate, không thay thế
+receipt allocation. Cần model schema5 APPROVED đúng epoch16/11 và matching
+training-prefix/coverage trước khi tiếp tục; không tự huấn luyện trong phạm vi
+user đang cấm train. Evidence ngoài Git: output/bl-ml-live/report.json và
+publication-receipt.json. Runbook ghi preflight và tiêu chí acceptance cần chạy.
+Chưa commit/push/merge hoặc sửa Google Sheet.
+
+## NAV live v2 — 18/11/2026
+
+User duyệt tách policy live khỏi buffer baseline. Snapshot selected mới dùng
+`user-selection-live-nav-v2`: NAV VFF source/identity/hash đã được Market xác
+minh, quality PASS và first-seen thật được dùng sau snapshot verification,
+không chờ thêm 5 phiên. Tuổi vẫn tính từ ngày NAV tại Việt Nam, <=7 ngày.
+Chỉ dùng ngày định giá không vượt phiên hoàn tất 18:00 mới nhất. NAV history
+cho thống kê live căn theo valuation date; không chứng nhận publication ở quá
+khứ và không dùng thay baseline backtest. GOLD/equity không đổi.
+
+Snapshot/bundle cũ và selected v1/schema2 vẫn đọc theo policy cũ. Version mới
+được pin qua snapshot/hash, bundle provenance, command SelectionContext và
+selection hash; worker từ chối policy khác panel. OpenAPI Quant, event command
+và schema context mở rộng enum, giữ default v1 cho command cũ. Không migration,
+backfill, đổi thuật toán hay sửa numerical result/TTL/hash cũ.
+
+TDD: đã quan sát tests live-policy và command-pin thất bại trước implementation.
+Regression phủ NAV latest, verification time/first-seen, input tương lai,
+quality/product identity, ngày 7/8, cutoff 18:00, reload immutable panel,
+v1 còn lag, equity/GOLD không đổi và command-policy mismatch. 819 Python/core
+tests passed, 6 skipped; focused cuối 20 passed/1 skipped. Ruff, contract export,
+build ba backend image và diff check đạt. Fixture selected-source dùng ngày
+Việt Nam hiện tại khi đọc rows vừa ingest, giữ nguyên ngày nguồn frozen và
+test backdated cutoff; không nới business clock để làm test xanh.
+
+**Backend thật PASS** qua Auth/JWT, PostgreSQL, publication worker, Chat review/
+confirmation, Portfolio, RabbitMQ và Quant. Snapshot
+8c2dc496-7d83-4cb2-bc3f-aee78732ee73, bundle hash
+b2a2d5c87dfa5d6d129f9341b3a6b641274d8a38a662936dc8b5ffc4e9d77946.
+VFF đủ điều kiện là NAV 17/11, tuổi 1 ngày; EW/MVO READY. MVO cho danh mục
+kiểm thử FPT/VFF trả optimal bằng CLARABEL, 50/50, đạt sum/bounds/defensive.
+Recommendation 829f5c78-fcda-41e5-99fd-6266ff25dead, canonical facts hash
+196d415260d144b266435bc7033cf607179eba43a8d2f67a8c280cafb71ce09b
+khớp Chat/Portfolio. Chỉ lưu đề xuất, không accept target.
+
+Đã restart Portfolio/Quant API/workers, Market API, Chat API/worker và Web;
+verify chính receipt mới và receipt stale cũ đạt, không gửi luồng thay thế.
+Preservation receipt xác nhận rows, artifacts, accounts, volumes/catalog cũ
+nguyên vẹn. Browser chỉ mở cùng đề xuất đã lưu, desktop1440/mobile390 đạt.
+Provider tạm tắt khi test, usage rỗng/chi phí mới 0; đã khôi phục config dev
+LLM bật, query embeddings tắt. BL_ML not run (MODEL_UNAVAILABLE, bundle không
+ghim model); RAG eval not run vì không đổi truy xuất/LLM trong đợt này.
+
+Lần readiness đầu bị INPUT_UNAVAILABLE do recreate thiếu override cờ selection;
+đã khôi phục override local cũ trước khi chạy gate đạt. Runbook ghi rõ overlay
+để tránh mất cờ khi recreate. Evidence ngoài Git: output/live-nav-policy/report.json,
+receipt/log/screenshot cùng thư mục. Chưa commit/push/merge hoặc sửa Google Sheet.
+
+## Làm mới đầu vào và lỗi Chat — 18/11/2026
+
+Đã refresh nguồn thật cho 32 tài sản, toàn bộ AVAILABLE/PASS, cutoff phiên hoàn
+tất 17/11. Snapshot mới 6aa157bf-aa7d-4b71-bd24-d3d0717ccd21, 54.325 observations,
+hash b058ab86a698027154cd6e62386c81354f4f52e9194dbaf542171b9952e16537.
+Publication 6f819d9d-25cf-45af-b7a3-a8f5ba437a60 SUCCEEDED qua operator API/worker,
+bundle hash 96c887a99734c6365f5a10a5fe47ffeafe76063a4ef8c157f821154cf3e3d747,
+valid_until 19/11/2026 14:24:17 UTC+7. Giữ publication/rows/artifacts cũ.
+
+**Chưa đạt luồng tạo đề xuất thành công.** Lỗi INPUT_EXPIRED đã hết trên readiness,
+nhưng MVO bị chặn VFF_STALE. Nguồn NAV có đến 17/11, trong khi observation đủ
+điều kiện theo buffer 5 phiên chỉ đến 10/11, tuổi 8 ngày so với ngưỡng 7 ngày.
+Không đổi buffer/freshness, clock, SQL business results hoặc huấn luyện model để
+làm gate xanh. Chưa có recommendation mới từ lượt này.
+
+Chat đọc allowlist mã lỗi ở cả Portfolio error envelope và FastAPI detail, giữ
+INPUT_EXPIRED/VFF_STALE/GOLD_STALE/ASSET_DATA_STALE qua job/SSE. Không chuyển tiếp
+raw upstream message. UI phân biệt bộ đầu vào hết hạn và NAV VFF quá cũ, chỉ rõ
+nhờ operator cập nhật/phát hành dữ liệu rồi tạo yêu cầu mới, xem lại và xác nhận.
+Lượt live expiry đầu tiên còn bị generic STALE_OR_INVALID_INPUT vì adapter chưa
+đọc envelope của Portfolio. Giữ row FAILED đó; sửa bằng regression cho envelope
+thật rồi chạy lại nhánh stale trên bộ mới. Live expiry trên bản cuối chưa chạy.
+
+143 Chat/Knowledge tests passed, 4 opt-in skipped; 147 web tests, TypeScript,
+Ruff và production Chat/Web builds đạt. API thật đi qua review/confirmation và
+chặn đúng VFF_STALE. Browser desktop/mobile hiển thị đúng lý do và bước tiếp.
+Sau restart Chat API/worker/Web, cùng receipt stale vẫn khớp message/error/usage.
+Preservation receipt xác nhận rows, artifacts, accounts, volumes và catalog cũ
+được giữ. Đợt này không tạo LLM invocation. Full positive MVO và BL_ML not run.
+
+Lệnh verification mới nằm trong scripts/smoke_chat_input_refresh.py. Bằng chứng
+ngoài Git ở output/chat-input-refresh/report.json và output/playwright/input-refresh.
+Chưa commit/push/Google Sheet.
+
+## OpenAI do dev cấu hình — 18/11/2026
+
+Đã bỏ checkbox OpenAI, popup dữ liệu gửi đi và luồng đổi consent khỏi composer.
+Giữ phần nguồn kiến thức và các lựa chọn nghiệp vụ của hội thoại. Dev điều khiển
+qua CHAT_LLM_ENABLED và CHAT_QUERY_EMBEDDINGS_ENABLED, embedding mặc định tắt.
+Key, budget và quota tiếp tục ở worker. Dữ liệu consent cũ chỉ giữ để tương thích
+receipt, không còn quyết định quyền gửi ra provider. API preferences trả 403 sau
+khi kiểm tra owner. Yêu cầu tạo conversation cấp consent cũng bị từ chối.
+Không migration/backfill các hội thoại cũ.
+
+Offline 128 Chat/Knowledge tests passed, 4 opt-in storage probes skipped;
+145 web tests, TypeScript, Ruff và production Chat/Web builds đạt. Test mới
+kiểm user không tự bật provider, config dev áp dụng cho hội thoại cũ, tắt dev
+chặn cả cache/provider và embedding có công tắc riêng. Impeccable detector không
+có findings. Browser thật đã gửi tin nhắn từ hội thoại có historical consent=false,
+nhận OpenAI response VERIFIED theo cấu hình dev. UI không có hai controls đã bỏ,
+options vẫn dùng bàn phím được, 1440px/390px không tràn ngang. Browser harness đã
+được sửa phần URL polling và locator khi các câu trả lời giống nhau.
+
+Test config dev tắt chạy thật đạt 1/1, 0 provider calls và portfolio hash không
+đổi. Đã bật lại CHAT_LLM_ENABLED=1, CHAT_QUERY_EMBEDDINGS_ENABLED=0. Sau restart
+Chat API/worker/Web, 12 receipt cũ +2 receipt hồi quy cũ +receipt dev-disabled và
+receipt browser mới đều khớp nội dung/usage. Browser receipt dùng cùng thuật toán
+Node JSON.stringify khi kiểm hash để giữ đúng biểu diễn số thập phân.
+Đợt browser phát sinh 8 calls trong approval hồi quy đã cấp trước đó. Tổng cộng
+hai approval vẫn nằm trong trần 0,50 USD. Không chạy lại full paid/hybrid eval.
+
+Demo vẫn ở 127.0.0.1:3100. File ignored managed-web-port.yaml ghim APP_ORIGIN và
+port để tránh dùng origin localhost:3000 mặc định khi recreate. Cấu hình và cách
+chạy nằm ở đầu KNOWLEDGE_RAG.md. Bộ eval contextual v2 thể hiện cấu hình dev,
+giữ fixture v1 và các receipt trước đó nguyên vẹn. Chưa commit/push/Google Sheet.
+
+## Hội thoại theo ngữ cảnh OpenAI — 18/11/2026
+
+API key cũ vẫn còn trong file ignored có quyền 600. Demo portfolio-auth-demo
+trước đó chỉ chạy Compose nền nên worker chưa nạp key/provider. Đã bật lại
+kết nối bằng overlay Chat LLM cũ, thêm CHAT_CONTEXTUAL_REPLIES=1 và budget mới
+tổng 0,50 USD theo phê duyệt người dùng.
+
+Prompt chat-dialogue-v3 nhận diện cách nói tạo đề xuất và câu trả lời nối tiếp.
+Prompt chat-response-v3 sinh lời dẫn và câu hỏi bổ sung sau khi backend xác định
+state thật. Schema giới hạn 600 ký tự, transport giữ tối đa 384 output tokens,
+response có deadline 5 giây và giữ tổng budget thời gian của turn. Số liệu tiếp
+tục render từ facts card, kiến thức từ excerpts/citations đã ghim. Response có
+reservation riêng theo job/purpose, dùng chung budget group với intent/explanation.
+Không có migration hay thay đổi public request schema.
+
+| Gate | Kết quả |
+| --- | --- |
+| Offline | 125 Chat/Knowledge tests passed, 4 opt-in storage probes skipped. 10 fixtures tiếng Việt với injected adapter đạt. Ruff, format và diff check đạt. |
+| Provider thật lượt đầu | 10/12 turns đạt, 18 calls. D01 bỏ qua response do time budget, D07 trả fallback an toàn vì output chứa thông tin bị validator chặn. Giữ nguyên report lần đầu. |
+| Hồi quy provider trên bản sửa | D01 và D07 đạt 2/2, thêm 3 calls. Không chạy lại toàn bộ 10 cases trên bản cuối. |
+| Persistence | Sau restart Chat API/worker, đúng 12 receipts ban đầu và 2 receipts hồi quy đều khớp message/usage. Portfolio hash trước/sau khớp. |
+| Browser | Đăng nhập UI bằng tài khoản kiểm thử và mở lại đúng hai hội thoại hồi quy sau restart. Câu trả lời đã lưu hiển thị đúng. Không gửi lượt chat mới qua browser. |
+| Usage thực | Tổng 21 calls, 8.410 input +745 output tokens, ước tính bảo thủ 0,001423750 USD. 0 uncertain reservations. Tổng reserved 0,0357 USD. Đây không phải hóa đơn. |
+
+Daily cap được đặt 40 để chạy thêm hồi quy cùng ngày. Mỗi approval vẫn có cap
+20 textual calls và ngân sách bền vững. Hai approval của đợt này có tổng upper
+reservation cho textual calls 0,068 USD, nằm trong trần 0,50 USD. Demo đang dùng
+approval hồi quy và file ignored .generated/chat-contextual.env. Các hội thoại
+eval đã tắt consent sau khi xong. File source của worker khớp checkout.
+
+Free prose ở đây giới hạn lời dẫn/hỏi thêm, chưa tổng hợp nhận định tài chính tự
+do. Validator ký tự/PII/URL/số và prompt không chứng minh đúng ngữ nghĩa của mọi
+câu tự nhiên. Bộ contextual cases là regression/dev, không phải held-out mới.
+Full release eval/human review và numerical research parity không được chứng
+nhận bởi gate này. Chi tiết và lệnh chạy trong KNOWLEDGE_RAG.md và CHAT_LLM_PLAN.md.
+
+## Knowledge/RAG lexical MVP — 07/11/2026
+
+Đã hiện thực Knowledge owner API/DB/leased worker, PostgreSQL 17.11 + pgvector 0.8.1
+ở cluster/volume mới, 12 ghi chú PUBLIC / 24 claims, manifest/CLI/lifecycle, scoped
+lexical + exact-cosine adapter, Chat tool chỉ đọc, retrieval checkpoint, immutable
+evidence hash, consent v1/v2 và provider reservations/caps. Không đổi core,
+quantitative facts/hash, confirmation/accept semantics hoặc tự allocation từ câu hỏi
+kiến thức. API port 8006; migrations Knowledge `k10000000001..04`, Chat
+`c10000000003`. [Runbook/API/commands](KNOWLEDGE_RAG.md).
+
+**Chưa nghiệm thu release RAG.** Giữ corpus/eval đã đóng băng; không sửa expected
+cases hoặc hạ ngưỡng để pass. Semantic/provider gate chưa chạy do chưa có budget
+mới. Offline intent và lexical held-out hiện dưới ngưỡng.
+
+| Layer | Kết quả thực trong đợt này |
+| --- | --- |
+| K0 baseline | HEAD `67540341a7819cfc4cc8ea4b202a325bafd0b583`; ban đầu không có tracked diff. 537 Python +4 skips, 134 web; Chat API, bốn Chat browser journeys, P0 expired-input/re-auth và ba PostgreSQL concurrency probes đạt. Provider được tắt trước browser. |
+| Offline cuối | **571 Python/core passed, 1 skipped** (Market concurrency URL chưa cấu hình); ba Chat PostgreSQL probes và một Knowledge PostgreSQL probe chạy thật. **138 web tests**, TypeScript, Ruff và production images Chat/Knowledge/Web đạt. 12 contracts export ổn định; migration/metadata PostgreSQL và Compose config đạt. |
+| Storage/auth/lifecycle | Indexing/dedupe/alias-key conflict, READY activation, atomic swap/deactivate/rollback, stale precondition và cited history bất biến chạy thật. DB runtime DML/denied DDL/owner/cross-DB, broker ACLs, machine audiences/scopes và Knowledge immutable-row checks đạt. Synthetic vectors trong isolated PostgreSQL schema kiểm exact cosine 1536, model/threshold/PUBLIC/cutoff/draft/no-match và concurrent pointer swap; đây **không** là real-provider hybrid evidence. |
+| Chat/authorization | Real Keycloak/Portfolio/Quant/Knowledge: knowledge không cần portfolio, consent v1/v2/off, missing evidence, canonical facts equality, cross-owner history/SSE đạt. 47 delegation probes /305.53s, gồm hết hạn thật sau 5 phút và account restore, đạt. Knowledge outage vẫn trả canonical facts đúng + thiếu nguồn. |
+| Browser/UI | Figma đúng file/project, đọc V2.5 qua figma-mcp-go sau official MCP quota; giữ controls/layout/tokens. PKCE, nguồn bằng bàn phím, consent renewal/revoke, 390px/desktop, no-source/reload và canonical source + explicit accept đạt. Đã sửa focus sau renewal bằng browser regression. Impeccable detector 0 findings; rendered muted-text contrast 5.66:1. Không chứng nhận full screen reader/thiết bị thật. |
+| Persistence | Sau restart thật Chat API/worker, Knowledge API/worker, Web: cùng Knowledge, Chat-Knowledge, outage-canonical và browser source/target receipts khớp IDs/corpus/chunks/evidence/facts/history; invocation không tăng. Original Chat browser và Market browser receipts đạt; P0 API receipt đạt. Runtime Python source hash khớp images (Chat14 files, Knowledge10); hai workers không có provider key/budget mới. |
+| Strict API receipt incident | Initial Knowledge browser case đã accept proposal của API fixture, tăng portfolio summary version1→2. Strict original Chat API receipt **fail summary hash**; không ghi đè hoặc nới checker. Diagnostic đọc thật xác nhận original facts/input/history/conversation vẫn khớp. Harness đã sửa: tạo/accept portfolio riêng và assert API fixture không đổi; case mới đạt, receipt riêng. Đây không biến failure cũ thành pass. |
+| Historical regressions | Market–Quant receipt dừng ở parity load vì prepared input cũ expired. P1 browser receipt fail current BL_ML availability tại dòng281, sau khi model/manifest/snapshot pins khớp. Không sửa expiry/data hoặc chạy luồng mới để thay bằng chứng; full historical gates này chưa đạt trong đợt này. |
+| Eval v1 | 60 cases:20 dev/40 held-out,24 answerable +24 safety/abstention +12 canonical/multi-turn; SHA256 `bbd12e32e888737bcc23c51261a92675d2ac16d2706ce573853ae0356802f4f3`. Intent dev18/20, held-out30/40 (**75%**, yêu cầu90%). Lexical Hit@5 dev8/8, held-out12/16 (**75%**, yêu cầu90%). Lexical abstention áp dụng dev2/2 +held-out2/2; không suy thành toàn bộ safety eval. Full 60-case live conversation eval và human support/relevance review: **not run**. |
+| Performance/usage | 28 real lexical API samples: retrieval server p50 **6.887ms**, p95 **12.685ms**; HTTP p50 28.116ms/p95 47.292ms. Không tính đó là load/SLO certification. Ingestion/query/dialogue calls **0/0/0**, actual tokens0, new uncertain reservations0, estimated spend$0. Paid/hybrid latency/quality/cost: **not run**. |
+| Review | Review độc lập tìm 7 Important findings, không Critical; sửa với RED→GREEN và full green suites: routing/billing, redacted question, stable CLI availability, alias keys, DB snapshot, strict paid assessments và checkpointed paid resume. Bổ sung turn-budget fallback và fixture-isolation regression. Không commit/push/merge/Google Sheet; giữ concurrent sticky-shell CSS riêng. |
+
+Lệnh chính đã chạy: `CHAT_POSTGRES_TEST=1 KNOWLEDGE_POSTGRES_TEST=1 .venv-software/bin/python -m pytest tests/software packages/portfolio-core/tests -q`, `npm --prefix apps/web test`, `npm --prefix apps/web run typecheck`, Compose build/config, Alembic check, `smoke_knowledge.py`, `smoke_chat_knowledge.py`, `smoke_knowledge_lifecycle.py`, `smoke_chat_authorization.py`, real boundary probes, `eval_knowledge.py --mode offline/lexical`, browser Knowledge/Chat/Market/P1 persistence. Chi tiết command/result được giữ trong ignored `output/knowledge-rag/`; receipts giữ trong ignored `.generated`, không vào Git.
+
+Paid preparation có dry-run mặc định0, trần đề xuất1USD **chưa được cấp**; reservation
+bounds tối đa100 embeddings +20 dialogue (~$0.050 upper bound với giá đã đối chiếu),
+partition20/20/60%. Chỉ workers được nhận key qua overlay opt-in. Replay giữ stable
+keys/jobs, uncertain outcome không tự gọi trả phí lại; representative gate kiểm
+usage thật/fully embedded corpus/intent/claims/abstention, không chỉ nhãn HYBRID.
+Không thay Auto Recharge. Xem runbook để cấp cấu hình sau khi có budget cụ thể.
+
+Đề nghị checklist để người dùng duyệt riêng, **chưa cập nhật Google Sheet**:
+
+| Mục | Trạng thái đề nghị / giới hạn |
+| --- | --- |
+| KN-01 | Local owner-service/API/DB/worker: đạt phạm vi MVP; không production certification. |
+| KN-02 | **Partial**: manifest + curated Markdown đạt; PDF/URL/OCR/malware pipeline chưa làm. |
+| KN-03/04/05 | **Partial**: pinned pgvector/scoped lexical/storage + citations/Chat integration đạt local; semantic provider/full eval chưa đạt. |
+| KN-06 | **Partial**: lifecycle MVP swap/deactivate/rollback/audit; không full legal deletion/retention. |
+| CHAT-04/05/13 | **Partial**: read-only tool, controlled claims, evidence/consent/quota và local safety gates; paid/full conversation eval còn mở. |
+| FE-22 | Source/consent UI local đạt; giữ giới hạn browser QA, chưa full accessibility certification. |
+| DB-07 | Owner cluster/migrations/runtime grants local đạt; không đổi existing PostgreSQL volume/image. |
+| E2E-08 | **Partial / chưa release**: local lexical/browser receipts đạt theo phạm vi trên; paid, full eval/human review và các historical failures còn mở. |
+
+### Cập nhật truy xuất tiếng Việt — 09/11/2026
+
+`knowledge-retrieval-v2` thử cụm thuật ngữ trong corpus khi truy vấn đầy đủ
+không có kết quả. Chat chấp nhận cả v1 và v2. Giữ nguyên Markdown, corpus đang
+active, PostgreSQL + pgvector và bộ eval v1. Không cần migration hay reindex.
+
+| Eval cùng bộ dữ liệu | v1 | v2 |
+| --- | --- | --- |
+| Lexical Hit@5 dev | 8/8 | 8/8 |
+| Lexical Hit@5 held-out | 12/16 (75%) | **14/16 (87,5%)**, dưới ngưỡng 90% |
+| Lexical abstention áp dụng dev / held-out | 2/2 và 2/2 | 2/2 và 2/2 |
+| Offline intent dev / held-out | 18/20 và 30/40 | 18/20 và 30/40 |
+
+A22 và A23 tìm được nguồn được chấp nhận. A21 chỉ tìm được định nghĩa EW,
+chưa hỗ trợ câu hỏi về bảo đảm lợi nhuận. A24 vẫn thiếu nguồn phù hợp. Đây là
+eval lexical trên Knowledge API thật, 28 lượt truy xuất mỗi bản. Server p50/p95
+từ 3,53/5,84 ms lên 5,37/11,77 ms trong hai lần đo local. Báo cáo trước/sau nằm
+trong thư mục ignored `output/knowledge-rag/`. Full live conversation eval,
+human support review, browser và paid hybrid không chạy lại trong đợt này.
+
+Python/core 572 passed, 1 skipped (Market concurrency). Sau khi restart Chat
+và Knowledge API/worker, receipt Chat v1 gốc và receipt diễn đạt lại v2 đều khớp.
+Hai file receipt gốc giữ nguyên checksum. Hash response của Knowledge API v1
+bao gồm `retrieval_version`. Đối chiếu cùng query/corpus/cutoff sau nâng cấp xác
+nhận payload chỉ khác trường phiên bản. Ledger không có reservation mới cho
+ingestion, query embedding hoặc dialogue trong đợt đo.
+
+### Thử nghiệm query rewriting tiếng Việt — 09/11/2026
+
+Chat có điểm nối adapter nội bộ, tắt ở worker mặc định. Adapter thử một truy vấn
+lexical sau khi lượt kiến thức không có kết quả. Với câu nối tiếp, ngữ cảnh chỉ
+gồm một chủ đề từ trích dẫn trong câu trả lời kiến thức liền trước của cùng hội
+thoại. Giữ scope/corpus/cutoff và chỉ lưu hash của truy vấn viết lại thành công.
+
+Eval `eval-vi-rewrite-v1` chạy hai nhánh trên Chat/Knowledge API thật với cùng
+corpus và 10 ca mới. Hit@5 và tỷ lệ có ít nhất một trích dẫn đúng trong tin nhắn
+đều tăng từ **2/7 lên 7/7**. Ba ca cần abstain đều đạt ở cả hai nhánh. Adapter
+được gọi 6 lần, trong đó 5 lần tìm được nguồn và 1 câu ngoài corpus vẫn thiếu
+nguồn. Các truy vấn viết lại do fixture cung cấp. Đây là phép đo đường truy xuất
+và xuất bản trích dẫn. Chất lượng model local, paid hybrid và browser không chạy.
+Bộ eval 60 ca trước vẫn giữ nguyên. Python/core **578 passed, 1 skipped**.
+Sau restart Chat API/worker, cả 20 receipt eval và receipt Chat Knowledge cũ
+đều khớp. Runner chỉ dừng và khởi động lại đúng container Chat worker.
+
+
 ## Chat LLM phương án B — 05/11/2026
 
 Đã nối OpenAI Responses thật với `gpt-6-luna`, reasoning none, strict schemas,

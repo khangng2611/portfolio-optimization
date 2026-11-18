@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parent
@@ -18,16 +19,11 @@ GENERATED = ROOT / ".generated"
 ROLES = ["investor", "researcher", "data-operator", "model-reviewer", "system-admin"]
 LEGACY_SECRET_NAMES = [
     "POSTGRES_PASSWORD",
-    "IDENTITY_MIGRATOR_PASSWORD",
-    "IDENTITY_RUNTIME_PASSWORD",
     "PORTFOLIO_MIGRATOR_PASSWORD",
     "PORTFOLIO_RUNTIME_PASSWORD",
     "QUANT_MIGRATOR_PASSWORD",
     "QUANT_RUNTIME_PASSWORD",
-    "KEYCLOAK_ADMIN_PASSWORD",
-    "OIDC_CLIENT_SECRET",
     "QUANT_CLIENT_SECRET",
-    "TEST_CLIENT_SECRET",
     "REDIS_PASSWORD",
     "RABBITMQ_ADMIN_PASSWORD",
     "PORTFOLIO_PUBLISHER_PASSWORD",
@@ -54,12 +50,20 @@ CHAT_SECRET_NAMES = [
     "CHAT_CLIENT_SECRET",
     "PORTFOLIO_ACCOUNT_READER_SECRET",
 ]
+KNOWLEDGE_SECRET_NAMES = [
+    "KNOWLEDGE_ADMIN_PASSWORD",
+    "KNOWLEDGE_MIGRATOR_PASSWORD",
+    "KNOWLEDGE_RUNTIME_PASSWORD",
+]
+AUTH_SECRET_NAMES = ["AUTH_MIGRATOR_PASSWORD", "AUTH_RUNTIME_PASSWORD", "AUTH_WEB_SECRET"]
 SECRET_NAMES = (
     LEGACY_SECRET_NAMES
     + MARKET_SECRET_NAMES
     + PUBLISHER_SECRET_NAMES
     + ML_SECRET_NAMES
     + CHAT_SECRET_NAMES
+    + KNOWLEDGE_SECRET_NAMES
+    + AUTH_SECRET_NAMES
 )
 
 
@@ -82,15 +86,7 @@ def create_secrets() -> dict[str, str]:
             raise SystemExit(
                 "Existing secrets are incomplete; restore secrets.json rather than silently rotating credentials."
             )
-        additions = (
-            set(
-                MARKET_SECRET_NAMES
-                + PUBLISHER_SECRET_NAMES
-                + ML_SECRET_NAMES
-                + CHAT_SECRET_NAMES
-            )
-            - values.keys()
-        )
+        additions = set(SECRET_NAMES) - values.keys()
         if additions:
             values.update({name: secrets.token_hex(32) for name in sorted(additions)})
             write_private(path, json_text(values))
@@ -130,13 +126,16 @@ def create_accounts() -> list[dict[str, str]]:
     return accounts
 
 
-def make_database_sql(values: dict[str, str]) -> str:
+def make_database_sql(
+    values: dict[str, str],
+    names=("auth", "portfolio", "quant", "market", "ml", "chat"),
+) -> str:
     lines = [
         "-- Generated disposable local credentials. Never commit this file.",
         "REVOKE ALL ON DATABASE postgres FROM PUBLIC;",
         "REVOKE ALL ON DATABASE template1 FROM PUBLIC;",
     ]
-    for name in ("identity", "portfolio", "quant", "market", "ml", "chat"):
+    for name in names:
         owner, migrator, runtime, database = [
             f"{name}_{suffix}" for suffix in ("owner", "migrator", "runtime", "db")
         ]
@@ -161,372 +160,25 @@ def make_database_sql(values: dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def audience_mapper(audience: str) -> dict:
-    return {
-        "name": f"audience-{audience}",
-        "protocol": "openid-connect",
-        "protocolMapper": "oidc-audience-mapper",
-        "consentRequired": False,
-        "config": {
-            "included.client.audience": audience,
-            "id.token.claim": "false",
-            "access.token.claim": "true",
-        },
-    }
+def make_knowledge_database_sql(values):
+    return (
+        make_database_sql(values, names=("knowledge",))
+        + "\\connect knowledge_db\nCREATE EXTENSION IF NOT EXISTS vector;\n"
+    )
 
 
-def make_realm(
-    values: dict[str, str], accounts: list[dict[str, str]], test_client: bool
-) -> dict:
-    roles_mapper = {
-        "name": "realm-roles",
-        "protocol": "openid-connect",
-        "protocolMapper": "oidc-usermodel-realm-role-mapper",
-        "consentRequired": False,
-        "config": {
-            "multivalued": "true",
-            "claim.name": "realm_access.roles",
-            "jsonType.label": "String",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-        },
-    }
-    scopes = [
-        {
-            "name": "basic",
-            "protocol": "openid-connect",
-            "attributes": {"include.in.token.scope": "false"},
-            "protocolMappers": [
-                {
-                    "name": "subject",
-                    "protocol": "openid-connect",
-                    "protocolMapper": "oidc-sub-mapper",
-                    "consentRequired": False,
-                    "config": {
-                        "access.token.claim": "true",
-                        "introspection.token.claim": "true",
-                        "lightweight.claim": "true",
-                    },
-                }
-            ],
-        },
-        {
-            "name": "profile",
-            "protocol": "openid-connect",
-            "attributes": {"include.in.token.scope": "true"},
-            "protocolMappers": [
-                {
-                    "name": "username",
-                    "protocol": "openid-connect",
-                    "protocolMapper": "oidc-usermodel-property-mapper",
-                    "config": {
-                        "user.attribute": "username",
-                        "claim.name": "preferred_username",
-                        "jsonType.label": "String",
-                        "id.token.claim": "true",
-                        "access.token.claim": "true",
-                        "userinfo.token.claim": "true",
-                    },
-                }
-            ],
-        },
-        {
-            "name": "email",
-            "protocol": "openid-connect",
-            "attributes": {"include.in.token.scope": "true"},
-            "protocolMappers": [
-                {
-                    "name": "email",
-                    "protocol": "openid-connect",
-                    "protocolMapper": "oidc-usermodel-property-mapper",
-                    "config": {
-                        "user.attribute": "email",
-                        "claim.name": "email",
-                        "jsonType.label": "String",
-                        "id.token.claim": "true",
-                        "access.token.claim": "true",
-                        "userinfo.token.claim": "true",
-                    },
-                }
-            ],
-        },
-        {
-            "name": "roles",
-            "protocol": "openid-connect",
-            "attributes": {"include.in.token.scope": "false"},
-            "protocolMappers": [roles_mapper],
-        },
-    ] + [
-        {
-            "name": name,
-            "protocol": "openid-connect",
-            "attributes": {"include.in.token.scope": "true"},
-            "protocolMappers": [],
-        }
-        for name in [
-            "portfolio:read",
-            "portfolio:write",
-            "quant:resolve",
-            "quant:publish",
-            "ml:read",
-            "ml:train",
-            "ml:review",
-            "ml:model:read",
-            "market:read",
-            "market:write",
-            "market:snapshot:read",
-            "chat:read",
-            "chat:write",
-            "chat:delegate",
-            "market:chat:read",
-        ]
-    ]
-    web = {
-        "clientId": "portfolio-web",
-        "name": "Local browser BFF",
-        "enabled": True,
-        "protocol": "openid-connect",
-        "publicClient": False,
-        "secret": values["OIDC_CLIENT_SECRET"],
-        "standardFlowEnabled": True,
-        "implicitFlowEnabled": False,
-        "directAccessGrantsEnabled": False,
-        "serviceAccountsEnabled": False,
-        "redirectUris": ["http://localhost:3000/auth/callback"],
-        "webOrigins": ["http://localhost:3000"],
-        "attributes": {
-            "pkce.code.challenge.method": "S256",
-            "post.logout.redirect.uris": "http://localhost:3000/*",
-        },
-        "defaultClientScopes": [
-            "basic",
-            "profile",
-            "email",
-            "roles",
-            "portfolio:read",
-            "portfolio:write",
-            "chat:read",
-            "chat:write",
-        ],
-        "optionalClientScopes": [
-            "market:read",
-            "market:write",
-            "quant:publish",
-            "ml:read",
-            "ml:train",
-            "ml:review",
-        ],
-        "protocolMappers": [
-            audience_mapper(a)
-            for a in ("portfolio-api", "market-api", "quant-api", "ml-api", "chat-api")
-        ],
-    }
-    service = {
-        "clientId": "portfolio-service",
-        "enabled": True,
-        "protocol": "openid-connect",
-        "publicClient": False,
-        "secret": values["QUANT_CLIENT_SECRET"],
-        "standardFlowEnabled": False,
-        "implicitFlowEnabled": False,
-        "directAccessGrantsEnabled": False,
-        "serviceAccountsEnabled": True,
-        "defaultClientScopes": ["basic", "quant:resolve"],
-        "optionalClientScopes": [],
-        "protocolMappers": [audience_mapper("quant-api")],
-    }
-    clients = [web, service] + [
-        {
-            "clientId": name,
-            "enabled": True,
-            "protocol": "openid-connect",
-            "bearerOnly": True,
-        }
-        for name in ["portfolio-api", "quant-api", "market-api", "ml-api", "chat-api"]
-    ]
-    if values.get("MARKET_READER_CLIENT_SECRET"):
-        clients.append(
-            {
-                "clientId": "quant-publisher",
-                "enabled": True,
-                "protocol": "openid-connect",
-                "publicClient": False,
-                "secret": values["MARKET_READER_CLIENT_SECRET"],
-                "standardFlowEnabled": False,
-                "implicitFlowEnabled": False,
-                "directAccessGrantsEnabled": False,
-                "serviceAccountsEnabled": True,
-                "defaultClientScopes": ["basic", "market:snapshot:read"],
-                "optionalClientScopes": [],
-                "protocolMappers": [audience_mapper("market-api")],
-            }
-        )
-    for client_id, secret_name, scope, audience in [
-        (
-            "ml-worker",
-            "ML_MARKET_READER_CLIENT_SECRET",
-            "market:snapshot:read",
-            "market-api",
-        ),
-        ("quant-ml-reader", "ML_READER_CLIENT_SECRET", "ml:model:read", "ml-api"),
-    ]:
-        if values.get(secret_name):
-            clients.append(
-                {
-                    "clientId": client_id,
-                    "enabled": True,
-                    "protocol": "openid-connect",
-                    "publicClient": False,
-                    "secret": values[secret_name],
-                    "standardFlowEnabled": False,
-                    "implicitFlowEnabled": False,
-                    "directAccessGrantsEnabled": False,
-                    "serviceAccountsEnabled": True,
-                    "defaultClientScopes": ["basic", scope],
-                    "optionalClientScopes": [],
-                    "protocolMappers": [audience_mapper(audience)],
-                }
-            )
-    if values.get("CHAT_CLIENT_SECRET"):
-        clients.append(
-            {
-                "clientId": "chat-service",
-                "enabled": True,
-                "protocol": "openid-connect",
-                "publicClient": False,
-                "secret": values["CHAT_CLIENT_SECRET"],
-                "standardFlowEnabled": False,
-                "implicitFlowEnabled": False,
-                "directAccessGrantsEnabled": False,
-                "serviceAccountsEnabled": True,
-                "defaultClientScopes": ["basic", "chat:delegate", "market:chat:read"],
-                "optionalClientScopes": [],
-                "protocolMappers": [
-                    audience_mapper("portfolio-api"),
-                    audience_mapper("market-api"),
-                ],
-            }
-        )
-    if values.get("PORTFOLIO_ACCOUNT_READER_SECRET"):
-        clients.append(
-            {
-                "clientId": "portfolio-account-reader",
-                "enabled": True,
-                "protocol": "openid-connect",
-                "publicClient": False,
-                "secret": values["PORTFOLIO_ACCOUNT_READER_SECRET"],
-                "standardFlowEnabled": False,
-                "implicitFlowEnabled": False,
-                "directAccessGrantsEnabled": False,
-                "serviceAccountsEnabled": True,
-                "defaultClientScopes": ["basic"],
-                "optionalClientScopes": [],
-                "protocolMappers": [
-                    audience_mapper("realm-management"),
-                    {
-                        "name": "account-reader-management-role",
-                        "protocol": "openid-connect",
-                        "protocolMapper": "oidc-usermodel-client-role-mapper",
-                        "consentRequired": False,
-                        "config": {
-                            "usermodel.clientRoleMapping.clientId": "realm-management",
-                            "claim.name": "resource_access.realm-management.roles",
-                            "jsonType.label": "String",
-                            "multivalued": "true",
-                            "access.token.claim": "true",
-                            "id.token.claim": "false",
-                        },
-                    },
-                ],
-            }
-        )
-    if test_client:
-        clients.append(
-            {
-                "clientId": "portfolio-test",
-                "name": "DEV ONLY integration password grant",
-                "description": "Disposable local tests only. Never import this client into a deployed realm.",
-                "enabled": True,
-                "protocol": "openid-connect",
-                "publicClient": False,
-                "secret": values["TEST_CLIENT_SECRET"],
-                "standardFlowEnabled": False,
-                "implicitFlowEnabled": False,
-                "directAccessGrantsEnabled": True,
-                "serviceAccountsEnabled": False,
-                "defaultClientScopes": [
-                    "basic",
-                    "profile",
-                    "email",
-                    "roles",
-                    "portfolio:read",
-                    "portfolio:write",
-                    "market:read",
-                    "market:write",
-                    "chat:read",
-                    "chat:write",
-                ],
-                "optionalClientScopes": [],
-                "protocolMappers": [
-                    audience_mapper("portfolio-api"),
-                    audience_mapper("market-api"),
-                    audience_mapper("chat-api"),
-                ],
-            }
-        )
-    return {
-        "realm": "portfolio",
-        "enabled": True,
-        "displayName": "Portfolio — local development",
-        "sslRequired": "none",
-        "registrationAllowed": False,
-        "resetPasswordAllowed": False,
-        "rememberMe": False,
-        "loginWithEmailAllowed": True,
-        "duplicateEmailsAllowed": False,
-        "bruteForceProtected": True,
-        "accessTokenLifespan": 300,
-        "ssoSessionIdleTimeout": 1800,
-        "ssoSessionMaxLifespan": 28800,
-        "revokeRefreshToken": True,
-        "refreshTokenMaxReuse": 0,
-        "roles": {"realm": [{"name": role} for role in ROLES]},
-        "clientScopes": scopes,
-        "clients": clients,
-        "users": [
-            {
-                "username": account["username"],
-                "enabled": True,
-                "emailVerified": True,
-                "email": account["username"] + "@example.invalid",
-                "firstName": account["username"],
-                "lastName": "Local",
-                "requiredActions": [],
-                "realmRoles": account["roles"],
-                "credentials": [
-                    {
-                        "type": "password",
-                        "value": account["password"],
-                        "temporary": False,
-                    }
-                ],
-            }
-            for account in accounts
-        ]
-        + (
-            [
-                {
-                    "username": "service-account-portfolio-account-reader",
-                    "enabled": True,
-                    "serviceAccountClientId": "portfolio-account-reader",
-                    "realmRoles": [],
-                    "clientRoles": {"realm-management": ["view-users"]},
-                }
-            ]
-            if values.get("PORTFOLIO_ACCOUNT_READER_SECRET")
-            else []
-        ),
-    }
+def signing_key() -> str:
+    path = GENERATED / "auth-signing-key.b64"
+    if not path.exists():
+        try:
+            key = subprocess.run(
+                ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048"],
+                capture_output=True, check=True, timeout=30,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            raise SystemExit("OpenSSL is required to generate the local Auth signing key.") from None
+        write_private(path, base64.b64encode(key).decode() + "\n")
+    return path.read_text().strip()
 
 
 def rabbit_password_hash(password: str) -> str:
@@ -761,6 +413,9 @@ def create_market_dataset(refresh: bool) -> None:
         "provider": "synthetic-local",
         "price_column": "price",
     }
+    # SQL registry pins never change; each refreshed artifact needs a new identity.
+    version = "DEMO_STOCK_" + entries["DEMO_STOCK"]["sha256"][:32].upper()
+    entries[version] = dict(entries["DEMO_STOCK"])
     pending = directory / (".catalog-" + secrets.token_hex(8) + ".tmp")
     pending.write_text(json_text(entries))
     pending.chmod(0o644)
@@ -769,11 +424,6 @@ def create_market_dataset(refresh: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--enable-test-client",
-        action="store_true",
-        help="Include DEV ONLY password-grant client; run upgrade.py for an existing realm",
-    )
     parser.add_argument(
         "--refresh-demo",
         action="store_true",
@@ -785,17 +435,10 @@ def main() -> None:
     GENERATED.chmod(0o700)
     values = create_secrets()
     accounts = create_accounts()
-    settings_path = GENERATED / "settings.json"
-    settings = (
-        json.loads(settings_path.read_text())
-        if settings_path.exists()
-        else {"test_client": False}
-    )
-    settings["test_client"] = settings["test_client"] or args.enable_test_client
-    write_private(settings_path, json_text(settings))
     environment = dict(
         values,
-        OIDC_TEST_CLIENT_SECRET=values["TEST_CLIENT_SECRET"],
+        AUTH_SIGNING_KEY_B64=signing_key(),
+        AUTH_SEED_ACCOUNTS_B64=base64.b64encode(json.dumps(accounts).encode()).decode(),
         # Only the local publication worker writes this host-owned bind mount.
         # Numeric container identity avoids world-write/chown of generated files.
         LOCAL_BUNDLE_UID=str(os.getuid()),
@@ -811,9 +454,11 @@ def main() -> None:
         GENERATED / "postgres" / "10-databases.sql", make_database_sql(values)
     )
     write_private(
-        GENERATED / "keycloak" / "portfolio-realm.json",
-        json_text(make_realm(values, accounts, settings["test_client"])),
+        GENERATED / "knowledge-postgres" / "10-databases.sql",
+        make_knowledge_database_sql(values),
     )
+    (GENERATED / "knowledge-postgres").chmod(0o755)
+    (GENERATED / "knowledge-postgres" / "10-databases.sql").chmod(0o644)
     write_private(
         GENERATED / "rabbitmq" / "definitions.json",
         json_text(make_rabbit_definitions(values)),
@@ -834,7 +479,6 @@ def main() -> None:
     # The parent directory stays mode 0700 and never enters any build context.
     for directory in [
         "postgres",
-        "keycloak",
         "rabbitmq",
         "redis",
         "bundles",
@@ -854,10 +498,6 @@ def main() -> None:
     print(
         "Synthetic DEMO inputs expire after one day. Explicit refresh: python3 infra/local/bootstrap.py --refresh-demo"
     )
-    if settings["test_client"]:
-        print(
-            "DEV ONLY portfolio-test password grant enabled in generated realm import."
-        )
 
 
 if __name__ == "__main__":

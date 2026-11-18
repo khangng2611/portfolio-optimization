@@ -6,6 +6,13 @@ services:
       - path: ./.generated/chat-openai.env
         required: true
     environment:
+      CHAT_LLM_ENABLED: ${CHAT_LLM_ENABLED:-1}
+      CHAT_QUERY_EMBEDDINGS_ENABLED: ${CHAT_QUERY_EMBEDDINGS_ENABLED:-0}
       CHAT_LLM_PROVIDER: openai
       CHAT_OPENAI_MODEL: gpt-6-luna
-      CHAT_LLM_DAILY_CALL_LIMIT: "20"
+      CHAT_LLM_APPROVAL_CALL_LIMIT: ${CHAT_LLM_APPROVAL_CALL_LIMIT:-20}
+      CHAT_LLM_DAILY_CALL_LIMIT: ${CHAT_LLM_DAILY_CALL_LIMIT:-20}
+      # Contextual replies require a new explicit, durable budget approval.
+      CHAT_CONTEXTUAL_REPLIES: ${CHAT_CONTEXTUAL_REPLIES:-0}
+      KNOWLEDGE_PAID_APPROVAL: ${KNOWLEDGE_PAID_APPROVAL:-}
+      KNOWLEDGE_BUDGET_USD: ${KNOWLEDGE_BUDGET_USD:-0}

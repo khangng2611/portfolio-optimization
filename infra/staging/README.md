@@ -1,5 +1,9 @@
 # Staging deployment template
 
+This template is for the earlier OIDC-compatible images. The local Auth demo
+uses its own Compose file and the current web image expects that Auth API.
+
+
 This standalone Compose template runs the BFF and Portfolio, Quant and Market
 migrations/APIs/workers against separately provisioned PostgreSQL, RabbitMQ,
 Redis and Keycloak. It contains no infrastructure containers, realm import,

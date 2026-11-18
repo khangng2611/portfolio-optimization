@@ -1,6 +1,5 @@
 """Exercise the disposable Compose stack using real identity, DBs and broker.
 
-Requires bootstrap --enable-test-client before the realm's first import.
 Credentials and tokens are never printed; a token-free receipt supports restart checks.
 """
 
@@ -9,16 +8,14 @@ import csv
 import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-GENERATED = Path(__file__).resolve().parents[1] / "infra/local/.generated"
+from local_auth import GENERATED, login
 PORTFOLIO = "http://localhost:8001"
 MARKET = "http://localhost:8003"
-IDENTITY = "http://localhost:8080/realms/portfolio/protocol/openid-connect/token"
 
 
 class SmokeFailure(Exception):
@@ -53,27 +50,6 @@ def request(method, url, *, token=None, body=None, form=None, headers=None):
 def require(condition, message):
     if not condition:
         raise SmokeFailure(message)
-
-
-def login(username, accounts, settings):
-    account = next(user for user in accounts["users"] if user["username"] == username)
-    status, data = request(
-        "POST",
-        IDENTITY,
-        form={
-            "grant_type": "password",
-            "client_id": "portfolio-test",
-            "client_secret": settings["OIDC_TEST_CLIENT_SECRET"],
-            "username": username,
-            "password": account["password"],
-            "scope": "openid portfolio:read portfolio:write market:read market:write",
-        },
-    )
-    require(
-        status == 200 and "access_token" in data,
-        f"Local test login failed ({status}); enable the test client before first realm import.",
-    )
-    return data["access_token"]
 
 
 def verify_market_receipt(receipt, operator, other):
@@ -116,7 +92,13 @@ def verify_market_receipt(receipt, operator, other):
 
 
 def market_smoke(operator, investor):
-    body = {"dataset_id": "DEMO_STOCK"}
+    registry = json.loads((GENERATED / "datasets/catalog.json").read_text())
+    spec = registry["DEMO_STOCK"]
+    dataset_id = "DEMO_STOCK_" + spec["sha256"][:32].upper()
+    require(registry.get(dataset_id) == spec, "Refresh DEMO with the current bootstrap first.")
+    with (GENERATED / "datasets" / spec["path"]).open() as stream:
+        dates = [row["date"] for row in csv.DictReader(stream)]
+    body = {"dataset_id": dataset_id}
     status, _ = request(
         "POST",
         MARKET + "/api/v1/market/ingestions",
@@ -155,15 +137,12 @@ def market_smoke(operator, investor):
         state.get("status") == "SUCCEEDED",
         "Market broker ingestion failed; inspect job/worker status.",
     )
-    registry = json.loads((GENERATED / "datasets/catalog.json").read_text())
-    with (GENERATED / "datasets" / registry["DEMO_STOCK"]["path"]).open() as stream:
-        dates = [row["date"] for row in csv.DictReader(stream)]
     status, snapshot = request(
         "POST",
         MARKET + "/api/v1/market/snapshots",
         token=operator,
         body={
-            "asset_ids": [registry["DEMO_STOCK"]["asset_id"]],
+            "asset_ids": [spec["asset_id"]],
             "start_date": min(dates),
             "end_date": max(dates),
             "as_of_date": datetime.now(timezone.utc).date().isoformat(),
@@ -239,14 +218,8 @@ def main():
         help="Re-read the prior result after a container restart; create nothing",
     )
     args = parser.parse_args()
-    accounts = json.loads((GENERATED / "accounts.json").read_text())
-    settings = dict(
-        line.split("=", 1)
-        for line in (GENERATED / ".env").read_text().splitlines()
-        if line and not line.startswith("#")
-    )
-    alice, bob = login("alice", accounts, settings), login("bob", accounts, settings)
-    operator = login("data-operator", accounts, settings)
+    alice, bob = login("alice"), login("bob")
+    operator = login("data-operator")
     receipt_path = GENERATED / "smoke-receipt.json"
     if args.verify_receipt:
         verify_receipt(json.loads(receipt_path.read_text()), alice, bob, operator)
@@ -324,7 +297,7 @@ def main():
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
     receipt_path.chmod(0o600)
     print(
-        "PASS: real OIDC, async MVO + Market ingestion/snapshot, idempotency, provenance, history, ownership and missing-model rejection."
+        "PASS: real Auth, async MVO + Market ingestion/snapshot, idempotency, provenance, history, ownership and missing-model rejection."
     )
 
 

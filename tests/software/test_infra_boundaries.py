@@ -1,8 +1,6 @@
-"""A real issuer's test-client claims must include the configured Market boundary."""
+"""Local DB and broker isolation probes."""
 
-import base64
 import importlib.util
-import json
 from pathlib import Path
 
 import httpx
@@ -10,127 +8,6 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-@pytest.mark.parametrize(
-    "claims, error",
-    [
-        (
-            {
-                "aud": "portfolio-api",
-                "scope": "openid market:read market:write chat:read chat:write",
-                "realm_access": {"roles": ["data-operator"]},
-            },
-            "Market audience",
-        ),
-        (
-            {
-                "aud": ["portfolio-api", "market-api", "chat-api"],
-                "scope": "openid market:read chat:read chat:write",
-                "realm_access": {"roles": ["data-operator"]},
-            },
-            "Market scopes",
-        ),
-        (
-            {
-                "aud": ["market-api", "chat-api"],
-                "scope": "openid market:read market:write chat:read chat:write",
-                "realm_access": {"roles": ["investor"]},
-            },
-            "operator role",
-        ),
-        (
-            {
-                "aud": ["portfolio-api", "market-api", "chat-api"],
-                "scope": "openid market:read market:write chat:read chat:write",
-                "realm_access": {"roles": ["data-operator"]},
-            },
-            None,
-        ),
-    ],
-)
-def test_live_identity_check_requires_market_audience_scopes_and_operator_role(
-    tmp_path, monkeypatch, capsys, claims, error
-):
-    spec = importlib.util.spec_from_file_location(
-        "local_boundaries", ROOT / "infra/local/verify_boundaries.py"
-    )
-    boundary = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(boundary)
-    boundary.ROOT = tmp_path
-    directory = tmp_path / ".generated"
-    directory.mkdir()
-    (directory / "accounts.json").write_text(
-        json.dumps(
-            {
-                "users": [
-                    {
-                        "username": "alice",
-                        "password": "alice-password",
-                        "roles": ["investor"],
-                    },
-                    {
-                        "username": "data-operator",
-                        "password": "operator-password",
-                        "roles": ["data-operator"],
-                    },
-                ]
-            }
-        )
-    )
-    (directory / "settings.json").write_text('{"test_client":true}')
-    payload = (
-        base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
-    )
-    issuer = "http://localhost:8080/realms/portfolio"
-
-    def serve(request):
-        if request.url.path.endswith("/.well-known/openid-configuration"):
-            return httpx.Response(200, json={"issuer": issuer})
-        if b"client_id=portfolio-web" in request.content:
-            return httpx.Response(400, json={"error": "unauthorized_client"})
-        if b"client_id=portfolio-test" in request.content:
-            return httpx.Response(
-                200, json={"access_token": "e30." + payload + ".test-signature"}
-            )
-        if b"client_id=chat-service" in request.content:
-            machine = {
-                "aud": ["portfolio-api", "market-api"],
-                "scope": "chat:delegate market:chat:read",
-            }
-        elif b"client_id=portfolio-account-reader" in request.content:
-            machine = {
-                "resource_access": {"realm-management": {"roles": ["view-users"]}}
-            }
-        elif request.url.path == "/admin/realms/portfolio/users":
-            return httpx.Response(200, json=[{"id": "alice-id"}])
-        elif request.url.path.endswith("/users/alice-id"):
-            return httpx.Response(200, json={"enabled": True})
-        elif request.url.path.endswith("/role-mappings/realm/composite"):
-            return httpx.Response(200, json=[{"name": "investor"}])
-        else:
-            raise AssertionError("Unexpected boundary call")
-        encoded = (
-            base64.urlsafe_b64encode(json.dumps(machine).encode()).decode().rstrip("=")
-        )
-        return httpx.Response(
-            200, json={"access_token": "e30." + encoded + ".test-signature"}
-        )
-
-    client = httpx.Client(transport=httpx.MockTransport(serve))
-    monkeypatch.setattr(boundary.httpx, "Client", lambda **kwargs: client)
-    values = {
-        "OIDC_CLIENT_SECRET": "web-secret",
-        "TEST_CLIENT_SECRET": "test-secret",
-        "CHAT_CLIENT_SECRET": "chat-secret",
-        "PORTFOLIO_ACCOUNT_READER_SECRET": "reader-secret",
-    }
-    if error:
-        with pytest.raises(AssertionError, match=error):
-            boundary.verify_identity(values)
-    else:
-        boundary.verify_identity(values)
-        assert "PASS:" in capsys.readouterr().out
 
 
 def test_broker_check_reads_vhost_permissions_and_rejects_runtime_topology_grants(

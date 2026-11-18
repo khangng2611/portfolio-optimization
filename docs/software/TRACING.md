@@ -10,7 +10,7 @@ Stack cơ bản vẫn chạy khi không chọn tracing.
 Từ repo root, với prerequisites trong [hướng dẫn setup](SETUP_AND_API_TESTING.md):
 
 ```sh
-python3 scripts/setup_software.py up --enable-test-client --tracing
+python3 scripts/setup_software.py up --tracing
 python3 scripts/setup_software.py check --tracing
 ```
 
@@ -68,7 +68,7 @@ Nếu cần chạy Compose trực tiếp, mọi lệnh tracing cần **cả hai*
 ```sh
 docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml config --quiet
 docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml build
-docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --wait postgres rabbitmq redis keycloak jaeger
+docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --wait postgres rabbitmq redis jaeger
 .venv-software/bin/python infra/local/upgrade.py
 docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --wait
 ```

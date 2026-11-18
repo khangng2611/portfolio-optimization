@@ -30,20 +30,18 @@ def test_live_gate_requires_explicit_disposable_stack_opt_in(gate, monkeypatch):
 def test_account_enabled_state_is_restored_after_probe_failure(gate):
     calls = []
 
-    def admin(method, path, body=None):
-        calls.append((method, path, body))
-        if method == "GET":
-            return 200, {"enabled": True}
-        return 204, {}
+    def auth(action, body):
+        calls.append((action, body))
+        return (200, {"active": True}) if action == "account" else (204, {})
 
     with pytest.raises(RuntimeError, match="probe failed"):
-        with gate.temporarily_disabled(admin, "test-user"):
+        with gate.temporarily_disabled(auth, "test-user"):
             raise RuntimeError("probe failed")
     assert calls == [
-        ("GET", "/users/test-user", None),
-        ("PUT", "/users/test-user", {"enabled": False}),
-        ("PUT", "/users/test-user", {"enabled": True}),
-        ("GET", "/users/test-user", None),
+        ("account", {"subject": "test-user"}),
+        ("set-enabled", {"subject": "test-user", "enabled": False}),
+        ("set-enabled", {"subject": "test-user", "enabled": True}),
+        ("account", {"subject": "test-user"}),
     ]
 
 

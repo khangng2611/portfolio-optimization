@@ -1,0 +1,105 @@
+{
+  "verified_at": "2026-11-04T14:30:38.804099+00:00",
+  "folder_url": "https://drive.google.com/drive/u/0/folders/1UPGSgNHSL1TmWOug5G5E1eH0CLJgLVkt",
+  "folder_name": "reports_extensions_C_v1_20261104",
+  "files_uploaded": 19,
+  "ui_verified_all_names": true,
+  "ui_status": "Đã tải 19 mục lên",
+  "source_steps_1_2_not_modified": true,
+  "uploaded_payload_hashes": [
+    {
+      "file": "00_README_First.txt",
+      "bytes": "1044",
+      "sha256": "69782da045361bd9a479411b84870935d0403acbe6dccb0548993e63e45cdf33"
+    },
+    {
+      "file": "Additional_Experiments_C_Evidence_20261104.zip",
+      "bytes": "2448706",
+      "sha256": "6c8080fefc950a7fce4b82d4733829ec76a495483141a69c573546ccfc1965b6"
+    },
+    {
+      "file": "Additional_Experiments_C_Report.docx",
+      "bytes": "389298",
+      "sha256": "dd8b6db4be5a81f49a3fb4042c314fd8f6afaa6068ec24231e88deab50ffd693"
+    },
+    {
+      "file": "Additional_Experiments_C_Report.pdf",
+      "bytes": "524828",
+      "sha256": "f007dcfd398a483615534574789f6fee6b50dc9d6aca7cf4060e78d378c7dc8a"
+    },
+    {
+      "file": "C1_event_trades.csv",
+      "bytes": "143544",
+      "sha256": "3a65358e6c5a5b9b79dfe6f1a859f1ffe1095e90d14d715acbf7f0c6c309b3af"
+    },
+    {
+      "file": "C1_results.csv",
+      "bytes": "9871",
+      "sha256": "69b204ebb9ffbd5b9822896ee149a058fdd8979ea37098194bbe861bdde72d20"
+    },
+    {
+      "file": "C2_results.csv",
+      "bytes": "231",
+      "sha256": "bd8f84aa3e77c31b98028c18cd709dd74b506685c721cbe161886c41bafc7c9a"
+    },
+    {
+      "file": "C2_source_and_alignment.md",
+      "bytes": "1286",
+      "sha256": "c9e4872d3403ab489a6a9916b2ce42504ca6858ec42d20299f42fad29ef34e78"
+    },
+    {
+      "file": "C2_source_feasibility.md",
+      "bytes": "4092",
+      "sha256": "1e9c4667fc094c0a18b07534acb88e2c4677eaf25a67fb1256939049871cee74"
+    },
+    {
+      "file": "comparisons.csv",
+      "bytes": "5748",
+      "sha256": "27b21f1de5fc271bd07a310b9a05e443f2eb96065366b151b8b4ce1124f6da84"
+    },
+    {
+      "file": "data_dictionary.md",
+      "bytes": "3642",
+      "sha256": "a9f6e42033404407b34cbb30997f85e086e0c41a786a30ad2d01c11aefaec8a9"
+    },
+    {
+      "file": "input_dictionary.csv",
+      "bytes": "16270",
+      "sha256": "6b90cdff400ccd544f61bc5412cc8882e1eed2e75a3e1b2b8f6827d9eada6c64"
+    },
+    {
+      "file": "issues_to_supervisor.md",
+      "bytes": "3139",
+      "sha256": "ad803689b020b613c881d45b915ec16a94184224c6d772001c6153e3492e9887"
+    },
+    {
+      "file": "optional_proposals.md",
+      "bytes": "2182",
+      "sha256": "b24d403f3cd99096350ebd482a1c02f8d682c0f626177e79d5b21d79130ee32b"
+    },
+    {
+      "file": "paired_uncertainty.csv",
+      "bytes": "579",
+      "sha256": "54c0c2a9034c6953a06bd5fe36a62c3924f1c11f81315918a782160d5295ffd2"
+    },
+    {
+      "file": "publication_manifest.json",
+      "bytes": "13679",
+      "sha256": "48bba77de937c896d59fab78cd6073f7872d4e8612f3480ce17bed9696d30e79"
+    },
+    {
+      "file": "target_L1_distances.csv",
+      "bytes": "24774",
+      "sha256": "7e1968a7f8a2f2b42d1440d85779a2b9f23231834e7f1aba4840be5fd1e0c8b4"
+    },
+    {
+      "file": "validations.md",
+      "bytes": "2130",
+      "sha256": "594fc870b013c25aac080025c57ad048f06fa6d8161fe6df9e9ce7eed39cb68c"
+    }
+  ],
+  "screenshot": "qa/drive_submission_complete.png",
+  "C1": "COMPLETED",
+  "C2": "NOT_RUN_SOURCE_GATE_NOT_MET",
+  "C3_C6": "DESIGN_ONLY_NOT_EXECUTED"
+}

@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "baseline_run_id": "availability-observed-contract-20261012T233110",
+  "B_run_id": "core-evidence-20261023T211011",
+  "created_at": "2026-11-04T21:09:06.830084+07:00",
+  "authorization": "User requested execution of experiment_1.md in this chat; existing research inputs reused under same declared scope",
+  "raw_data_redistribution_permitted": false,
+  "data_rights_note": "No new raw-vendor publication authorization inferred. Private local snapshots only; publication archive excludes inputs.",
+  "historical_publication_verified": false,
+  "static_universe": true,
+  "files": [
+    {
+      "snapshot": "prices_valuation.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/aligned_prices.csv",
+      "sha256": "c6789fb99526608cc0e5426de2b8ff59bee14148d908828bd72ed0d3e5814c84",
+      "bytes": 374696
+    },
+    {
+      "snapshot": "prices_eligible.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/candidate_information_prices.csv",
+      "sha256": "5802f1ea9f4d91693eaf2515c27e52adaf18fc60a2bff47aca801e166b0bc50e",
+      "bytes": 380148
+    },
+    {
+      "snapshot": "availability_ledger.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/availability_ledger.csv",
+      "sha256": "92f2b885527f7e287490a7211dab37b2e97cea95d674c0851ee465763213a2b3",
+      "bytes": 11219007
+    },
+    {
+      "snapshot": "availability_policy.json",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/availability_policy.json",
+      "sha256": "f8c96723fd1c18d0efd496d709c2fde95a92b22a44ced4d9c0a469a85c6a1990",
+      "bytes": 13929
+    },
+    {
+      "snapshot": "selection_history.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/selection_history_comparison.csv",
+      "sha256": "fc8928c42cfb556d8f9770868f685771aeb59f091d447139846c29cc58996cf0",
+      "bytes": 210456
+    },
+    {
+      "snapshot": "baseline_metrics.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/optimizer_ladder_metrics.csv",
+      "sha256": "bda45d6a6ad790d608c412f504dd5902efd516b0545fe27fcd556a45b611c447",
+      "bytes": 1408
+    },
+    {
+      "snapshot": "baseline_costs.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/cost_sensitivity.csv",
+      "sha256": "75f7c63296306a5388fbd61231a01c1332560a0435901d23c20940ed42cefcfa",
+      "bytes": 34272
+    },
+    {
+      "snapshot": "baseline_run_manifest.json",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/manifest.json",
+      "sha256": "3dd2e778a83900961073fe661f39bb4bcb2cc59cbd92c57ab75001d1f8385daa",
+      "bytes": 65195
+    },
+    {
+      "snapshot": "step1_manifest.json",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/runs/availability-observed-contract-20261012T233110/manifest.json",
+      "sha256": "3f7457ae6c56ca6e02bcae5166cd7851e9a428d6e0b6859153c34937b55aedd6",
+      "bytes": 45787
+    },
+    {
+      "snapshot": "assets_1.json",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/outputs/step1/readiness_20261012/candidate_workspace/assets_1.json",
+      "sha256": "17f8dcdc12e5bcc85636de55aace06f5ac9a438e35f130ee0718cf813f8f2a42",
+      "bytes": 8822
+    },
+    {
+      "snapshot": "experiment_1.md",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/phase2-journal-plan/experiment_1.md",
+      "sha256": "a2cf3503e2603475d49a3535e2cd078928297e41afd4be9fae8e0548e185e8ef",
+      "bytes": 26986
+    },
+    {
+      "snapshot": "B1_BLnoML_nav.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B1_BLnoML/nav.csv",
+      "sha256": "dad50e14f3f91282d88e3cbd3d8e0002b228066e1667c0150f8b536121b4862a",
+      "bytes": 45964
+    },
+    {
+      "snapshot": "B1_BLnoML_daily_returns.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B1_BLnoML/daily_returns.csv",
+      "sha256": "db68ed31d31b46c18227d9d68649c42d8a43bde134aea4d391830b455845b3e1",
+      "bytes": 50655
+    },
+    {
+      "snapshot": "B1_BLnoML_weights.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B1_BLnoML/weights.csv",
+      "sha256": "fa6807c45e92e69b95567e40d6a2eccdfcbecf08638dad8984d9c9b55a147c1e",
+      "bytes": 483581
+    },
+    {
+      "snapshot": "B1_BLnoML_daily_weights.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B1_BLnoML/daily_weights.csv",
+      "sha256": "70f2df54f7b3d5fa01fe1a2a66605ed6bd76511525ce67f151e96989b92471cb",
+      "bytes": 384571
+    },
+    {
+      "snapshot": "B1_BLnoML_trades.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B1_BLnoML/trades.csv",
+      "sha256": "914e85849edb9932cfc35121a6777094537bd7d094f27aaa7e528057ede5ae99",
+      "bytes": 24921
+    },
+    {
+      "snapshot": "B1_BLnoML_posterior_audit.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B1_BLnoML/posterior_audit.csv",
+      "sha256": "83a20e370f1b7c9662cec7887213790ef9f698c49fa4ba5432f55b864ea4810c",
+      "bytes": 496743
+    },
+    {
+      "snapshot": "B2_BLML_nav.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B2_BLML/nav.csv",
+      "sha256": "61cdbe01c1b79ac0565c49b06094c5b6373e2e1b1b1c97b4085b88ad07ef8c04",
+      "bytes": 45954
+    },
+    {
+      "snapshot": "B2_BLML_daily_returns.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B2_BLML/daily_returns.csv",
+      "sha256": "3c3e0a6839ef5e75c276ac910bf04ef6f876181b7b64aecbbc97cbdc63f0b32a",
+      "bytes": 50674
+    },
+    {
+      "snapshot": "B2_BLML_weights.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B2_BLML/weights.csv",
+      "sha256": "10232436977390238e6715b3105345b9f446e0d797337f5eccee07bcbf790bed",
+      "bytes": 466475
+    },
+    {
+      "snapshot": "B2_BLML_daily_weights.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B2_BLML/daily_weights.csv",
+      "sha256": "3d7b6a1b9443ede7373b69fdb61217910fa0fa9431a9f3be1c7ba19ccf940d67",
+      "bytes": 356507
+    },
+    {
+      "snapshot": "B2_BLML_trades.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B2_BLML/trades.csv",
+      "sha256": "01afe3202215b6ac4402ed700e4d381d596d84986276f55553d8a36bea64a206",
+      "bytes": 24330
+    },
+    {
+      "snapshot": "B2_BLML_posterior_audit.csv",
+      "source": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/experiments_core/runs/core-evidence-20261023T211011/outputs/variants/B2_BLML/posterior_audit.csv",
+      "sha256": "d7622d041cc29809979e209809798d7f4da1f5bffda6fdf35f60c1dbd2565340",
+      "bytes": 580569
+    }
+  ]
+}

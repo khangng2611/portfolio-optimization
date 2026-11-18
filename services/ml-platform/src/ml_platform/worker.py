@@ -19,26 +19,33 @@ from quant_service.snapshot_inputs import (
     FEATURE_SCHEMA,
     FEATURE_NAMES,
 )
+from quant_service import phase1
 from quant_service.snapshot_publisher import MarketReader
 from quant_service.model_worker import TrainingData, train_candidate, approve_candidate
-from quant_service.ml import ModelManifest, read_artifact
+from quant_service.ml import parse_manifest, read_artifact, validate_native_files
 from .models import Model, Review, TrainingJob
 from .queue import TrainingQueue
 
 
 def validated_candidate(directory, ref):
-    manifest = ModelManifest.model_validate_json(read_artifact(directory, ref))
-    if manifest.schema_version != 2 or manifest.demo or manifest.status != "CANDIDATE":
-        raise ValueError("Provenance-complete candidate required")
+    manifest = parse_manifest(read_artifact(directory, ref))
     if (
-        manifest.xgboost_version != xgb.__version__
-        or manifest.feature_schema_version != FEATURE_SCHEMA
+        manifest.schema_version not in (2, 3, 4, 5)
+        or manifest.demo
+        or manifest.status != "CANDIDATE"
+    ):
+        raise ValueError("Provenance-complete candidate required")
+    if manifest.xgboost_version != xgb.__version__:
+        raise ValueError("Unsupported model runtime")
+    root = (Path(directory) / ref["file"]).resolve().parent
+    validate_native_files(root, manifest, load=True)
+    if manifest.schema_version in (3, 4, 5):
+        return manifest
+    if (
+        manifest.feature_schema_version != FEATURE_SCHEMA
         or manifest.feature_names != FEATURE_NAMES
     ):
         raise ValueError("Unsupported model runtime or feature schema")
-    # Native refs resolve relative to the manifest directory.
-    root = Path(directory) / Path(ref["file"]).parent
-    read_artifact(root, manifest.model, suffixes=(".ubj",), max_bytes=20_000_000)
     metrics = manifest.validation
     import math
 
@@ -62,7 +69,9 @@ def validated_candidate(directory, ref):
 def _register(session, directory, job, ref, provenance):
     manifest = validated_candidate(directory, ref)
     if (
-        manifest.training_snapshot_id != job.request["snapshot_id"]
+        (manifest.schema_version == 5)
+        != (job.request.get("model_family") == "phase1-asset-ensemble-v5")
+        or manifest.training_snapshot_id != job.request["snapshot_id"]
         or manifest.training_snapshot_hash != job.request["snapshot_hash"]
         or manifest.training_cutoff.isoformat() != job.request["training_cutoff"]
         or manifest.training_data_hash != provenance["training_data_hash"]
@@ -102,10 +111,16 @@ def _recover(directory, session, job):
 
 def _durable_receipt(root, name, value):
     # Artifacts and receipt survive a worker/container crash before the SQL commit.
-    for path in root.iterdir():
+    for path in root.rglob("*"):
         if path.is_file() and path.suffix in {".json", ".ubj"}:
             with path.open("rb") as stream:
                 os.fsync(stream.fileno())
+        elif path.is_dir():
+            descriptor = os.open(path, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
     temporary = root / (name + ".tmp")
     with temporary.open("w") as stream:
         json.dump(value, stream, allow_nan=False)
@@ -136,24 +151,74 @@ def process_one(queue, directory, reader, *, now=None):
             return True
         request = job.request
         snapshot, rows = reader.load(request["snapshot_id"], request["snapshot_hash"])
-        panel = SnapshotPanel(
-            snapshot,
-            rows,
-            expected_hash=request["snapshot_hash"],
-            now=now,
-            max_age_days=request["max_age_days"],
-            lookback=request["lookback"],
-            min_returns=request["min_returns"],
-        )
-        training = panel.training_data(date.fromisoformat(request["training_cutoff"]))
-        _, _, provenance = panel.inputs()
-        provenance |= {
-            "trainer": "quant-model-worker-v1",
-            "feature_schema_hash": canonical_hash(FEATURE_DEFINITION),
-            "training_data_hash": canonical_hash(
-                TrainingData.model_validate(training).model_dump(mode="json")
-            ),
-        }
+        is_asset = request.get("model_family") == "phase1-asset-ensemble-v5"
+        cutoff = date.fromisoformat(request["training_cutoff"])
+        if is_asset:
+            from quant_service.selection_panel import SelectionPanel
+            from .selected_train import train_asset_candidate, fit_state
+
+            if snapshot.get("schema_version") != 3 or request["max_age_days"] != 7:
+                raise ValueError(
+                    "Asset ensemble requires selected source schema 3 and freshness 7"
+                )
+            panel = SelectionPanel(
+                snapshot, rows, expected_hash=request["snapshot_hash"], now=now
+            )
+            state = fit_state(panel)
+            if str(state["training_cutoff"]) != str(cutoff):
+                raise ValueError("Asset ensemble cutoff conflicts with the fit epoch")
+            provenance = {
+                "snapshot_id": snapshot["id"],
+                "snapshot_hash": snapshot["content_hash"],
+                "trainer": "phase1-asset-ensemble-v5",
+                "data_origin": "real",
+                "fit_epoch": str(state["fit_epoch"]),
+                "training_equity_hash": state["training_equity_hash"],
+                "training_data_hash": state["training_data_hash"],
+                "point_in_time_certified": False,
+            }
+        else:
+            is_full = snapshot.get("schema_version") == 2
+            if is_full:
+                from quant_service.full import MixedPanel
+                from .full_train import train_full_candidate, training_hash
+
+            panel = (MixedPanel if is_full else SnapshotPanel)(
+                snapshot,
+                rows,
+                expected_hash=request["snapshot_hash"],
+                now=now,
+                max_age_days=request["max_age_days"],
+                lookback=request["lookback"],
+                min_returns=request["min_returns"],
+            )
+            cutoff = date.fromisoformat(request["training_cutoff"])
+            if is_full:
+                if str(cutoff) != panel.selection_state()["training_cutoff"]:
+                    raise ValueError(
+                        "Full training cutoff conflicts with the fit schedule"
+                    )
+                _, _, provenance = panel.inputs()
+                provenance |= {
+                    "trainer": "phase1-full-native-ensemble-v1",
+                    "feature_schema_hash": canonical_hash(
+                        {
+                            "feature_schema_version": "phase1-full-features-v1",
+                            "feature_names": phase1.FEATURES,
+                        }
+                    ),
+                    "training_data_hash": training_hash(panel),
+                }
+            else:
+                training = panel.training_data(cutoff)
+                _, _, provenance = panel.inputs()
+                provenance |= {
+                    "trainer": "quant-model-worker-v1",
+                    "feature_schema_hash": canonical_hash(FEATURE_DEFINITION),
+                    "training_data_hash": canonical_hash(
+                        TrainingData.model_validate(training).model_dump(mode="json")
+                    ),
+                }
         # Training and artifact creation occur under the fenced job transaction.
         # A lost worker cannot overwrite a candidate already registered by recovery.
         with queue.sessions() as session:
@@ -184,7 +249,14 @@ def process_one(queue, directory, reader, *, now=None):
                         raise ValueError("Training receipt conflict")
                     local = saved["reference"]
                 else:
-                    local = train_candidate(root, training)
+                    if is_asset:
+                        local = train_asset_candidate(root, panel, state["fit_epoch"])
+                    else:
+                        local = (
+                            train_full_candidate(root, panel, cutoff)
+                            if is_full
+                            else train_candidate(root, training)
+                        )
                     # Full bytes are complete before the atomic receipt rename.
                     _durable_receipt(
                         root,
@@ -234,7 +306,9 @@ def materialize_approvals(sessions, directory):
                     review = session.scalar(
                         select(Review).where(Review.model_id == model.id)
                     )
-                    validated_candidate(directory, model.candidate_ref)
+                    candidate = validated_candidate(directory, model.candidate_ref)
+                    if review is None or review.decision != "APPROVED":
+                        raise ValueError("Recorded approval required")
                     root = Path(directory) / Path(model.candidate_ref["file"]).parent
                     receipt = root / "approval-receipt.json"
                     if receipt.exists():
@@ -248,14 +322,23 @@ def materialize_approvals(sessions, directory):
                                 "sha256": model.candidate_ref["sha256"],
                             },
                             reviewer=review.actor,
+                            registry_review=True,
                         )
                         _durable_receipt(root, "approval-receipt.json", local)
-                    approved = ModelManifest.model_validate_json(
-                        read_artifact(root, local)
-                    )
+                    approved = parse_manifest(read_artifact(root, local))
                     if (
                         approved.model_id != model.id
+                        or approved.status != "APPROVED"
                         or approved.approved_by != review.actor
+                        or (
+                            candidate.schema_version in (3, 4, 5)
+                            and approved.model_dump(
+                                exclude={"status", "approved_at", "approved_by"}
+                            )
+                            != candidate.model_dump(
+                                exclude={"status", "approved_at", "approved_by"}
+                            )
+                        )
                     ):
                         raise ValueError("Approval conflict")
                     model.approved_ref = {

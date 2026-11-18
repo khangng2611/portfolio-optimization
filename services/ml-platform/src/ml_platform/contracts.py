@@ -1,18 +1,26 @@
 from datetime import date
 from uuid import UUID
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from portfolio_contracts import utcnow
 
 
 class TrainingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    model_family: Literal["phase1-asset-ensemble-v5"] | None = None
     snapshot_id: UUID
     snapshot_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     training_cutoff: date
     max_age_days: int = Field(default=7, strict=True, ge=1, le=30)
     lookback: int = Field(default=252, strict=True, ge=20, le=2520)
     min_returns: int = Field(default=60, strict=True, ge=20, le=2520)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_request(self, handler):
+        value = handler(self)
+        if self.model_family is None:
+            value.pop("model_family", None)
+        return value
 
     @model_validator(mode="after")
     def bounded(self):

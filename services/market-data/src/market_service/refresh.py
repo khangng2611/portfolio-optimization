@@ -418,20 +418,8 @@ def finish(sessions, claimed, store, artifacts, packs, manifest_pin, *, now=None
                 as_of_date=utcnow().date(),
                 max_age_days=job.config["max_age_days"],
             ),
+            observed_sessions=set(packs[0][0]["expected_sessions"]),
         )
-        # A provider can remove a formerly observed historical bar. There is no
-        # tombstone revision in this MVP: refuse a snapshot that would silently
-        # retain rows absent from the complete current source vintage.
-        current_keys = {
-            (row.asset_id, row.observation_date.isoformat())
-            for _, observations, _ in packs
-            for row in observations
-        }
-        selected_keys = {
-            (row["asset_id"], row["observation_date"]) for row in snapshot.observations
-        }
-        if selected_keys != current_keys:
-            raise QualityFailure([finding("MISSING_SESSIONS")], len(selected_keys))
         job.status, job.error = "SUCCEEDED", None
         job.source_manifest = manifest_pin
         job.artifacts, job.ingestion_job_ids, job.snapshot_id = (

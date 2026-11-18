@@ -599,6 +599,47 @@
         }
       }
     },
+    "/api/v1/market/selected-snapshots": {
+      "post": {
+        "summary": "Selected Snapshot",
+        "operationId": "selected_snapshot_api_v1_market_selected_snapshots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectedSnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/market/snapshots/{snapshot_id}": {
       "get": {
         "summary": "Get Snapshot",
@@ -1534,6 +1575,25 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SchedulePatch"
+      },
+      "SelectedSnapshotRequest": {
+        "properties": {
+          "as_of_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SelectedSnapshotRequest"
       },
       "SnapshotRequest": {
         "properties": {

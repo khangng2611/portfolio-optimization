@@ -85,6 +85,17 @@
           ],
           "default": null,
           "title": "Fallback Reason"
+        },
+        "requested_constraints": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Constraints"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -171,6 +182,128 @@
       ],
       "title": "ReadyInput",
       "type": "object"
+    },
+    "RegimeInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "regime": {
+          "enum": [
+            "normal",
+            "stress",
+            "crisis"
+          ],
+          "title": "Regime",
+          "type": "string"
+        },
+        "vol_ratio": {
+          "minimum": 0,
+          "title": "Vol Ratio",
+          "type": "number"
+        },
+        "drawdown": {
+          "title": "Drawdown",
+          "type": "number"
+        },
+        "equity_momentum": {
+          "title": "Equity Momentum",
+          "type": "number"
+        }
+      },
+      "required": [
+        "regime",
+        "vol_ratio",
+        "drawdown",
+        "equity_momentum"
+      ],
+      "title": "RegimeInfo",
+      "type": "object"
+    },
+    "SelectionContext": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_asset_ids": {
+          "items": {
+            "pattern": "^[A-Z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Candidate Asset Ids",
+          "type": "array"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "title": "Revision Id",
+          "type": "string"
+        },
+        "candidate_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Candidate Hash",
+          "type": "string"
+        },
+        "selection_policy_id": {
+          "const": "user-k5-v1",
+          "default": "user-k5-v1",
+          "title": "Selection Policy Id",
+          "type": "string"
+        },
+        "risk_policy_id": {
+          "const": "custom-mixed-risk-v1",
+          "default": "custom-mixed-risk-v1",
+          "title": "Risk Policy Id",
+          "type": "string"
+        },
+        "data_policy_id": {
+          "default": "user-selection-data-v1",
+          "enum": [
+            "user-selection-data-v1",
+            "user-selection-live-nav-v2"
+          ],
+          "title": "Data Policy Id",
+          "type": "string"
+        },
+        "regime_policy_id": {
+          "const": "candidate-regime-v1",
+          "default": "candidate-regime-v1",
+          "title": "Regime Policy Id",
+          "type": "string"
+        },
+        "regime": {
+          "$ref": "#/$defs/RegimeInfo"
+        },
+        "regime_input_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Regime Input Hash",
+          "type": "string"
+        },
+        "decision_at": {
+          "format": "date-time",
+          "title": "Decision At",
+          "type": "string"
+        },
+        "decision_session": {
+          "format": "date",
+          "title": "Decision Session",
+          "type": "string"
+        },
+        "valid_until": {
+          "format": "date-time",
+          "title": "Valid Until",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_asset_ids",
+        "revision_id",
+        "candidate_hash",
+        "regime",
+        "regime_input_hash",
+        "decision_at",
+        "decision_session",
+        "valid_until"
+      ],
+      "title": "SelectionContext",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -224,6 +357,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/DecisionContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "selection_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SelectionContext"
         },
         {
           "type": "null"

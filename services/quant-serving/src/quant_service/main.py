@@ -6,10 +6,29 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 
 from service_auth import AuthError, TokenVerifier
-from portfolio_contracts import ModelUnavailable
+from portfolio_contracts import ModelUnavailable, Constraints, ReadyInput, StrictModel
+from portfolio_contracts.selection import SelectionContext, SelectionProof
+from portfolio_contracts.selection import CandidateSet
 from service_observability import configure, install_http_tracing
 from .publication_api import install_publication_api, CredentialModelResolver
 from .runtime import catalog_from_env, sessions_from_env
+from .full import FullDataUnavailable
+
+
+class SelectionReadyRequest(CandidateSet):
+    strategy: Literal["EW", "MVO", "BL_ML"] = "BL_ML"
+    constraints: Constraints | None = None
+    portfolio_version: int | None = None
+    revision_id: str | None = None
+    candidate_hash: str | None = None
+
+
+class VerifySelectionRequest(StrictModel):
+    inputs: ReadyInput
+    selection_context: SelectionContext
+    selection_proof: SelectionProof
+    constraints: Constraints
+    strategy: Literal["EW", "MVO", "BL_ML"]
 
 
 def create_app(*, sessions, verifier, catalog, model_resolver=None):
@@ -50,6 +69,47 @@ def create_app(*, sessions, verifier, catalog, model_resolver=None):
             raise HTTPException(403, "Missing quant:resolve scope")
         return identity
 
+    @app.post("/internal/v1/inputs/verify-selection")
+    def verify_selection(
+        body: VerifySelectionRequest, identity=Depends(resolver_identity)
+    ):
+        from types import SimpleNamespace
+        from .selection import recompute_selection
+
+        command = SimpleNamespace(
+            inputs=body.inputs,
+            selection_context=body.selection_context,
+            constraints=body.constraints,
+            strategy=body.strategy,
+            deadline=body.selection_context.valid_until,
+            decision_context=None,
+            input_hash=body.selection_proof.input_hash,
+        )
+        try:
+            actual = recompute_selection(catalog.selection_catalog, command)[3]
+            return {"valid": actual == body.selection_proof}
+        except (ValueError, KeyError, TypeError, OSError):
+            return {"valid": False}
+
+    @app.post("/internal/v1/inputs/selection-ready")
+    def selection_ready(
+        body: SelectionReadyRequest, identity=Depends(resolver_identity)
+    ):
+        from .selection_ready import prepare_selection
+
+        try:
+            return prepare_selection(
+                catalog.selection_catalog, body.model_dump(mode="json")
+            ).model_dump(mode="json")
+        except (ValueError, KeyError, TypeError, OSError):
+            raise HTTPException(409, {"code": "INPUT_INVALID"}) from None
+
+    @app.get("/internal/v1/assets/catalog")
+    def assets(identity=Depends(resolver_identity)):
+        from .asset_catalog import asset_catalog
+
+        return asset_catalog(catalog)
+
     @app.get("/internal/v1/inputs/universes")
     def universes(identity=Depends(resolver_identity)):
         try:
@@ -73,6 +133,10 @@ def create_app(*, sessions, verifier, catalog, model_resolver=None):
             raise HTTPException(403, "Missing quant:resolve scope")
         try:
             return catalog.ready(universe_id, strategy).model_dump(mode="json")
+        except FullDataUnavailable as exc:
+            raise HTTPException(
+                409, {"code": exc.code, "message": str(exc), "details": exc.details}
+            ) from None
         except ModelUnavailable:
             raise HTTPException(409, {"code": "MODEL_UNAVAILABLE"}) from None
         except ValueError:

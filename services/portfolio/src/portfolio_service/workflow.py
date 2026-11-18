@@ -5,14 +5,16 @@ from datetime import datetime
 from sqlalchemy import select
 
 from portfolio_contracts import Envelope, OptimizeResult, aware, utcnow
+from portfolio_contracts.selection import SelectionProof
 from service_observability import link_job, log_event, span
 from .models import Inbox, Job, Portfolio, Recommendation
 
 
-def validate_result(result, command):
+def validate_result(result, command, *, resolver=None, deadline=None):
     # Reject non-JSON/nonfinite diagnostics before PostgreSQL JSON persistence.
     json.dumps(result, allow_nan=False)
-    ids = command["inputs"]["asset_ids"]
+    context = command.get("selection_context")
+    ids = context["candidate_asset_ids"] if context else command["inputs"]["asset_ids"]
     weights = result.get("weights", [])
     c = command["constraints"]
     if (
@@ -36,6 +38,66 @@ def validate_result(result, command):
         raise ValueError("Invalid or infeasible final weights")
     if abs(sum(weights) - 1) > 1e-7:
         raise ValueError("Invalid weight sum")
+    phase = (command["inputs"].get("provenance") or {}).get("phase1_full")
+    if phase and command["strategy"] == "BL_ML":
+        active = phase["active_asset_ids"]
+        if any(abs(w) > 1e-7 for asset, w in zip(ids, weights) if asset not in active):
+            raise ValueError("Inactive asset has nonzero weight")
+        inference = result["diagnostics"].get("inference") or {}
+        if (
+            not isinstance(inference, dict)
+            or any(
+                inference.get(key) != phase[key]
+                for key in (
+                    "selection_id",
+                    "selection_epoch",
+                    "fit_epoch",
+                    "active_asset_ids",
+                )
+            )
+            or (
+                inference.get("model_manifest_hash")
+                != command["inputs"]["model_bundle_id"]
+            )
+        ):
+            raise ValueError(
+                "Full-universe inference pins do not match the accepted command"
+            )
+    if context:
+        proof = SelectionProof.model_validate(result["diagnostics"].get("selection"))
+        provenance = command["inputs"].get("provenance") or {}
+        if (
+            proof.input_hash != command["input_hash"]
+            or proof.candidate_hash != context["candidate_hash"]
+            or proof.snapshot_hash != provenance.get("snapshot_hash")
+            or proof.panel_hash != provenance.get("panel_hash")
+            or proof.decision_session.isoformat() != context["decision_session"]
+            or proof.active_asset_ids != [a for a in ids if a in proof.active_asset_ids]
+            or len(set(proof.active_asset_ids)) != len(proof.active_asset_ids)
+            or any(
+                w != 0 for a, w in zip(ids, weights) if a not in proof.active_asset_ids
+            )
+        ):
+            raise ValueError("Selection proof does not match accepted command")
+        if command["strategy"] == "BL_ML":
+            inference = result["diagnostics"].get("inference") or {}
+            if (
+                inference.get("manifest_hash") != command["inputs"]["model_bundle_id"]
+                or inference.get("snapshot_id") != command["inputs"]["snapshot_id"]
+                or inference.get("snapshot_hash") != proof.snapshot_hash
+            ):
+                raise ValueError("Selected model/snapshot pin mismatch")
+        if resolver is None or deadline is None:
+            raise RuntimeError("Selection verification resolver required")
+        if not resolver.verify_selection(
+            command["inputs"],
+            context,
+            proof.model_dump(mode="json"),
+            deadline,
+            constraints=c,
+            strategy=command["strategy"],
+        ):
+            raise ValueError("Selection proof source recomputation failed")
     defensive = sum(
         w for asset, w in zip(ids, weights) if asset in c["defensive_asset_ids"]
     )
@@ -46,7 +108,7 @@ def validate_result(result, command):
         raise ValueError("Defensive constraints violated")
 
 
-def consume_result(sessions, event: Envelope):
+def consume_result(sessions, event: Envelope, *, resolver=None):
     if (
         event.type != "quant.optimization.completed"
         or event.producer != "quant-serving"
@@ -114,11 +176,25 @@ def consume_result(sessions, event: Envelope):
             return
         try:
             with span("portfolio.result.validate", attributes=attributes):
-                validate_result(payload.result or {}, job.input)
-                if portfolio.version != job.input["portfolio_version"]:
+                validate_result(
+                    payload.result or {},
+                    job.input,
+                    resolver=resolver,
+                    deadline=aware(job.deadline),
+                )
+                if (
+                    not job.input.get("selection_context")
+                    and portfolio.version != job.input["portfolio_version"]
+                ):
                     raise ValueError("Portfolio changed")
                 if (
-                    aware(datetime.fromisoformat(job.input["inputs"]["valid_until"]))
+                    aware(
+                        datetime.fromisoformat(
+                            (job.input.get("selection_context") or job.input["inputs"])[
+                                "valid_until"
+                            ]
+                        )
+                    )
                     <= utcnow()
                 ):
                     raise ValueError("Input expired")
@@ -153,6 +229,15 @@ def consume_result(sessions, event: Envelope):
                 "fallback_reason"
             ),
         }
+        if job.input.get("selection_context"):
+            result["selection_context"] = job.input["selection_context"]
+            result["selection_proof"] = payload.result["diagnostics"]["selection"]
+            result["valid_until"] = job.input["selection_context"]["valid_until"]
+        requested = (job.input.get("decision_context") or {}).get(
+            "requested_constraints"
+        )
+        if requested is not None:
+            result["requested_constraints"] = requested
         if job.input["inputs"].get("provenance") is not None:
             result["inputs_provenance"] = job.input["inputs"]["provenance"]
         with span(

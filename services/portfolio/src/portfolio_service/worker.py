@@ -9,7 +9,7 @@ from portfolio_contracts import Envelope, utcnow
 from portfolio_contracts.broker import connection_from_url, consume, publish
 from service_observability import configure, log_event, span
 from .models import Job, Outbox
-from .runtime import sessions_from_env
+from .runtime import sessions_from_env, QuantResolver
 from .workflow import consume_result
 
 
@@ -48,10 +48,11 @@ def main():
         raise SystemExit("Usage: python -m portfolio_service.worker dispatch|consume")
     configure(f"portfolio-{sys.argv[1]}")
     if sys.argv[1:] == ["consume"]:
+        resolver = QuantResolver()
         consume(
             url,
             "portfolio",
-            lambda body: consume_result(sessions, Envelope.model_validate(body)),
+            lambda body: consume_result(sessions, Envelope.model_validate(body), resolver=resolver),
         )
         return
     if sys.argv[1:] != ["dispatch"]:

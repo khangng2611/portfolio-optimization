@@ -8,9 +8,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator, field_validator
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import object_session
 
 from portfolio_contracts import (
     Constraints,
@@ -40,10 +41,16 @@ from .models import (
     Portfolio,
     Recommendation,
     RiskAssessment,
+    PortfolioAssetSelection,
     User,
 )
-from .policy import RiskAnswers, risk_policy
+from .policy import RiskAnswers, effective_constraints, risk_policy, check_candidate_feasibility
+from .selection import (enabled as selections_enabled, require_enabled, current_selection,
+                        create_selection_revision, revision_json, stale_selection_details)
+from portfolio_contracts.selection import CandidateSet, SelectionReadiness, SelectionContext, AssetCatalogItem
+from portfolio_contracts.assets import canonical_candidates, supported_assets, CATALOG_VERSION
 from .workflow import validate_result
+from .runtime import StaleInput
 
 HUMAN_ROLES = {
     "investor",
@@ -54,7 +61,24 @@ HUMAN_ROLES = {
 }
 
 
-class NewPortfolio(StrictModel):
+class AssetSelectionInput(StrictModel):
+    asset_ids: list[str] | None = Field(default=None, min_length=1, max_length=32)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def canonical(cls, value):
+        return canonical_candidates(value) if value is not None else value
+
+    @model_validator(mode="after")
+    def exclusive(self):
+        if self.asset_ids is not None and "universe_id" in self.model_fields_set:
+            raise ValueError("asset_ids and universe_id are mutually exclusive")
+        if getattr(self, "universe_id", None) == "USER_SELECTED":
+            raise ValueError("Use asset_ids for a custom portfolio")
+        return self
+
+
+class NewPortfolio(AssetSelectionInput):
     name: str = Field(min_length=1, max_length=120, pattern=r"\S")
     capital_vnd: Decimal = Field(
         gt=0, le=Decimal("10000000000000000000"), max_digits=24, decimal_places=4
@@ -69,7 +93,7 @@ class NewRecommendation(StrictModel):
     fallback_strategy: Literal["EW"] | None = None
 
 
-class OnboardingPortfolio(StrictModel):
+class OnboardingPortfolio(AssetSelectionInput):
     name: str = Field(min_length=1, max_length=120, pattern=r"\S")
     capital_vnd: Decimal = Field(
         gt=0, le=Decimal("10000000000000000000"), max_digits=24, decimal_places=4
@@ -135,11 +159,13 @@ class StrategyReadiness(StrictModel):
         "INPUT_EXPIRED",
         "INPUT_UNAVAILABLE",
         "INPUT_INVALID",
+        "VFF_STALE", "GOLD_STALE", "MODEL_REVIEW_PENDING", "SELECTION_MISMATCH",
     ]
 
 
 class InputReadiness(StrictModel):
     # Additive diagnostics only: immutable ReadyInput execution pins are unchanged.
+    provenance: dict | None = None
     bundle_id: str | None = None
     bundle_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     snapshot_id: str | None = None
@@ -152,7 +178,7 @@ class InputReadiness(StrictModel):
     demo: bool
     data_origin: Literal["real", "synthetic", "unverified"]
     status: Literal["READY", "EXPIRED", "UNAVAILABLE"]
-    reason_code: Literal["READY", "INPUT_EXPIRED", "INPUT_UNAVAILABLE", "INPUT_INVALID"]
+    reason_code: Literal["READY", "INPUT_EXPIRED", "INPUT_UNAVAILABLE", "INPUT_INVALID", "VFF_STALE", "GOLD_STALE", "MODEL_REVIEW_PENDING", "SELECTION_MISMATCH"]
     strategies: list[StrategyReadiness]
     next_action: Literal["NONE", "REFRESH_DATA", "CONTACT_OPERATOR"]
     checked_at: datetime
@@ -161,7 +187,7 @@ class InputReadiness(StrictModel):
 def profile_policy_id(profile):
     if not profile:
         return "manual-constraints-v1"
-    legacy = f"risk-policy-v1:{profile['profile']}"
+    legacy = f"{profile.get('mapping_version', 'risk-policy-v1')}:{profile['profile']}"
     return f"{legacy}:{profile['version_id']}" if profile.get("version_id") else legacy
 
 
@@ -217,7 +243,7 @@ def target_json(value):
 
 
 def portfolio_json(value):
-    return {
+    result = {
         "id": value.id,
         "name": value.name,
         "capital_vnd": str(value.capital_vnd),
@@ -227,6 +253,10 @@ def portfolio_json(value):
         "policy_version_id": policy_id(value),
         "risk_profile": value.risk_profile,
     }
+    selection = current_selection(value)
+    if selection is not None:
+        result["asset_selection"] = revision_json(selection)
+    return result
 
 
 def create_app(*, sessions, verifier, resolver, account_active=None):
@@ -242,18 +272,30 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
         response.headers["Cache-Control"] = "no-store"
         return response
 
-    def error(request, status, code, message, headers=None):
+    def error(request, status, code, message, headers=None, *, details=None):
+        public_error = {"code": code, "message": message, "retryable": status == 503}
+        if details is not None:
+            public_error["details"] = details
         return JSONResponse(
             status_code=status,
             content={
-                "error": {"code": code, "message": message, "retryable": status == 503},
+                "error": public_error,
                 "request_id": request.state.request_id,
             },
             headers=headers,
         )
 
+    @app.exception_handler(StaleInput)
+    async def stale_input_error(request: Request, exc: StaleInput):
+        return JSONResponse(status_code=409, content={
+            "error": exc.detail | {"retryable": False},
+            "request_id": request.state.request_id,
+        })
+
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException):
+        if exc.status_code == 409 and isinstance(exc.detail, dict):
+            return error(request, 409, exc.detail["code"], exc.detail["message"], exc.headers, details=exc.detail.get("details"))
         return error(
             request,
             exc.status_code,
@@ -363,21 +405,37 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
     def universes_readiness(identity=Depends(principal)):
         return resolve_readiness()
 
+    @app.get("/api/v1/assets/catalog")
+    def asset_catalog(user_id=Depends(owner)):
+        try:
+            value = resolver.catalog()
+            assets = [AssetCatalogItem.model_validate(item).model_dump(mode="json") for item in value["assets"]]
+            if value["catalog_version"] != CATALOG_VERSION or [a["asset_id"] for a in assets] != [a["asset_id"] for a in supported_assets()]:
+                raise ValueError("Catalog mismatch")
+        except (httpx.HTTPError, ValueError, KeyError, AttributeError, TypeError):
+            assets = [AssetCatalogItem.model_validate(item).model_dump(mode="json") for item in supported_assets()]
+        return {"catalog_version": CATALOG_VERSION, "selection_enabled": selections_enabled(), "assets": assets}
+
     @app.post("/api/v1/portfolios", status_code=201)
     def create_portfolio(body: NewPortfolio, user_id=Depends(owner)):
+        universe = "USER_SELECTED" if body.asset_ids is not None else body.universe_id
+        if body.asset_ids is not None:
+            require_enabled()
         with sessions.begin() as session:
             value = Portfolio(
                 owner_user_id=user_id,
                 name=body.name.strip(),
                 capital_vnd=body.capital_vnd,
-                universe_id=body.universe_id,
-                constraints=Constraints(
+                universe_id=universe,
+                constraints=effective_constraints(Constraints(
                     risk_aversion=body.risk_aversion,
                     max_position_weight=body.max_position_weight,
-                ).model_dump(),
+                ), universe).model_dump(),
             )
             session.add(value)
             session.flush()
+            if body.asset_ids is not None:
+                create_selection_revision(session, value, body.asset_ids, None, value.version, initial=True)
             return portfolio_json(value)
 
     @app.get("/api/v1/portfolios")
@@ -431,13 +489,16 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
 
     @app.post("/api/v1/onboarding/portfolios", status_code=201)
     def onboarding(body: OnboardingPortfolio, user_id=Depends(owner)):
-        profile, constraints = risk_policy(body.answers)
+        universe = "USER_SELECTED" if body.asset_ids is not None else body.universe_id
+        if body.asset_ids is not None:
+            require_enabled()
+        profile, constraints = risk_policy(body.answers, universe)
         with sessions.begin() as session:
             value = Portfolio(
                 owner_user_id=user_id,
                 name=body.name.strip(),
                 capital_vnd=body.capital_vnd,
-                universe_id=body.universe_id,
+                universe_id=universe,
                 constraints=constraints.model_dump(),
                 risk_profile=profile,
             )
@@ -449,6 +510,8 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             value.risk_profile = revision.risk_profile
             session.add(revision)
             session.flush()
+            if body.asset_ids is not None:
+                create_selection_revision(session, value, body.asset_ids, None, value.version, initial=True)
             return portfolio_json(value)
 
     def owned_portfolio(session, portfolio_id, user_id, *, lock=False):
@@ -460,6 +523,41 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             raise HTTPException(404, "Không tìm thấy danh mục.")
         return value
 
+    @app.get("/api/v1/portfolios/{portfolio_id}/asset-selections")
+    def selection_history(portfolio_id: UUID, response: Response, user_id=Depends(owner)):
+        with sessions() as session:
+            value = owned_portfolio(session, portfolio_id, user_id)
+            response.headers["ETag"] = f'"{value.version}"'
+            return [revision_json(item) for item in session.scalars(
+                select(PortfolioAssetSelection).where(
+                    PortfolioAssetSelection.portfolio_id == value.id,
+                    PortfolioAssetSelection.owner_user_id == user_id,
+                ).order_by(PortfolioAssetSelection.portfolio_version.desc())
+            )]
+
+    @app.post("/api/v1/portfolios/{portfolio_id}/asset-selections", status_code=201)
+    def edit_selection(portfolio_id: UUID, body: CandidateSet, response: Response,
+                       user_id=Depends(owner), if_match: str | None = Header(default=None),
+                       idempotency_key: str | None = Header(default=None)):
+        with sessions.begin() as session:
+            value = owned_portfolio(session, portfolio_id, user_id, lock=True)
+            require_enabled()
+            if current_selection(value) is None:
+                raise HTTPException(409, "Danh mục cũ giữ nguyên bộ tài sản đã lưu.")
+            if if_match is None:
+                raise HTTPException(428, "Cần If-Match từ phiên bản danh mục hiện tại.")
+            if not if_match.startswith('"') or not if_match.endswith('"') or not if_match[1:-1].isdigit():
+                raise HTTPException(400, "If-Match không hợp lệ.")
+            if not idempotency_key or not 1 <= len(idempotency_key) <= 128 or any(ord(c) < 33 or ord(c) > 126 for c in idempotency_key):
+                raise HTTPException(400, "Cần Idempotency-Key hợp lệ.")
+            try:
+                revision = create_selection_revision(session, value, body.candidate_asset_ids,
+                                                     idempotency_key, int(if_match[1:-1]))
+            except ValueError:
+                raise HTTPException(422, "Tài sản không hợp lệ.") from None
+            response.headers["ETag"] = f'"{revision.portfolio_version}"'
+            return revision_json(revision)
+
     @app.post(
         "/api/v1/portfolios/{portfolio_id}/risk-assessments/preview",
         response_model=RiskAssessmentPreview,
@@ -470,9 +568,9 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
         response: Response,
         user_id=Depends(owner),
     ):
-        profile, constraints = risk_policy(body.answers)
         with sessions() as session:
             value = owned_portfolio(session, portfolio_id, user_id)
+            profile, constraints = risk_policy(body.answers, value.universe_id)
             response.headers["ETag"] = f'"{value.version}"'
             return {
                 "portfolio_id": value.id,
@@ -533,10 +631,10 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
         if_match: str | None = Header(default=None),
         idempotency_key: str | None = Header(default=None),
     ):
-        profile, constraints = risk_policy(body.answers)
         body_hash = canonical_hash(body.model_dump())
         with sessions.begin() as session:
             value = owned_portfolio(session, portfolio_id, user_id, lock=True)
+            profile, constraints = risk_policy(body.answers, value.universe_id)
             if if_match is None:
                 raise HTTPException(428, "Cần If-Match từ phiên bản danh mục hiện tại.")
             if (
@@ -592,12 +690,40 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             response.headers["ETag"] = f'"{revision.portfolio_version}"'
             return assessment_json(revision)
 
+    def selected_readiness(value, revision):
+        local = dict(portfolio_version=value.version, revision_id=revision.id,
+                     candidate_hash=revision.candidate_hash, candidate_asset_ids=revision.candidate_asset_ids,
+                     checked_at=utcnow())
+        assessment = object_session(value).get(RiskAssessment, value.risk_profile["version_id"]) if value.risk_profile and value.risk_profile.get("version_id") else None
+        reason = "INPUT_UNAVAILABLE" if not selections_enabled() else (
+            "RISK_PROFILE_REQUIRED" if assessment is None or assessment.portfolio_id != value.id or assessment.owner_user_id != value.owner_user_id or value.risk_profile.get("mapping_version") != "custom-mixed-risk-v1"
+            else check_candidate_feasibility(revision.candidate_asset_ids, value.constraints, "BL_ML")
+        )
+        if reason:
+            return SelectionReadiness(**local, reason_code=reason, strategies=[
+                {"strategy": strategy, "can_submit": False, "reason_code": reason} for strategy in ("EW", "MVO", "BL_ML")
+            ])
+        try:
+            response = SelectionReadiness.model_validate(resolver.selection_ready({
+                key: item for key, item in (local | {
+                    "constraints": value.constraints,
+                }).items() if key != "checked_at"
+            }))
+            if response.candidate_hash != revision.candidate_hash or response.candidate_asset_ids != revision.candidate_asset_ids:
+                raise ValueError("Selection readiness mismatch")
+            return response.model_copy(update={"portfolio_version": value.version, "revision_id": revision.id})
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+            return SelectionReadiness(**local, reason_code="INPUT_UNAVAILABLE")
+
     @app.get(
-        "/api/v1/portfolios/{portfolio_id}/readiness", response_model=InputReadiness
+        "/api/v1/portfolios/{portfolio_id}/readiness", response_model=InputReadiness | SelectionReadiness
     )
     def portfolio_readiness(portfolio_id: UUID, user_id=Depends(owner)):
         with sessions() as session:
             value = owned_portfolio(session, portfolio_id, user_id)
+            revision = current_selection(value)
+            if revision is not None:
+                return selected_readiness(value, revision)
             universe_id = value.universe_id
         return resolve_readiness(universe_id)
 
@@ -705,14 +831,14 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 )
             try:
                 if (
-                    aware(datetime.fromisoformat(job.input["inputs"]["valid_until"]))
+                    aware(datetime.fromisoformat((job.input.get("selection_context") or job.input["inputs"])["valid_until"]))
                     <= utcnow()
                 ):
                     raise ValueError("expired")
                 numerical = proposal.result | {
                     "weights": [float(w) for w in proposal.result["weights"]]
                 }
-                validate_result(numerical, job.input)
+                validate_result(numerical, job.input, resolver=resolver, deadline=min(aware(job.deadline), utcnow() + timedelta(seconds=15)) if not job.input.get("selection_context") else utcnow() + timedelta(seconds=15))
             except (ValueError, TypeError, KeyError):
                 raise HTTPException(
                     409, "Đề xuất hết hạn hoặc không hợp lệ; hãy tạo đề xuất mới."
@@ -779,6 +905,9 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 for key in ("risk_aversion", "max_position_weight")
                 if key in updates
             }
+            value.constraints = effective_constraints(
+                Constraints.model_validate(value.constraints), value.universe_id
+            ).model_dump()
             if {"risk_aversion", "max_position_weight"}.intersection(updates):
                 value.risk_profile = None
             value.version += 1
@@ -847,6 +976,7 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
         idempotency_key: str | None = Header(default=None),
         expected_chat_version: int | None = None,
         expected_chat_policy: str | None = None,
+        if_match: Annotated[str | None, Header()] = None,
     ):
         if (
             not idempotency_key
@@ -874,6 +1004,12 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             )
             if not portfolio:
                 raise HTTPException(404, "Không tìm thấy danh mục.")
+            revision = current_selection(portfolio)
+            if revision is not None:
+                if_match = if_match or (f'"{expected_chat_version}"' if expected_chat_version is not None else None)
+                if if_match is None:
+                    raise HTTPException(428, "Cần If-Match từ phiên bản danh mục hiện tại.")
+                body_hash = canonical_hash(payload | {"selection_portfolio_version": if_match})
             existing = session.scalar(
                 select(Job).where(
                     Job.owner_user_id == user_id,
@@ -892,6 +1028,10 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 return accepted(existing)
             if (expected_chat_version is not None and portfolio.version != expected_chat_version) or (expected_chat_policy is not None and policy_id(portfolio) != expected_chat_policy):
                 raise HTTPException(409, "Danh mục/hồ sơ thay đổi; cần xác nhận lại.")
+            if revision is not None:
+                require_enabled()
+                if if_match != f'"{portfolio.version}"':
+                    raise HTTPException(412, "Danh mục đã thay đổi, hãy tải lại.")
             pending = session.scalar(
                 select(func.count())
                 .select_from(Job)
@@ -906,27 +1046,75 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                     429, "Tối đa 5 yêu cầu đang chờ cho mỗi người dùng."
                 )
             effective_strategy, fallback_reason = body.strategy, None
-            try:
-                with span(
-                    "portfolio.inputs.resolve", attributes={"strategy": body.strategy}
-                ):
-                    try:
-                        resolved = resolver.ready(portfolio.universe_id, body.strategy)
-                    except ModelUnavailable:
-                        if body.strategy != "BL_ML" or body.fallback_strategy != "EW":
-                            raise
-                        resolved = resolver.ready(portfolio.universe_id, "EW")
-                        effective_strategy, fallback_reason = "EW", "MODEL_UNAVAILABLE"
-                    inputs = ReadyInput.model_validate(resolved)
-            except (httpx.HTTPError, ValueError, KeyError):
-                raise HTTPException(
-                    503, "Chưa có dữ liệu/model phù hợp sẵn sàng."
-                ) from None
+            selection_context = None
+            constraints = None
+            if revision is not None:
+                readiness = selected_readiness(portfolio, revision)
+                by_strategy = {item.strategy: item for item in readiness.strategies}
+                selected = by_strategy.get(body.strategy)
+                if selected and not selected.can_submit and body.strategy == "BL_ML" and body.fallback_strategy == "EW" and selected.reason_code in {
+                    "MODEL_UNAVAILABLE", "MODEL_REVIEW_PENDING", "MODEL_COVERAGE_MISSING", "MODEL_EPOCH_MISMATCH", "NO_VALID_ML_VIEWS"
+                } and by_strategy.get("EW") and by_strategy["EW"].can_submit:
+                    effective_strategy, fallback_reason = "EW", selected.reason_code
+                    selected = by_strategy["EW"]
+                if not selected or not selected.can_submit or readiness.inputs is None or readiness.regime is None:
+                    reason = selected.reason_code if selected else readiness.reason_code
+                    details = stale_selection_details(readiness, reason)
+                    message = "Lựa chọn chưa đủ điều kiện tính toán."
+                    if details:
+                        message = f"{details['asset_id']}: observation đủ điều kiện ngày {details['observation_date']} đã {details['age_days']} ngày; tối đa 7 ngày."
+                    raise HTTPException(409, {"code": reason, "message": message, "details": details})
+                constraints = effective_constraints(Constraints.model_validate(portfolio.constraints), "USER_SELECTED", readiness.regime.regime)
+                if readiness.effective_constraints != constraints:
+                    raise HTTPException(409, {"code": "INPUT_INVALID", "message": "Policy hiệu lực không khớp."})
+                try:
+                    selection_context = SelectionContext(
+                        revision_id=revision.id, candidate_asset_ids=revision.candidate_asset_ids,
+                        candidate_hash=revision.candidate_hash, regime=readiness.regime,
+                        regime_input_hash=readiness.regime_input_hash, decision_at=readiness.decision_at,
+                        decision_session=readiness.decision_session, valid_until=readiness.selection_valid_until,
+                        data_policy_id=(readiness.inputs.provenance or {}).get("data_policy_id", "user-selection-data-v1"),
+                    )
+                except ValueError:
+                    raise HTTPException(409, {"code": "INPUT_INVALID", "message": "Selection input không hợp lệ."}) from None
+                if selection_context.valid_until <= utcnow():
+                    raise HTTPException(409, {"code": "INPUT_EXPIRED", "message": "Dữ liệu lựa chọn đã hết hạn."})
+                inputs = readiness.inputs
+            else:
+                try:
+                    with span(
+                        "portfolio.inputs.resolve", attributes={"strategy": body.strategy}
+                    ):
+                        try:
+                            resolved = resolver.ready(portfolio.universe_id, body.strategy)
+                        except ModelUnavailable:
+                            if body.strategy != "BL_ML" or body.fallback_strategy != "EW":
+                                raise
+                            resolved = resolver.ready(portfolio.universe_id, "EW")
+                            effective_strategy, fallback_reason = "EW", "MODEL_UNAVAILABLE"
+                        inputs = ReadyInput.model_validate(resolved)
+                except (httpx.HTTPError, ValueError, KeyError):
+                    raise HTTPException(
+                        503, "Chưa có dữ liệu/model phù hợp sẵn sàng."
+                    ) from None
             if inputs.valid_until <= utcnow():
                 raise HTTPException(409, "Dữ liệu đầu vào đã hết hạn.")
+            phase = (inputs.provenance or {}).get("phase1_full")
+            if portfolio.universe_id == "VN_PHASE1_FULL" and not phase:
+                raise HTTPException(503, "Thiếu selection và policy của bộ tài sản đầy đủ.")
+            if constraints is None:
+                constraints = effective_constraints(
+                    Constraints.model_validate(portfolio.constraints), portfolio.universe_id,
+                    (phase or {}).get("regime", {}).get("regime", "normal"),
+                )
             if (
-                len(inputs.asset_ids) * portfolio.constraints["max_position_weight"]
+                len(phase["active_asset_ids"] if phase and effective_strategy == "BL_ML" else inputs.asset_ids) * constraints.max_position_weight
                 < 1 - 1e-8
+            ) or (
+                portfolio.universe_id == "VN_PHASE1_FULL"
+                and constraints.max_position_weight + 1e-8 < max(
+                    constraints.min_defensive_weight, 1 - constraints.max_non_defensive_weight
+                )
             ):
                 raise HTTPException(
                     409, "Giới hạn tỷ trọng không tạo được danh mục khả thi."
@@ -940,14 +1128,16 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 strategy=effective_strategy,
                 capital_vnd=str(portfolio.capital_vnd),
                 inputs=inputs,
-                constraints=portfolio.constraints,
+                constraints=constraints,
+                selection_context=selection_context,
                 decision_context=DecisionContext(
                     policy_version_id=policy_id(portfolio),
                     risk_profile=portfolio.risk_profile,
                     requested_strategy=body.strategy,
                     fallback_reason=fallback_reason,
+                    requested_constraints=portfolio.constraints if phase or revision is not None else None,
                 ),
-                deadline=utcnow() + timedelta(seconds=60),
+                deadline=min(utcnow() + timedelta(seconds=60), selection_context.valid_until) if selection_context is not None else utcnow() + timedelta(seconds=60),
                 input_hash="0" * 64,
             )
             command.input_hash = command.compute_hash()

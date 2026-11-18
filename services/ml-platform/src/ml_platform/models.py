@@ -30,7 +30,7 @@ class TrainingJob(Base):
 class Model(Base):
     __tablename__ = "ml_model"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    training_job_id: Mapped[str] = mapped_column(
+    training_job_id: Mapped[str | None] = mapped_column(
         ForeignKey("ml_training_job.id"), unique=True
     )
     status: Mapped[str] = mapped_column(String(16), index=True)

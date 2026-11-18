@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_serializer
 
 
 class ModelUnavailable(ValueError):
@@ -65,6 +65,10 @@ class DecisionContext(StrictModel):
     risk_profile: dict | None = None
     requested_strategy: Literal["EW", "MVO", "BL_ML"]
     fallback_reason: str | None = None
+    requested_constraints: Constraints | None = None
+
+
+from .selection import SelectionContext  # noqa: E402
 
 
 class OptimizeCommand(StrictModel):
@@ -78,14 +82,26 @@ class OptimizeCommand(StrictModel):
     inputs: ReadyInput
     constraints: Constraints
     decision_context: DecisionContext | None = None
+    selection_context: SelectionContext | None = None
     deadline: datetime
     input_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_wire(self, handler):
+        value = handler(self)
+        if self.selection_context is None:
+            value.pop("selection_context", None)
+        return value
 
     def compute_hash(self):
         # Legacy queued commands predate decision_context; keep their hashes replayable.
         excluded = {"input_hash": True}
+        if self.selection_context is None:
+            excluded["selection_context"] = True
         if self.decision_context is None:
             excluded["decision_context"] = True
+        elif self.decision_context.requested_constraints is None:
+            excluded["decision_context"] = {"requested_constraints"}
         if self.inputs.provenance is None:
             excluded["inputs"] = {"provenance"}
         return canonical_hash(self.model_dump(mode="json", exclude=excluded))

@@ -514,6 +514,18 @@
       },
       "TrainingRequest": {
         "properties": {
+          "model_family": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "phase1-asset-ensemble-v5"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Family"
+          },
           "snapshot_id": {
             "type": "string",
             "format": "uuid",

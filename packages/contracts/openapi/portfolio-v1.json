@@ -106,6 +106,27 @@
         ]
       }
     },
+    "/api/v1/assets/catalog": {
+      "get": {
+        "summary": "Asset Catalog",
+        "operationId": "asset_catalog_api_v1_assets_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/portfolios": {
       "post": {
         "summary": "Create Portfolio",
@@ -284,6 +305,132 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/asset-selections": {
+      "get": {
+        "summary": "Selection History",
+        "operationId": "selection_history_api_v1_portfolios__portfolio_id__asset_selections_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Edit Selection",
+        "operationId": "edit_selection_api_v1_portfolios__portfolio_id__asset_selections_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateSet"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/portfolios/{portfolio_id}/risk-assessments/preview": {
@@ -526,7 +673,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InputReadiness"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InputReadiness"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SelectionReadiness"
+                    }
+                  ],
+                  "title": "Response Portfolio Readiness Api V1 Portfolios  Portfolio Id  Readiness Get"
                 }
               }
             }
@@ -965,6 +1120,22 @@
               ],
               "title": "Idempotency-Key"
             }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
           }
         ],
         "requestBody": {
@@ -1299,6 +1470,26 @@
   },
   "components": {
     "schemas": {
+      "CandidateSet": {
+        "properties": {
+          "candidate_asset_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_-]{1,64}$"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Candidate Asset Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidate_asset_ids"
+        ],
+        "title": "CandidateSet"
+      },
       "Constraints": {
         "properties": {
           "risk_aversion": {
@@ -1419,6 +1610,18 @@
       },
       "InputReadiness": {
         "properties": {
+          "provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          },
           "bundle_id": {
             "anyOf": [
               {
@@ -1541,7 +1744,11 @@
               "READY",
               "INPUT_EXPIRED",
               "INPUT_UNAVAILABLE",
-              "INPUT_INVALID"
+              "INPUT_INVALID",
+              "VFF_STALE",
+              "GOLD_STALE",
+              "MODEL_REVIEW_PENDING",
+              "SELECTION_MISMATCH"
             ],
             "title": "Reason Code"
           },
@@ -1586,6 +1793,22 @@
       },
       "NewPortfolio": {
         "properties": {
+          "asset_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 32,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Ids"
+          },
           "name": {
             "type": "string",
             "maxLength": 120,
@@ -1666,6 +1889,22 @@
       },
       "OnboardingPortfolio": {
         "properties": {
+          "asset_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 32,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Ids"
+          },
           "name": {
             "type": "string",
             "maxLength": 120,
@@ -1767,6 +2006,117 @@
         "additionalProperties": false,
         "type": "object",
         "title": "PortfolioUpdate"
+      },
+      "ReadyInput": {
+        "properties": {
+          "bundle_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Bundle Id"
+          },
+          "bundle_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Hash"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "model_bundle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Bundle Id"
+          },
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 2,
+            "title": "Asset Ids"
+          },
+          "as_of_date": {
+            "type": "string",
+            "title": "As Of Date"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          },
+          "demo": {
+            "type": "boolean",
+            "title": "Demo",
+            "default": false
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bundle_id",
+          "bundle_hash",
+          "snapshot_id",
+          "asset_ids",
+          "as_of_date",
+          "valid_until"
+        ],
+        "title": "ReadyInput"
+      },
+      "RegimeInfo": {
+        "properties": {
+          "regime": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "stress",
+              "crisis"
+            ],
+            "title": "Regime"
+          },
+          "vol_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Vol Ratio"
+          },
+          "drawdown": {
+            "type": "number",
+            "title": "Drawdown"
+          },
+          "equity_momentum": {
+            "type": "number",
+            "title": "Equity Momentum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "regime",
+          "vol_ratio",
+          "drawdown",
+          "equity_momentum"
+        ],
+        "title": "RegimeInfo"
       },
       "RiskAnswers": {
         "properties": {
@@ -2026,6 +2376,200 @@
         ],
         "title": "RiskPolicyState"
       },
+      "SelectionReadiness": {
+        "properties": {
+          "readiness_kind": {
+            "type": "string",
+            "const": "user-selection-v1",
+            "title": "Readiness Kind",
+            "default": "user-selection-v1"
+          },
+          "portfolio_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Version"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "candidate_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Hash"
+          },
+          "candidate_asset_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_-]{1,64}$"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Candidate Asset Ids"
+          },
+          "can_submit": {
+            "type": "boolean",
+            "title": "Can Submit",
+            "default": false
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "INSUFFICIENT_ASSETS",
+              "RISK_PROFILE_REQUIRED",
+              "DEFENSIVE_ASSET_REQUIRED",
+              "CONSTRAINTS_INFEASIBLE",
+              "ASSET_DATA_MISSING",
+              "ASSET_DATA_STALE",
+              "VFF_STALE",
+              "GOLD_STALE",
+              "HISTORY_INSUFFICIENT",
+              "MODEL_REVIEW_PENDING",
+              "MODEL_COVERAGE_MISSING",
+              "MODEL_EPOCH_MISMATCH",
+              "NO_VALID_ML_VIEWS",
+              "INPUT_INVALID",
+              "INPUT_EXPIRED",
+              "INPUT_UNAVAILABLE",
+              "MODEL_UNAVAILABLE"
+            ],
+            "title": "Reason Code",
+            "default": "INPUT_UNAVAILABLE"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/StrategySelectionReadiness"
+            },
+            "type": "array",
+            "title": "Strategies"
+          },
+          "asset_status": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Asset Status"
+          },
+          "regime": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegimeInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "regime_input_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Input Hash"
+          },
+          "effective_constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Constraints"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selection_valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Valid Until"
+          },
+          "decision_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision At"
+          },
+          "decision_session": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Session"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadyInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SelectionReadiness"
+      },
       "StrategyReadiness": {
         "properties": {
           "strategy": {
@@ -2049,7 +2593,11 @@
               "MODEL_INVALID",
               "INPUT_EXPIRED",
               "INPUT_UNAVAILABLE",
-              "INPUT_INVALID"
+              "INPUT_INVALID",
+              "VFF_STALE",
+              "GOLD_STALE",
+              "MODEL_REVIEW_PENDING",
+              "SELECTION_MISMATCH"
             ],
             "title": "Reason Code"
           }
@@ -2062,6 +2610,55 @@
           "reason_code"
         ],
         "title": "StrategyReadiness"
+      },
+      "StrategySelectionReadiness": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "EW",
+              "MVO",
+              "BL_ML"
+            ],
+            "title": "Strategy"
+          },
+          "can_submit": {
+            "type": "boolean",
+            "title": "Can Submit"
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "INSUFFICIENT_ASSETS",
+              "RISK_PROFILE_REQUIRED",
+              "DEFENSIVE_ASSET_REQUIRED",
+              "CONSTRAINTS_INFEASIBLE",
+              "ASSET_DATA_MISSING",
+              "ASSET_DATA_STALE",
+              "VFF_STALE",
+              "GOLD_STALE",
+              "HISTORY_INSUFFICIENT",
+              "MODEL_REVIEW_PENDING",
+              "MODEL_COVERAGE_MISSING",
+              "MODEL_EPOCH_MISMATCH",
+              "NO_VALID_ML_VIEWS",
+              "INPUT_INVALID",
+              "INPUT_EXPIRED",
+              "INPUT_UNAVAILABLE",
+              "MODEL_UNAVAILABLE"
+            ],
+            "title": "Reason Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "strategy",
+          "can_submit",
+          "reason_code"
+        ],
+        "title": "StrategySelectionReadiness"
       },
       "StrictModel": {
         "properties": {},

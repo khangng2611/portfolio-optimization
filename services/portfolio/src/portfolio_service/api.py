@@ -23,6 +23,8 @@ from portfolio_contracts import (
     StrictModel,
     aware,
     canonical_hash,
+    system_hybrid_enabled,
+    system_hybrid_managed,
     utcnow,
 )
 from service_auth import AuthError
@@ -50,6 +52,7 @@ from .selection import (enabled as selections_enabled, require_enabled, current_
 from portfolio_contracts.selection import CandidateSet, SelectionReadiness, SelectionContext, AssetCatalogItem
 from portfolio_contracts.assets import canonical_candidates, supported_assets, CATALOG_VERSION
 from .workflow import validate_result
+from portfolio_contracts.explanation import RecommendationEvidence
 from .runtime import StaleInput
 
 HUMAN_ROLES = {
@@ -91,6 +94,7 @@ class NewPortfolio(AssetSelectionInput):
 class NewRecommendation(StrictModel):
     strategy: Literal["EW", "MVO", "BL_ML"] = "MVO"
     fallback_strategy: Literal["EW"] | None = None
+    mode: Literal["system"] | None = None
 
 
 class OnboardingPortfolio(AssetSelectionInput):
@@ -711,9 +715,20 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             }))
             if response.candidate_hash != revision.candidate_hash or response.candidate_asset_ids != revision.candidate_asset_ids:
                 raise ValueError("Selection readiness mismatch")
-            return response.model_copy(update={"portfolio_version": value.version, "revision_id": revision.id})
+            return response.model_copy(update={"portfolio_version": value.version, "revision_id": UUID(str(revision.id))})
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
             return SelectionReadiness(**local, reason_code="INPUT_UNAVAILABLE")
+
+    def hybrid_readiness(readiness):
+        by_strategy = {item.strategy: item for item in readiness.strategies}
+        blocked = next((by_strategy[s].reason_code for s in ("BL_ML", "MVO")
+                        if s in by_strategy and not by_strategy[s].can_submit), None)
+        ready = all(s in by_strategy and by_strategy[s].can_submit for s in ("BL_ML", "MVO"))
+        reason = "READY" if ready else blocked or readiness.reason_code
+        return SelectionReadiness.model_validate(readiness.model_dump() | {
+            "can_submit": ready, "reason_code": reason,
+            "strategies": [{"strategy": "HYBRID", "can_submit": ready, "reason_code": reason}],
+        })
 
     @app.get(
         "/api/v1/portfolios/{portfolio_id}/readiness", response_model=InputReadiness | SelectionReadiness
@@ -722,8 +737,16 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
         with sessions() as session:
             value = owned_portfolio(session, portfolio_id, user_id)
             revision = current_selection(value)
+            if system_hybrid_managed() and not system_hybrid_enabled():
+                return hybrid_readiness(SelectionReadiness(
+                    candidate_asset_ids=revision.candidate_asset_ids if revision else [],
+                    reason_code="INPUT_UNAVAILABLE", checked_at=utcnow(),
+                ))
             if revision is not None:
-                return selected_readiness(value, revision)
+                readiness = selected_readiness(value, revision)
+                return hybrid_readiness(readiness) if system_hybrid_enabled() else readiness
+            if system_hybrid_enabled():
+                return hybrid_readiness(SelectionReadiness(reason_code="ASSET_SELECTION_REQUIRED", checked_at=utcnow()))
             universe_id = value.universe_id
         return resolve_readiness(universe_id)
 
@@ -984,7 +1007,10 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             or any(ord(c) < 33 or ord(c) > 126 for c in idempotency_key)
         ):
             raise HTTPException(400, "Cần Idempotency-Key hợp lệ (1–128 ký tự ASCII).")
-        payload = body.model_dump(exclude_none=True)
+        system = body.mode == "system"
+        payload = {"mode": "system"} if system else body.model_dump(exclude_none=True)
+        if system and {"strategy", "fallback_strategy"} & body.model_fields_set:
+            raise HTTPException(422, "Đề xuất hệ thống không nhận chiến lược hoặc phương án dự phòng.")
         if expected_chat_version is not None or expected_chat_policy is not None:
             payload['chat_confirmation'] = {'portfolio_version': expected_chat_version, 'policy_version_id': expected_chat_policy}
         body_hash = canonical_hash(payload)
@@ -1026,6 +1052,10 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                     "portfolio.job.accept", job_id=existing.id, outcome="duplicate"
                 )
                 return accepted(existing)
+            if (system and not system_hybrid_enabled()) or (not system and system_hybrid_managed()):
+                raise HTTPException(409, {"code": "INPUT_UNAVAILABLE", "message": "Yêu cầu tạo đề xuất chưa phù hợp với chế độ đang phục vụ."})
+            if system and revision is None:
+                raise HTTPException(409, {"code": "ASSET_SELECTION_REQUIRED", "message": "Cần tạo danh mục có rổ tài sản được chọn để tính đề xuất hệ thống."})
             if (expected_chat_version is not None and portfolio.version != expected_chat_version) or (expected_chat_policy is not None and policy_id(portfolio) != expected_chat_policy):
                 raise HTTPException(409, "Danh mục/hồ sơ thay đổi; cần xác nhận lại.")
             if revision is not None:
@@ -1045,13 +1075,17 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 raise HTTPException(
                     429, "Tối đa 5 yêu cầu đang chờ cho mỗi người dùng."
                 )
-            effective_strategy, fallback_reason = body.strategy, None
+            requested_strategy = "HYBRID" if system else body.strategy
+            effective_strategy, fallback_reason = requested_strategy, None
+            blend_policy = None
             selection_context = None
             constraints = None
             if revision is not None:
                 readiness = selected_readiness(portfolio, revision)
+                if system:
+                    readiness = hybrid_readiness(readiness)
                 by_strategy = {item.strategy: item for item in readiness.strategies}
-                selected = by_strategy.get(body.strategy)
+                selected = by_strategy.get(requested_strategy)
                 if selected and not selected.can_submit and body.strategy == "BL_ML" and body.fallback_strategy == "EW" and selected.reason_code in {
                     "MODEL_UNAVAILABLE", "MODEL_REVIEW_PENDING", "MODEL_COVERAGE_MISSING", "MODEL_EPOCH_MISMATCH", "NO_VALID_ML_VIEWS"
                 } and by_strategy.get("EW") and by_strategy["EW"].can_submit:
@@ -1067,6 +1101,10 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 constraints = effective_constraints(Constraints.model_validate(portfolio.constraints), "USER_SELECTED", readiness.regime.regime)
                 if readiness.effective_constraints != constraints:
                     raise HTTPException(409, {"code": "INPUT_INVALID", "message": "Policy hiệu lực không khớp."})
+                if system:
+                    from portfolio_contracts.hybrid import hybrid_policy
+
+                    blend_policy = hybrid_policy(readiness.regime.regime, portfolio.risk_profile.get("profile"))
                 try:
                     selection_context = SelectionContext(
                         revision_id=revision.id, candidate_asset_ids=revision.candidate_asset_ids,
@@ -1130,10 +1168,11 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 inputs=inputs,
                 constraints=constraints,
                 selection_context=selection_context,
+                hybrid_policy=blend_policy,
                 decision_context=DecisionContext(
                     policy_version_id=policy_id(portfolio),
                     risk_profile=portfolio.risk_profile,
-                    requested_strategy=body.strategy,
+                    requested_strategy=requested_strategy,
                     fallback_reason=fallback_reason,
                     requested_constraints=portfolio.constraints if phase or revision is not None else None,
                 ),
@@ -1226,6 +1265,20 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             if job is None:
                 raise HTTPException(404, "Không tìm thấy tác vụ.")
             return recommendation_json(value, job)
+
+    @app.get("/api/v1/recommendations/{recommendation_id}/evidence", response_model=RecommendationEvidence)
+    def get_recommendation_evidence(recommendation_id: UUID, user_id=Depends(owner)):
+        from .explanation import recommendation_evidence
+
+        with sessions() as session:
+            value = session.scalar(select(Recommendation).where(
+                Recommendation.id == str(recommendation_id), Recommendation.owner_user_id == user_id))
+            if not value:
+                raise HTTPException(404, "Không tìm thấy đề xuất.")
+            job = session.get(Job, value.job_id)
+            if not job or job.owner_user_id != user_id:
+                raise HTTPException(404, "Không tìm thấy đề xuất.")
+            return recommendation_evidence(value, job, recommendation_json(value, job))
 
     from .delegation import install
     install(app, sessions=sessions, verifier=verifier, principal=principal, owner=owner,

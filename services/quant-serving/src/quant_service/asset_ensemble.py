@@ -36,6 +36,7 @@ def infer_asset_views(
     regime_info,
     *,
     require_approved=True,
+    evidence=None,
 ):
     """Return views_p/q/view_confidences with columns in active asset order.
 
@@ -107,4 +108,7 @@ def infer_asset_views(
             crisis = regime_info["regime"] == "crisis"
             q.append((0.1 if crisis else 0.05) / 252)
             confidence.append(0.8 * (1 if crisis else 0.85))
+    from .explanation import capture, capture_asset_views
+
+    capture(evidence, lambda: {"views": capture_asset_views(predictions, equities, active_asset_ids, p, q, confidence)})
     return dict(views_p=p, views_q=q, view_confidences=confidence)

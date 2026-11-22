@@ -69,7 +69,8 @@
           "enum": [
             "EW",
             "MVO",
-            "BL_ML"
+            "BL_ML",
+            "HYBRID"
           ],
           "title": "Requested Strategy",
           "type": "string"
@@ -103,6 +104,28 @@
         "requested_strategy"
       ],
       "title": "DecisionContext",
+      "type": "object"
+    },
+    "HybridPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "phase1-hybrid-profile-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mvo_share": {
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Mvo Share",
+          "type": "number"
+        }
+      },
+      "required": [
+        "version",
+        "mvo_share"
+      ],
+      "title": "HybridPolicy",
       "type": "object"
     },
     "ReadyInput": {
@@ -332,7 +355,8 @@
       "enum": [
         "EW",
         "MVO",
-        "BL_ML"
+        "BL_ML",
+        "HYBRID"
       ],
       "title": "Strategy",
       "type": "string"
@@ -368,6 +392,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/SelectionContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "hybrid_policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HybridPolicy"
         },
         {
           "type": "null"

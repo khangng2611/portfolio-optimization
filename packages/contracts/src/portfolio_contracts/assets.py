@@ -40,6 +40,7 @@ ASSET_IDS = EQUITY_IDS + ("GOLD", "VFF")
 CATALOG_VERSION = "supported-assets-v1"
 
 
+
 def canonical_candidates(ids):
     if not isinstance(ids, (list, tuple)) or not 1 <= len(ids) <= len(ASSET_IDS):
         raise ValueError("Select between 1 and 32 supported assets")
@@ -71,11 +72,8 @@ def supported_assets():
             else "gold"
             if asset == "GOLD"
             else "fund",
-            display_name=asset
-            if asset in EQUITY_IDS
-            else "Vàng SJC"
-            if asset == "GOLD"
-            else "VFF – Quỹ trái phiếu",
+            display_name=asset,
+            description=None,
             unit="VND/share"
             if asset in EQUITY_IDS
             else "VND/tael"

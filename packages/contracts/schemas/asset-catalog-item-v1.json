@@ -19,6 +19,18 @@
       "title": "Display Name",
       "type": "string"
     },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
     "unit": {
       "enum": [
         "VND/share",

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from portfolio_contracts import Envelope, OptimizeCommand, OptimizeResult
+from portfolio_contracts.explanation import OptimizationExplanationEvidence, RecommendationEvidence
 from portfolio_contracts.market import IngestCommand, IngestionRequest, SnapshotRequest
 from portfolio_contracts.selection import (
     AssetCatalogItem, SelectionRevision, SelectionReadiness, SelectionContext, SelectionProof,
@@ -18,6 +19,8 @@ from knowledge_service.api import create_app as knowledge_app
 
 root = Path(__file__).resolve().parents[1] / "packages/contracts"
 schemas = {
+    "schemas/optimization-explanation-v1.json": OptimizationExplanationEvidence.model_json_schema(),
+    "schemas/recommendation-evidence-v1.json": RecommendationEvidence.model_json_schema(),
     "schemas/asset-catalog-item-v1.json": AssetCatalogItem.model_json_schema(),
     "schemas/selection-revision-v1.json": SelectionRevision.model_json_schema(),
     "schemas/selection-readiness-v1.json": SelectionReadiness.model_json_schema(),

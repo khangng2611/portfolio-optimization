@@ -132,6 +132,7 @@ class Recommendation(Base):
     portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolio.id"))
     run_id: Mapped[str] = mapped_column(String(36))
     result: Mapped[dict] = mapped_column(JSON)
+    explanation_evidence: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

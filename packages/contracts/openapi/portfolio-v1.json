@@ -1256,6 +1256,51 @@
         }
       }
     },
+    "/api/v1/recommendations/{recommendation_id}/evidence": {
+      "get": {
+        "summary": "Get Recommendation Evidence",
+        "operationId": "get_recommendation_evidence_api_v1_recommendations__recommendation_id__evidence_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationEvidence"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/v1/delegation-grants": {
       "post": {
         "summary": "Issue",
@@ -1533,6 +1578,45 @@
         "type": "object",
         "title": "Constraints"
       },
+      "FeatureEvidence": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "momentum_5",
+              "momentum_10",
+              "momentum_20",
+              "rsi_14",
+              "ma_ratio_10_30",
+              "volatility_20",
+              "macd_hist",
+              "price_std_20"
+            ],
+            "title": "Name"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "fraction",
+              "index",
+              "thousand_vnd"
+            ],
+            "title": "Unit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "FeatureEvidence"
+      },
       "GrantRequest": {
         "properties": {
           "conversation_id": {
@@ -1577,11 +1661,12 @@
                 "get_portfolio_summary",
                 "request_allocation",
                 "get_recommendation",
-                "get_allocation_job"
+                "get_allocation_job",
+                "get_recommendation_evidence"
               ]
             },
             "type": "array",
-            "maxItems": 5,
+            "maxItems": 6,
             "minItems": 1,
             "title": "Tools"
           }
@@ -1881,6 +1966,18 @@
               }
             ],
             "title": "Fallback Strategy"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "system"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
           }
         },
         "additionalProperties": false,
@@ -1943,6 +2040,283 @@
           "answers"
         ],
         "title": "OnboardingPortfolio"
+      },
+      "OptimizationExplanationEvidence": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "optimization-explanation-v1",
+            "title": "Schema Version",
+            "default": "optimization-explanation-v1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETE",
+              "PARTIAL"
+            ],
+            "title": "Status"
+          },
+          "job_id": {
+            "type": "string",
+            "maxLength": 36,
+            "title": "Job Id"
+          },
+          "run_id": {
+            "type": "string",
+            "maxLength": 36,
+            "title": "Run Id"
+          },
+          "input_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Input Hash"
+          },
+          "bundle_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Hash"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Snapshot Id"
+          },
+          "model_bundle_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Bundle Id"
+          },
+          "asset_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]{1,32}$"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Asset Ids"
+          },
+          "active_asset_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]{1,32}$"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Active Asset Ids"
+          },
+          "decision_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision At"
+          },
+          "history_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History End Date"
+          },
+          "regime_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime End Date"
+          },
+          "covariance_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covariance End Date"
+          },
+          "snapshot_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Hash"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "fit_epoch": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fit Epoch"
+          },
+          "trained_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained At"
+          },
+          "training_cutoff": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Training Cutoff"
+          },
+          "selection_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Hash"
+          },
+          "feature_schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Schema"
+          },
+          "features": {
+            "patternProperties": {
+              "^[A-Z0-9_]{1,32}$": {
+                "items": {
+                  "$ref": "#/components/schemas/FeatureEvidence"
+                },
+                "type": "array",
+                "maxItems": 8
+              }
+            },
+            "type": "object",
+            "maxProperties": 32,
+            "title": "Features"
+          },
+          "views": {
+            "items": {
+              "$ref": "#/components/schemas/ViewEvidence"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Views"
+          },
+          "regime": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegimeEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limitations": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "NOT_RETAINED",
+                "ATTRIBUTION_NOT_AVAILABLE",
+                "PIT_NOT_CERTIFIED"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Limitations"
+          },
+          "evidence_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "job_id",
+          "run_id",
+          "input_hash",
+          "bundle_hash",
+          "snapshot_id",
+          "asset_ids",
+          "active_asset_ids"
+        ],
+        "title": "OptimizationExplanationEvidence"
       },
       "PortfolioUpdate": {
         "properties": {
@@ -2082,6 +2456,161 @@
           "valid_until"
         ],
         "title": "ReadyInput"
+      },
+      "RecommendationEvidence": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "recommendation-evidence-v1",
+            "title": "Schema Version",
+            "default": "recommendation-evidence-v1"
+          },
+          "recommendation_id": {
+            "type": "string",
+            "title": "Recommendation Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "facts_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Facts Hash"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETE",
+              "PARTIAL",
+              "UNAVAILABLE"
+            ],
+            "title": "Status"
+          },
+          "quant": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptimizationExplanationEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Limitations"
+          },
+          "evidence_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recommendation_id",
+          "run_id",
+          "facts_hash",
+          "status"
+        ],
+        "title": "RecommendationEvidence"
+      },
+      "RegimeEvidence": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "const": "candidate-basket",
+            "title": "Scope",
+            "default": "candidate-basket"
+          },
+          "asset_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]{1,32}$"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Asset Ids"
+          },
+          "regime": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "stress",
+              "crisis"
+            ],
+            "title": "Regime"
+          },
+          "vol_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Vol Ratio"
+          },
+          "drawdown": {
+            "type": "number",
+            "title": "Drawdown"
+          },
+          "equity_momentum": {
+            "type": "number",
+            "title": "Equity Momentum"
+          },
+          "observed_sessions": {
+            "type": "integer",
+            "minimum": 2.0,
+            "title": "Observed Sessions"
+          },
+          "volatility_windows": {
+            "prefixItems": [
+              {
+                "type": "integer",
+                "const": 20
+              },
+              {
+                "type": "integer",
+                "const": 120
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Volatility Windows",
+            "default": [
+              20,
+              120
+            ]
+          },
+          "trend_window": {
+            "type": "integer",
+            "const": 60,
+            "title": "Trend Window",
+            "default": 60
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_ids",
+          "regime",
+          "vol_ratio",
+          "drawdown",
+          "equity_momentum",
+          "observed_sessions"
+        ],
+        "title": "RegimeEvidence"
       },
       "RegimeInfo": {
         "properties": {
@@ -2440,6 +2969,7 @@
               "READY",
               "INSUFFICIENT_ASSETS",
               "RISK_PROFILE_REQUIRED",
+              "ASSET_SELECTION_REQUIRED",
               "DEFENSIVE_ASSET_REQUIRED",
               "CONSTRAINTS_INFEASIBLE",
               "ASSET_DATA_MISSING",
@@ -2618,7 +3148,8 @@
             "enum": [
               "EW",
               "MVO",
-              "BL_ML"
+              "BL_ML",
+              "HYBRID"
             ],
             "title": "Strategy"
           },
@@ -2632,6 +3163,7 @@
               "READY",
               "INSUFFICIENT_ASSETS",
               "RISK_PROFILE_REQUIRED",
+              "ASSET_SELECTION_REQUIRED",
               "DEFENSIVE_ASSET_REQUIRED",
               "CONSTRAINTS_INFEASIBLE",
               "ASSET_DATA_MISSING",
@@ -2769,6 +3301,139 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ViewEvidence": {
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "ML",
+              "POLICY",
+              "USER"
+            ],
+            "title": "Source Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "APPLIED",
+              "BELOW_THRESHOLD"
+            ],
+            "title": "Status"
+          },
+          "coefficients": {
+            "patternProperties": {
+              "^[A-Z0-9_]{1,32}$": {
+                "type": "number"
+              }
+            },
+            "type": "object",
+            "maxProperties": 32,
+            "minProperties": 1,
+            "title": "Coefficients"
+          },
+          "raw_mean_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Mean Return"
+          },
+          "member_std": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Std"
+          },
+          "horizon_sessions": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Sessions"
+          },
+          "raw_return_unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "simple_fraction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Return Unit"
+          },
+          "confidence_base": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Base"
+          },
+          "confidence_applied": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Applied"
+          },
+          "applied_q_daily": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Q Daily"
+          },
+          "transform_version": {
+            "type": "string",
+            "enum": [
+              "phase1-option-b-v1",
+              "vff-relative-policy-v1"
+            ],
+            "title": "Transform Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind",
+          "status",
+          "coefficients",
+          "transform_version"
+        ],
+        "title": "ViewEvidence"
       }
     },
     "securitySchemes": {

@@ -100,6 +100,34 @@ def test_custom_job_pins_original_resource_revision_and_regime_with_replay(stack
         assert session.scalar(select(func.count()).select_from(Job)) == 1
 
 
+def test_system_mode_only_accepts_server_selected_hybrid(stack, preflight, monkeypatch):
+    monkeypatch.setenv('SYSTEM_HYBRID_ENABLED', 'true')
+    client, sessions = stack
+    p = create(client, ['FPT', 'MWG', 'VCB', 'VFF']).json()
+    base = f"/api/v1/portfolios/{p['id']}"
+    ready = client.get(base + '/readiness', headers=headers()).json()
+    assert ready['strategies'] == [{'strategy': 'HYBRID', 'can_submit': True, 'reason_code': 'READY'}]
+    h = headers(**{'If-Match': '"1"', 'Idempotency-Key': 'system-allocation'})
+    path = base + '/recommendations'
+    assert client.post(path, headers=h, json={'strategy': 'MVO'}).status_code == 409
+    assert client.post(path, headers=h, json={'mode': 'system', 'fallback_strategy': 'EW'}).status_code == 422
+    result = client.post(path, headers=h, json={'mode': 'system'})
+    assert result.status_code == 202, result.text
+    assert client.post(path, headers=h, json={'mode': 'system'}).json() == result.json()
+    with sessions() as session:
+        job = session.get(Job, result.json()['job_id'])
+        command = OptimizeCommand.model_validate(job.input)
+        assert command.strategy == command.decision_context.requested_strategy == 'HYBRID'
+        assert command.hybrid_policy.mvo_share == .10
+        assert command.compute_hash() == job.input_hash
+    monkeypatch.setenv('SYSTEM_HYBRID_ENABLED', 'paused')
+    assert not client.get(base + '/readiness', headers=headers()).json()['can_submit']
+    assert client.post(path, headers=h, json={'mode': 'system'}).json() == result.json()
+    new_headers = h | {'Idempotency-Key': 'paused-new-job'}
+    assert client.post(path, headers=new_headers, json={'mode': 'system'}).status_code == 409
+    assert client.post(path, headers=new_headers, json={'strategy': 'EW'}).status_code == 409
+
+
 @pytest.mark.parametrize('malformed', [False, True])
 @pytest.mark.parametrize('fallback', [False, True])
 def test_stale_candidate_blocks_without_outbox_even_with_ew_fallback(stack, monkeypatch, preflight, fallback, malformed):

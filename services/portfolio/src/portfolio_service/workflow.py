@@ -8,6 +8,7 @@ from portfolio_contracts import Envelope, OptimizeResult, aware, utcnow
 from portfolio_contracts.selection import SelectionProof
 from service_observability import link_job, log_event, span
 from .models import Inbox, Job, Portfolio, Recommendation
+from .explanation import store_evidence
 
 
 def validate_result(result, command, *, resolver=None, deadline=None):
@@ -74,12 +75,12 @@ def validate_result(result, command, *, resolver=None, deadline=None):
             or proof.decision_session.isoformat() != context["decision_session"]
             or proof.active_asset_ids != [a for a in ids if a in proof.active_asset_ids]
             or len(set(proof.active_asset_ids)) != len(proof.active_asset_ids)
-            or any(
+            or (command["strategy"] != "HYBRID" and any(
                 w != 0 for a, w in zip(ids, weights) if a not in proof.active_asset_ids
-            )
+            ))
         ):
             raise ValueError("Selection proof does not match accepted command")
-        if command["strategy"] == "BL_ML":
+        if command["strategy"] in {"BL_ML", "HYBRID"}:
             inference = result["diagnostics"].get("inference") or {}
             if (
                 inference.get("manifest_hash") != command["inputs"]["model_bundle_id"]
@@ -87,6 +88,13 @@ def validate_result(result, command, *, resolver=None, deadline=None):
                 or inference.get("snapshot_hash") != proof.snapshot_hash
             ):
                 raise ValueError("Selected model/snapshot pin mismatch")
+        if command["strategy"] == "HYBRID":
+            from portfolio_contracts.hybrid import hybrid_policy, validate_hybrid_weights
+
+            pin = hybrid_policy(context["regime"]["regime"], command["decision_context"]["risk_profile"].get("profile"))
+            if pin != command["hybrid_policy"]:
+                raise ValueError("HYBRID policy pin mismatch")
+            validate_hybrid_weights(ids, proof.active_asset_ids, c, pin, result)
         if resolver is None or deadline is None:
             raise RuntimeError("Selection verification resolver required")
         if not resolver.verify_selection(
@@ -114,7 +122,9 @@ def consume_result(sessions, event: Envelope, *, resolver=None):
         or event.producer != "quant-serving"
     ):
         raise ValueError("Unexpected producer/type")
-    payload = OptimizeResult.model_validate(event.payload)
+    numerical_envelope = dict(event.payload)
+    raw_evidence = numerical_envelope.pop("explanation_evidence", None)
+    payload = OptimizeResult.model_validate(numerical_envelope)
     if event.correlation_id != payload.job_id:
         raise ValueError("Correlation mismatch")
     link_job(None, payload.job_id)
@@ -251,6 +261,7 @@ def consume_result(sessions, event: Envelope, *, resolver=None):
                     portfolio_id=job.portfolio_id,
                     run_id=str(payload.run_id),
                     result=result,
+                    explanation_evidence=store_evidence(raw_evidence, job.input, payload.run_id, result),
                 )
             )
             job.status, job.recommendation_id = "SUCCEEDED", job.id

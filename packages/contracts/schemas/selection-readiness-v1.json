@@ -163,7 +163,8 @@
           "enum": [
             "EW",
             "MVO",
-            "BL_ML"
+            "BL_ML",
+            "HYBRID"
           ],
           "title": "Strategy",
           "type": "string"
@@ -177,6 +178,7 @@
             "READY",
             "INSUFFICIENT_ASSETS",
             "RISK_PROFILE_REQUIRED",
+            "ASSET_SELECTION_REQUIRED",
             "DEFENSIVE_ASSET_REQUIRED",
             "CONSTRAINTS_INFEASIBLE",
             "ASSET_DATA_MISSING",
@@ -273,6 +275,7 @@
         "READY",
         "INSUFFICIENT_ASSETS",
         "RISK_PROFILE_REQUIRED",
+        "ASSET_SELECTION_REQUIRED",
         "DEFENSIVE_ASSET_REQUIRED",
         "CONSTRAINTS_INFEASIBLE",
         "ASSET_DATA_MISSING",

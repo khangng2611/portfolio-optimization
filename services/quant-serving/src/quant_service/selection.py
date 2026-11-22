@@ -63,12 +63,15 @@ def recompute_selection(catalog, command, *, now=None):
     effective = effective_candidate_constraints(requested.model_dump(), regime)
     if effective != command.constraints.model_dump():
         raise ValueError("Selection effective constraints mismatch")
-    reason = check_candidate_feasibility(ids, effective, command.strategy)
+    uses_views = command.strategy in {"BL_ML", "HYBRID"}
+    reason = check_candidate_feasibility(ids, effective, "BL_ML" if uses_views else command.strategy)
+    if command.strategy == "HYBRID" and not reason:
+        reason = check_candidate_feasibility(ids, effective, "MVO")
     if reason:
         raise SelectionDataError(reason)
     equities = [a for a in ids if a in EQUITY_IDS]
     selected = equities
-    if command.strategy == "BL_ML" and len(equities) > 5:
+    if uses_views and len(equities) > 5:
         columns = [panel.ids.index(a) for a in equities]
         selected = select_candidate_equities(panel.prices[:t, columns], equities)
     active = [a for a in ids if a not in EQUITY_IDS or a in selected]
@@ -78,7 +81,7 @@ def recompute_selection(catalog, command, *, now=None):
         panel_hash=panel.panel_hash,
         selection_policy_id=context.selection_policy_id,
         applied_selection="equity-k5-v1"
-        if command.strategy == "BL_ML" and len(equities) > 5
+        if uses_views and len(equities) > 5
         else "all-candidates-v1",
         decision_session=context.decision_session,
         selection_price_end_date=panel.dates[t - 1],
@@ -105,7 +108,7 @@ def recompute_selection(catalog, command, *, now=None):
     return value, panel, projected, proof
 
 
-def resolve_selection(catalog, command, *, now=None):
+def resolve_selection(catalog, command, *, now=None, evidence=None):
     value, panel, projected, proof = recompute_selection(catalog, command, now=now)
     ids, active = projected["asset_ids"], proof.active_asset_ids
     t = projected["decision_index"]
@@ -119,7 +122,7 @@ def resolve_selection(catalog, command, *, now=None):
         market_weights=[1 / len(active) if a in active else 0 for a in ids],
     )
     inference = None
-    if command.strategy == "BL_ML":
+    if command.strategy in {"BL_ML", "HYBRID"}:
         manifest = check_model(catalog, value, panel, projected)
         directory, _ = catalog.model(value)
         equities = [a for a in active if a in EQUITY_IDS]
@@ -138,6 +141,7 @@ def resolve_selection(catalog, command, *, now=None):
                 volatility,
                 active,
                 command.selection_context.regime.model_dump(),
+                **({"evidence": evidence} if evidence is not None else {}),
             )
         except ModelUnavailable:
             raise SelectionDataError("NO_VALID_ML_VIEWS") from None
@@ -154,4 +158,7 @@ def resolve_selection(catalog, command, *, now=None):
             model_family="phase1-asset-ensemble-v5",
             covered_asset_ids=manifest.covered_asset_ids,
         )
+    from .explanation import capture, capture_selection
+
+    capture(evidence, lambda: capture_selection(command, panel, proof, features if inference else {}, manifest if inference else None, t))
     return numerical, proof, inference

@@ -10,13 +10,14 @@ from . import Constraints, ReadyInput, StrictModel
 
 Digest = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 AssetId = Annotated[str, Field(pattern=r"^[A-Z0-9_-]{1,64}$")]
-Strategy = Literal["EW", "MVO", "BL_ML"]
+Strategy = Literal["EW", "MVO", "BL_ML", "HYBRID"]
 LIVE_NAV_POLICY = "user-selection-live-nav-v2"
 DataPolicy = Literal["user-selection-data-v1", "user-selection-live-nav-v2"]
 ReasonCode = Literal[
     "READY",
     "INSUFFICIENT_ASSETS",
     "RISK_PROFILE_REQUIRED",
+    "ASSET_SELECTION_REQUIRED",
     "DEFENSIVE_ASSET_REQUIRED",
     "CONSTRAINTS_INFEASIBLE",
     "ASSET_DATA_MISSING",
@@ -136,6 +137,7 @@ class AssetCatalogItem(StrictModel):
     asset_id: AssetId
     kind: Literal["stock", "gold", "fund"]
     display_name: str
+    description: str | None = None
     unit: Literal["VND/share", "VND/tael", "VND/unit"]
     currency: Literal["VND"] = "VND"
     catalog_version: Literal["supported-assets-v1"] = "supported-assets-v1"

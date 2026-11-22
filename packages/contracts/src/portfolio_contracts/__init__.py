@@ -2,11 +2,12 @@
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_serializer, model_validator
 
 
 class ModelUnavailable(ValueError):
@@ -63,7 +64,7 @@ class ReadyInput(StrictModel):
 class DecisionContext(StrictModel):
     policy_version_id: str = Field(min_length=1, max_length=100)
     risk_profile: dict | None = None
-    requested_strategy: Literal["EW", "MVO", "BL_ML"]
+    requested_strategy: Literal["EW", "MVO", "BL_ML", "HYBRID"]
     fallback_reason: str | None = None
     requested_constraints: Constraints | None = None
 
@@ -71,26 +72,54 @@ class DecisionContext(StrictModel):
 from .selection import SelectionContext  # noqa: E402
 
 
+def system_hybrid_enabled():
+    return os.environ.get("SYSTEM_HYBRID_ENABLED", "false").lower() == "true"
+
+
+def system_hybrid_managed():
+    return os.environ.get("SYSTEM_HYBRID_ENABLED", "false").lower() in {"true", "paused"}
+
+
+class HybridPolicy(StrictModel):
+    version: Literal["phase1-hybrid-profile-v1"]
+    mvo_share: Annotated[FiniteFloat, Field(gt=0, lt=1)]
+
+
 class OptimizeCommand(StrictModel):
     job_id: UUID
     owner_user_id: UUID
     portfolio_id: UUID
     portfolio_version: int = Field(ge=1)
-    strategy: Literal["EW", "MVO", "BL_ML"]
+    strategy: Literal["EW", "MVO", "BL_ML", "HYBRID"]
     core_version: Literal["0.1.0"] = "0.1.0"
     capital_vnd: str
     inputs: ReadyInput
     constraints: Constraints
     decision_context: DecisionContext | None = None
     selection_context: SelectionContext | None = None
+    hybrid_policy: HybridPolicy | None = None
     deadline: datetime
     input_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def validate_hybrid_pin(self):
+        if self.strategy == "HYBRID":
+            if not self.hybrid_policy or not self.selection_context or not self.decision_context:
+                raise ValueError("HYBRID requires a pinned policy, selection and decision context")
+            decision = self.decision_context
+            if decision.requested_strategy != "HYBRID" or decision.fallback_reason or not (decision.risk_profile or {}).get("version_id"):
+                raise ValueError("HYBRID requires a confirmed risk revision and no fallback")
+        elif self.hybrid_policy is not None:
+            raise ValueError("Only HYBRID accepts a blend policy")
+        return self
 
     @model_serializer(mode="wrap")
     def preserve_legacy_wire(self, handler):
         value = handler(self)
         if self.selection_context is None:
             value.pop("selection_context", None)
+        if self.hybrid_policy is None:
+            value.pop("hybrid_policy", None)
         return value
 
     def compute_hash(self):
@@ -115,6 +144,14 @@ class OptimizeResult(StrictModel):
     status: Literal["SUCCEEDED", "FAILED"]
     result: dict | None = None
     error: dict | None = None
+    explanation_evidence: dict | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_wire(self, handler):
+        value = handler(self)
+        if self.explanation_evidence is None:
+            value.pop("explanation_evidence", None)
+        return value
 
 
 class Envelope(StrictModel):

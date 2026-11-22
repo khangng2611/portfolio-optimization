@@ -28,7 +28,7 @@ class VerifySelectionRequest(StrictModel):
     selection_context: SelectionContext
     selection_proof: SelectionProof
     constraints: Constraints
-    strategy: Literal["EW", "MVO", "BL_ML"]
+    strategy: Literal["EW", "MVO", "BL_ML", "HYBRID"]
 
 
 def create_app(*, sessions, verifier, catalog, model_resolver=None):

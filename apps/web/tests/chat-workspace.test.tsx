@@ -23,6 +23,14 @@ it('withholds stored prose and allocation until canonical API facts are availabl
   expect(html).not.toContain('99%');
   expect(html).not.toContain('chat-open-recommendation');
 });
+
+it('withholds evidence-derived saved prose after an evidence mismatch', () => {
+  const saved = { schema_version: 'recommendation-evidence-v1', recommendation_id: canonical.id, run_id: 'run', facts_hash: card.facts_hash, evidence_hash: 'b'.repeat(64), status: 'PARTIAL', quant: null, limitations: [] } as const;
+  const html = renderToStaticMarkup(<ChatRecommendation card={{ ...card, facts: {...canonical, run_id:'run'}, explanation_evidence: { ...saved, limitations: [] } }} canonical={{...canonical, run_id:'run'}} evidence={{...saved, evidence_hash:'c'.repeat(64),limitations:[]}} content="SECRET_SAVED_EVIDENCE_CLAIM"/>);
+  expect(html).toContain('chưa khớp');
+  expect(html).not.toContain('SECRET_SAVED_EVIDENCE_CLAIM');
+  expect(html).toContain('Phân bổ chính');
+});
 it('rejects a provenance mismatch before rendering a result/action', () => {
   const html = renderToStaticMarkup(<ChatRecommendation card={card} canonical={{ ...canonical, bundle_hash: 'changed' }} content="Stored claim"/>);
   expect(html).toContain('chưa khớp');

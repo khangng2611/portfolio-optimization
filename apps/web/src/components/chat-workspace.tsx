@@ -1,14 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { RecommendationEvidenceView } from './recommendation-evidence';
+import type { RecommendationEvidence } from '../lib/chat-types';
 import { ActionIcon, IconButton, type ActionIconName } from './action-controls';
-import { AllocationView, money, profileName } from './allocation-view';
+import { AllocationView, money, percentage, profileName, strategyName } from './allocation-view';
 import { OperationError } from './operation-ui';
 import { Pagination } from './portfolio-lifecycle';
 import { ApiError, dateTime, type Api, type Page, type PageApi, type Portfolio, type Recommendation } from '../lib/portfolio-types';
 import { transcriptScrollAction, type TranscriptPosition } from '../lib/chat-scroll';
 import { LatestRequest } from '../lib/latest-request';
-import { workspaceHash, type WorkspaceRoute } from '../lib/workspace-state';
+import { readinessReason, workspaceHash, type WorkspaceRoute } from '../lib/workspace-state';
 import { chatError, chatStage, chatStatus, chatStopped, createSseParser, readPending, sameFacts, storageKey, type ChatDashboard, type ChatJob, type ChatMessage, type ChatPortfolio, type ChatReceipt, type ConfirmationCard, type Conversation, type FactCard, type KnowledgeEvidence, type RecommendationCard, type SendMessage } from '../lib/chat-types';
 import './chat-workspace.css';
 
@@ -32,16 +34,16 @@ export function ChatKnowledge({ evidence }: { evidence: KnowledgeEvidence }) {
   return <section className="chat-knowledge" data-testid="chat-knowledge" aria-label="Kiến thức tham khảo">{evidence.status !== 'MISSING' && <><p className="muted small">{evidence.status === 'REFERENCE' ? 'Đoạn tham khảo' : 'Trích đoạn được chọn từ corpus'} · {evidence.mode === 'LEXICAL' ? 'Tìm theo từ khóa' : 'Tìm kiếm kết hợp'}</p><ul>{evidence.citations.map(citation => <li key={citation.chunk_id}>{citation.text}</li>)}</ul></>}<KnowledgeSources evidence={evidence}/></section>;
 }
 
-export function ChatOptions({ intent, strategy, disabled, onIntent, onStrategy }: {
- intent: SendMessage['intent'] | ''; strategy: SendMessage['strategy'] | ''; disabled: boolean;
- onIntent: (value: SendMessage['intent'] | '') => void; onStrategy: (value: SendMessage['strategy'] | '') => void;
+export function ChatOptions({ intent, disabled, onIntent }: {
+ intent: SendMessage['intent'] | ''; disabled: boolean;
+ onIntent: (value: SendMessage['intent'] | '') => void;
 }) {
  const purposes: { value: SendMessage['intent'] | ''; label: string; icon: ActionIconName }[] = [
   {value:'',label:'Tự động',icon:'auto'}, {value:'portfolio',label:'Tóm tắt',icon:'portfolio'}, {value:'profile',label:'Hồ sơ',icon:'profile'},
   {value:'market',label:'Thị trường',icon:'market'}, {value:'allocation',label:'Tạo đề xuất',icon:'allocation'}, {value:'explain',label:'Giải thích',icon:'explain'}, {value:'knowledge',label:'Kiến thức',icon:'help'}, {value:'help',label:'Trợ giúp',icon:'help'},
  ];
  return <div className="chat-composer-settings"><fieldset disabled={disabled}><legend>Mục đích</legend><div className="purpose-choices">{purposes.map(item=><label className="option-chip" key={item.value}><input type="radio" name="chat-intent" value={item.value} checked={intent===item.value} onChange={()=>onIntent(item.value)}/><ActionIcon name={item.icon}/><span>{item.label}</span></label>)}</div></fieldset>
- <fieldset disabled={disabled}><legend>Chiến lược khi tạo đề xuất</legend><div className="strategy-choices">{(['','EW','MVO','BL_ML'] as const).map(value=><label className="option-chip" key={value}><input type="radio" name="chat-strategy" data-testid={'chat-strategy-'+(value || 'auto')} value={value} checked={strategy===value} onChange={()=>onStrategy(value)}/><span>{value===''?'Tự động':value==='BL_ML'?'BL + ML':value}</span></label>)}</div><p className="muted small">Tự động: trợ lý sẽ hỏi thêm nếu chưa rõ lựa chọn. Chọn ở đây chưa gửi yêu cầu.</p></fieldset></div>;
+ </div>;
 }
 
 function PortfolioPicker({ api, apiPage, value, onChange, onError, disabled = false }: { api: Api; apiPage: PageApi; value: string; onChange: (id: string) => void; onError: (error: unknown) => void; disabled?: boolean }) {
@@ -120,7 +122,7 @@ export function ChatConfirmation({ card, disabled, onConfirm }: { card: Confirma
   const levels: Record<string, string> = { low: 'Thấp', medium: 'Vừa', high: 'Cao', beginner: 'Mới bắt đầu', experienced: 'Có kinh nghiệm' };
   return <section className="chat-confirmation" aria-label="Xem lại đầu vào trước khi tạo đề xuất"><span className="badge">Cần xác nhận</span><h3>Xem lại trước khi tạo đề xuất</h3>
     {card.reason === 'STALE_CONFIRMATION' && <p className="notice warning">Danh mục hoặc hồ sơ đã thay đổi. Vui lòng xem lại đầu vào mới bên dưới.</p>}
-    <PortfolioFacts portfolio={portfolio}/><dl className="chat-facts"><div><dt>Chiến lược</dt><dd>{card.input.strategy}</dd></div><div><dt>Bộ dữ liệu</dt><dd>{portfolio.universe_id}</dd></div></dl>
+    <PortfolioFacts portfolio={portfolio}/><dl className="chat-facts"><div><dt>Loại đề xuất</dt><dd>{strategyName(card.input.strategy)}</dd></div><div><dt>Bộ dữ liệu</dt><dd>{portfolio.universe_id}</dd></div></dl>
     <details className="chat-risk-details"><summary>Chi tiết hồ sơ và ràng buộc</summary><dl className="chat-facts"><div><dt>Mức ngại rủi ro</dt><dd>{constraints.risk_aversion}</dd></div>
       {constraints.min_defensive_weight !== undefined && <div><dt>Phòng thủ tối thiểu</dt><dd>{percent(constraints.min_defensive_weight)}</dd></div>}
       {constraints.max_non_defensive_weight !== undefined && <div><dt>Ngoài nhóm phòng thủ tối đa</dt><dd>{percent(constraints.max_non_defensive_weight)}</dd></div>}
@@ -134,14 +136,28 @@ export function ChatConfirmation({ card, disabled, onConfirm }: { card: Confirma
   </section>;
 }
 
-export function ChatRecommendation({ card, canonical, content }: { card: RecommendationCard; canonical: Recommendation | undefined; content: string }) {
+export function ChatRecommendation({ card, canonical, content, isCurrentTarget = false, onExplain, evidence }: { card: RecommendationCard; canonical: Recommendation | undefined; content: string; isCurrentTarget?: boolean; onExplain?: (question: string) => void; evidence?: RecommendationEvidence }) {
   if (!canonical) return <div role="status" className="muted">Đang đối chiếu đề xuất với Portfolio…</div>;
   if (!sameFacts(card.facts, canonical)) return <div className="notice warning" role="alert">Nội dung đã lưu chưa khớp dữ liệu đề xuất hiện tại. Tải lại trạng thái để đối chiếu trước khi tiếp tục.</div>;
-  return <section data-testid="chat-result" className="chat-recommendation" aria-label="Đề xuất từ kết quả định lượng"><div className="allocation-tags"><span className="badge success">Đề xuất đã lưu</span><span className="badge">{card.explanation_status === 'TEMPLATE' ? 'Giải thích theo mẫu dữ liệu' : 'Giải thích đã đối chiếu dữ liệu'}</span></div>
-    <AllocationView allocation={canonical} compact metadata={false}/><details className="chat-explanation" open={card.explanation_requested === true}><summary>Đọc giải thích phân bổ</summary><p className="chat-message-text">{content}</p></details><a data-testid="chat-open-recommendation" className="button" href={workspaceHash({ view: 'proposal', portfolioId: canonical.portfolio_id, proposalId: canonical.id })}>Xem đề xuất và quyết định</a>
-    {card.knowledge && <KnowledgeSources evidence={card.knowledge}/>}
+  const active = canonical.strategy === 'HYBRID' ? canonical.asset_ids : canonical.selection_proof?.active_asset_ids ?? canonical.inputs_provenance?.phase1_full?.active_asset_ids;
+  const positive = canonical.weights.filter(weight => Number(weight) > 0).length;
+  const evidenceVerified = !card.explanation_evidence || !!(evidence && evidence.recommendation_id === canonical.id && evidence.run_id === canonical.run_id && evidence.facts_hash === card.facts_hash && sameFacts(card.explanation_evidence, evidence));
+  return <section data-testid="chat-result" className="chat-recommendation" aria-label="Đề xuất từ kết quả định lượng"><div className="allocation-tags"><span className="badge success">Đã tạo đề xuất</span>{isCurrentTarget && <span className="badge success">Đã chấp nhận làm mục tiêu hiện tại</span>}<span className="badge">{card.explanation_status === 'TEMPLATE' ? 'Giải thích theo mẫu dữ liệu' : 'Giải thích đã đối chiếu dữ liệu'}</span></div>
+    <header className="chat-result-summary"><h3>Kết quả đang được giải thích</h3><p className="muted">{strategyName(canonical.strategy)}{canonical.as_of_date && <> · Dữ liệu {canonical.as_of_date}</>}</p></header>
+    <section className="chat-main-allocation" aria-label="Phân bổ chính"><h3>Phân bổ chính</h3><AllocationView allocation={canonical} compact metadata={false} summaryFirst capitalLabel="Vốn đã ghim của đề xuất"/></section>
+    <details className="chat-explanation" open={card.explanation_requested === true}><summary>Đọc giải thích phân bổ</summary>
+      <section className="chat-verified-basis"><h3>Cơ sở đã được xác minh</h3><p>Tỷ trọng, vốn và phương pháp ở trên lấy từ cùng đề xuất đã đối chiếu với dữ liệu định lượng.</p>{active && <p>{active.length} tài sản trong tập tính toán; {positive} tài sản có tỷ trọng dương. Tài sản được chọn vẫn có thể nhận 0%.</p>}
+        {!evidenceVerified && <p role="alert" className="notice warning">Evidence đã lưu chưa khớp hoặc chưa được đối chiếu với nguồn hiện tại. Tải lại trạng thái để đối chiếu.</p>}
+        {evidence && evidenceVerified && <RecommendationEvidenceView evidence={evidence} facts={canonical} factsHash={card.facts_hash}/>}
+        {evidenceVerified && content.trim() && <details className="chat-original-explanation"><summary>Nội dung giải thích đã lưu</summary><p className="chat-message-text">{content}</p></details>}
+      </section>
+      {canonical.constraints && <section className="chat-result-limits"><h3>Giới hạn và điều cần lưu ý</h3><p>Giới hạn đã ghim: tối đa {percentage(canonical.constraints.max_position_weight)} mỗi tài sản.{canonical.constraints.min_defensive_weight != null && <> Phòng thủ tối thiểu {percentage(canonical.constraints.min_defensive_weight)}.</>}{canonical.constraints.max_non_defensive_weight != null && <> Ngoài nhóm phòng thủ tối đa {percentage(canonical.constraints.max_non_defensive_weight)}.</>}</p><p className="muted">Đây là tỷ trọng mục tiêu, không phải tài sản đang nắm giữ hoặc bảo đảm lợi nhuận. Nội dung giải thích không thay đổi kết quả đã tính.</p></section>}
+    </details>
+    {card.knowledge?.citations.length ? <KnowledgeSources evidence={card.knowledge}/> : <p className="muted small chat-missing-sources">Chưa có nguồn tham khảo phù hợp. Chỉ hiển thị số liệu đã được đối chiếu.</p>}
+    <a data-testid="chat-open-recommendation" className="button" href={workspaceHash({ view: 'proposal', portfolioId: canonical.portfolio_id, proposalId: canonical.id })}>Xem đề xuất và quyết định</a>
     <p className="muted small">Chấp nhận chỉ lưu tỷ trọng mục tiêu. Chưa có giao dịch được thực hiện.</p>
-    <details className="chat-audit"><summary>Nguồn và mã đối chiếu kết quả</summary><dl><div><dt>Facts hash</dt><dd>{card.facts_hash}</dd></div><div><dt>Input hash</dt><dd>{String((canonical as Recommendation & { input_hash?: string }).input_hash ?? '—')}</dd></div><div><dt>Snapshot</dt><dd>{canonical.data_snapshot_id}</dd></div><div><dt>Bundle hash</dt><dd>{canonical.bundle_hash}</dd></div><div><dt>Giải thích</dt><dd>{card.provider.model ?? 'Template'} · {card.provider.reason}</dd></div>{card.provider.input_tokens !== undefined && <div><dt>Token input / output</dt><dd>{card.provider.input_tokens} / {card.provider.output_tokens}</dd></div>}</dl></details>
+    <details className="chat-audit"><summary>Nguồn và mã đối chiếu kết quả</summary><p>Đề xuất {canonical.id} · Phiên bản danh mục {canonical.portfolio_version}</p><details className="chat-all-weights"><summary>Toàn bộ tỷ trọng đã lưu · {canonical.asset_ids.length} tài sản</summary><ul>{canonical.asset_ids.map((asset, index) => <li key={asset}>{asset} · {percentage(Number(canonical.weights[index]))}</li>)}</ul></details><dl><div><dt>Facts hash</dt><dd>{card.facts_hash}</dd></div><div><dt>Input hash</dt><dd>{String((canonical as Recommendation & { input_hash?: string }).input_hash ?? '—')}</dd></div><div><dt>Snapshot</dt><dd>{canonical.data_snapshot_id}</dd></div><div><dt>Bundle hash</dt><dd>{canonical.bundle_hash}</dd></div><div><dt>Giải thích</dt><dd>{card.provider.model ?? 'Template'} · {card.provider.reason}</dd></div>{card.provider.input_tokens !== undefined && <div><dt>Token input / output</dt><dd>{card.provider.input_tokens} / {card.provider.output_tokens}</dd></div>}</dl></details>
+    {onExplain && <div className="chat-followups"><p className="muted small">Bạn muốn hiểu thêm?</p><button type="button" className="quiet" onClick={() => onExplain('Tài sản có tỷ trọng 0% trong đề xuất này được hiểu thế nào?')}>Tài sản 0% được hiểu thế nào?</button><p className="muted small">Chọn gợi ý để điền ô soạn, rồi chủ động gửi.</p></div>}
   </section>;
 }
 
@@ -185,7 +201,7 @@ export function ChatTurnStatus({ job, resultVisible, connection, disabled, onRes
   return <section className="chat-job" data-testid="chat-job" aria-label="Trạng thái lượt trao đổi" role="status">
     <strong>{chatStatus(job.status)}</strong>{(running || job.status === 'WAITING_INPUT') && <p>{chatStage(job.stage)}</p>}
     {running && <p className="muted small">{connection === 'connected' ? 'Đang cập nhật tiến trình.' : connection === 'retrying' ? 'Đang kết nối lại. Trạng thái vẫn được kiểm tra.' : 'Đang kết nối tiến trình…'}</p>}
-    {job.status === 'FAILED' && <p>{inputFailures[job.error ?? ''] ?? 'Yêu cầu chưa hoàn tất. Xem lại dữ liệu và đầu vào trước khi gửi một lượt mới.'}</p>}
+    {job.status === 'FAILED' && <p>{inputFailures[job.error ?? ''] ?? readinessReason[job.error ?? ''] ?? 'Yêu cầu chưa hoàn tất. Xem lại dữ liệu và đầu vào trước khi gửi một lượt mới.'}</p>}
     {job.status === 'AUTHORIZATION_REQUIRED' && <><p>Quyền của lượt này đã hết hạn. Cấp lại quyền để tiếp tục cùng yêu cầu.</p><button className="quiet" onClick={onResume} disabled={disabled}>Cấp lại quyền và tiếp tục</button></>}
   </section>;
 }
@@ -194,9 +210,10 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
   const cid = route.conversationId!;
   const [conversation, setConversation] = useState<Conversation | null>(null), [history, setHistory] = useState(emptyPage<ChatMessage>(50)), [offset, setOffset] = useState(0);
   const [job, setJob] = useState<ChatJob | null>(null), [recommendations, setRecommendations] = useState<Record<string, Recommendation>>({});
+  const [evidenceById, setEvidenceById] = useState<Record<string, RecommendationEvidence>>({});
   const [portfolioId, setPortfolioId] = useState(route.portfolioId ?? ''), [dashboard, setDashboard] = useState<ChatDashboard | null>(null), [contextRevision, setContextRevision] = useState(0);
   const [contextOpen, setContextOpen] = useState(false);
-  const [content, setContent] = useState(''), [strategy, setStrategy] = useState<SendMessage['strategy'] | ''>(''), [intent, setIntent] = useState<SendMessage['intent'] | ''>(''), [recommendationId, setRecommendationId] = useState('');
+  const [content, setContent] = useState(''), [intent, setIntent] = useState<SendMessage['intent'] | ''>(''), [recommendationId, setRecommendationId] = useState('');
   const [pending, setPending] = useState<SendMessage | null>(null), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [connection, setConnection] = useState<'connecting' | 'connected' | 'retrying' | 'saved'>('connecting'), [announcement, setAnnouncement] = useState('');
   const transientError = useRef(false);
@@ -257,10 +274,11 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
         if (state && state.conversation_id !== cid) throw new ApiError(404, '');
         const ids = [...new Set(page.items.flatMap(message => message.structured?.type === 'recommendation' ? [message.structured.recommendation_id] : []))];
         const canonical = await Promise.all(ids.map(id => api<Recommendation>(`/api/v1/recommendations/${id}`)));
-        return { current, page, state, canonical };
+        const evidence = await Promise.all(ids.map(id => api<RecommendationEvidence>(`/api/v1/recommendations/${id}/evidence`).catch(() => null)));
+        return { current, page, state, canonical, evidence };
       });
       if (!snapshot || !mounted.current) return null;
-      const { current, page, state, canonical } = snapshot;
+      const { current, page, state, canonical, evidence } = snapshot;
       // A reader may scroll up while the latest-page request is in flight.
       if (page.offset !== offset && !nearTranscriptEnd.current) return null;
       if (transientError.current) { transientError.current = false; setError(''); }
@@ -268,6 +286,7 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
       setConversation(current); setHistory(page);
       if (!portfolioRef.current && current.portfolio_id) { portfolioRef.current = current.portfolio_id; setPortfolioId(current.portfolio_id); }
       setRecommendations(Object.fromEntries(canonical.map(item => [item.id, item]))); jobRef.current = state; setJob(state);
+      setEvidenceById(Object.fromEntries(evidence.filter((item): item is RecommendationEvidence => item !== null).map(item => [item.recommendation_id, item])));
       const draft = pendingRef.current;
       if (draft && page.items.some(message => message.client_message_id === draft.client_message_id)) { rememberPending(null); setContent(value => value === draft.content ? '' : value); }
       if (state && chatStopped(state.status)) { setConnection('saved'); setAnnouncement(chatStatus(state.status)); }
@@ -361,7 +380,7 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
   }
   function send(event?: FormEvent) {
     event?.preventDefault(); if (!content.trim() || busy || loading || pending || job && !chatStopped(job.status)) return;
-    const body: SendMessage = { content: content.trim(), client_message_id: crypto.randomUUID(), ...(portfolioId ? { portfolio_id: portfolioId } : {}), ...(strategy ? { strategy } : {}), ...(intent ? { intent } : {}), ...(intent === 'explain' && recommendationId ? { recommendation_id: recommendationId } : {}) };
+    const body: SendMessage = { content: content.trim(), client_message_id: crypto.randomUUID(), ...(portfolioId ? { portfolio_id: portfolioId } : {}), ...(intent ? { intent } : {}), ...(intent === 'explain' && recommendationId ? { recommendation_id: recommendationId } : {}) };
     void submitBody(body);
   }
   function confirm(card: ConfirmationCard) {
@@ -393,7 +412,7 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
           {card?.dialogue?.reason === 'VERIFIED' && <details className="chat-message-source"><summary>Nguồn hỗ trợ trả lời</summary><p className="muted small">OpenAI hỗ trợ hiểu yêu cầu. Hệ thống kiểm tra dữ liệu và quyền thực hiện.</p></details>}
           {card?.type === 'knowledge' && <ChatKnowledge evidence={card.knowledge}/>}
           {card?.type === 'confirmation' && <ChatConfirmation card={card} disabled={blocked || job?.status !== 'WAITING_INPUT' || job.result_message_id !== message.id} onConfirm={() => confirm(card)}/>}
-          {card?.type === 'recommendation' && <ChatRecommendation card={card} canonical={recommendations[card.recommendation_id]} content={message.content}/>}
+          {card?.type === 'recommendation' && <ChatRecommendation card={card} canonical={recommendations[card.recommendation_id]} evidence={evidenceById[card.recommendation_id]} content={message.content} isCurrentTarget={dashboard?.accepted_target?.recommendation_id === card.recommendation_id} onExplain={!blocked && recommendations[card.recommendation_id]?.portfolio_id === portfolioId ? question => { setIntent('explain'); setRecommendationId(card.recommendation_id); setContent(question); input.current?.focus(); } : undefined}/>}
           {(card?.type === 'portfolio' || card?.type === 'profile' || card?.type === 'market') && <ReadFacts card={card}/>}
           {card?.type === 'input_required' && card.fields.includes('confirmed_risk_profile') && <a className="button quiet" href={workspaceHash({ view: 'risk-assessment', portfolioId: card.portfolio_id ?? portfolioId })}>Xem và xác nhận hồ sơ rủi ro</a>}
         </li>;
@@ -404,8 +423,8 @@ function ConversationWorkspace({ api, apiPage, route, navigate, ownerKey, onSess
       {pending && <aside className="notice warning chat-pending" role="alert"><strong>Yêu cầu chưa rõ trạng thái tiếp nhận</strong><p>{pending.confirmation ? 'Yêu cầu xác nhận đang được giữ nguyên để tránh tạo trùng. Chỉ gửi lại khi bạn chủ động xác nhận lần nữa.' : 'Nội dung và mã yêu cầu được giữ nguyên khi thử lại. Kết nối lại không tự gửi tin nhắn.'}</p><button data-testid="chat-retry" className="quiet" onClick={() => void submitBody(pending)} disabled={busy}>{pending.confirmation ? 'Xác nhận lại & gửi' : 'Gửi lại cùng yêu cầu'}</button></aside>}
       </div>{showScrollEnd && <button type="button" className="quiet chat-scroll-end" aria-label="Cuộn đến cuối vùng trao đổi" onClick={() => { if (transcript.current) { followLatest.current = true; nearTranscriptEnd.current = true; transcript.current.scrollTop = transcript.current.scrollHeight; setShowScrollEnd(false); const latestOffset = Math.floor(Math.max(0, history.total - 1) / history.limit) * history.limit; if (latestOffset !== offset) setOffset(latestOffset); else void refreshSnapshot(); } }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 5v14m-5-5 5 5 5-5"/></svg>Xuống cuối</button>}
       <form ref={composer} className="panel chat-composer" onSubmit={send} aria-label="Soạn tin nhắn"><label className="sr-only" htmlFor="chat-message-input">Tin nhắn của bạn</label><div className="chat-input-row"><textarea ref={input} id="chat-message-input" data-testid="chat-input" value={content} onChange={event => setContent(event.target.value)} maxLength={4000} rows={2} disabled={blocked} placeholder="Hỏi về danh mục hoặc yêu cầu một phương án phân bổ…" aria-describedby="chat-composer-help" onKeyDown={event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}/><IconButton icon="send" label={busy ? 'Đang gửi tin nhắn' : 'Gửi tin nhắn'} data-testid="chat-send" type="submit" className="send-button" disabled={blocked || !content.trim()}/></div>
-        {intent === 'explain' && <label>Mã đề xuất<input value={recommendationId} onChange={event => setRecommendationId(event.target.value)} disabled={blocked} pattern="[a-fA-F0-9-]{36}" required autoComplete="off"/></label>}
-        <div className="chat-composer-tools"><details className="chat-advanced" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}><summary aria-label="Tùy chọn hội thoại"><ActionIcon name="options"/><span className="control-tooltip" aria-hidden="true">Tùy chọn hội thoại</span></summary><ChatOptions intent={intent} strategy={strategy} disabled={blocked} onIntent={setIntent} onStrategy={setStrategy}/></details></div>
+        {intent === 'explain' && <label>Mã đề xuất<input value={recommendationId} onChange={event => setRecommendationId(event.target.value)} disabled={blocked} pattern="[a-fA-F0-9\-]{36}" required autoComplete="off"/></label>}
+        <div className="chat-composer-tools"><details className="chat-advanced" onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}><summary aria-label="Tùy chọn hội thoại"><ActionIcon name="options"/><span className="control-tooltip" aria-hidden="true">Tùy chọn hội thoại</span></summary><ChatOptions intent={intent} disabled={blocked} onIntent={setIntent}/></details></div>
         <p className="muted small" id="chat-composer-help">Ctrl / ⌘ + Enter để gửi · Chấp nhận mục tiêu tại màn hình đề xuất</p>
       </form>
     </section></div>

@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AssetSelectionEditor } from '../components/asset-picker';
-import { isSelectionReadiness, type AssetCatalog } from '../lib/selection-types';
+import { isSelectionReadiness, mergeAssetMetadata, type AssetCatalog, type AssetMetadata } from '../lib/selection-types';
 import { ChatWorkspace } from '../components/chat-workspace';
 import { DataRefresh } from '../components/data-refresh';
 import { ModelOperations } from '../components/model-operations';
@@ -34,7 +34,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
   const [readiness, setReadiness] = useState<Readiness | null>(null), [readinessFailed, setReadinessFailed] = useState(false), [universes, setUniverses] = useState<ReadyUniverse[]>([]);
   const [detail, setDetail] = useState<Recommendation | null>(null), [comparison, setComparison] = useState<[Recommendation, Recommendation] | null>(null), [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false), [opening, setOpening] = useState(false), [proposalLoading, setProposalLoading] = useState(false), [error, setError] = useState(''), [conflict, setConflict] = useState(false);
-  const [wizardStep, setWizardStep] = useState(0), [strategy, setStrategy] = useState('MVO'), [fallback, setFallback] = useState(false), [refresh, setRefresh] = useState(0), [historyVersion, setHistoryVersion] = useState(0), [clock, setClock] = useState(Date.now());
+  const [wizardStep, setWizardStep] = useState(0), [refresh, setRefresh] = useState(0), [historyVersion, setHistoryVersion] = useState(0), [clock, setClock] = useState(Date.now());
   const selection = useRef(0), heading = useRef<HTMLHeadingElement>(null), errorRef = useRef<HTMLDivElement>(null);
   const view = route.view;
   const browsingProposals = view === 'proposal' && route.focus === 'history';
@@ -104,7 +104,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(timer); }, []);
   useEffect(() => {
     if (!session) return; let active = true;
-    api<AssetCatalog>('/api/v1/assets/catalog').then(value => { if (active) setCatalog(value); }).catch(() => { if (active) setCatalog(null); });
+    Promise.all([api<AssetCatalog>('/api/v1/assets/catalog'), api<AssetMetadata[]>('/api/v1/market/assets').catch(() => [])]).then(([value, metadata]) => { if (active) setCatalog(mergeAssetMetadata(value, metadata)); }).catch(() => { if (active) setCatalog(null); });
     api<ReadyUniverse[]>('/api/v1/universes').then(values => { if (active) setUniverses(values); }).catch(() => { if (active) setUniverses([]); });
     return () => { active = false; };
   }, [session, api, refresh]);
@@ -142,10 +142,10 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
     catch (err) { setError((err as Error).message); return false; } finally { setBusy(false); }
   }
   const currentReadiness = readiness && !isSelectionReadiness(readiness) && readiness.valid_until && Date.parse(readiness.valid_until) <= clock ? { ...readiness, status: 'EXPIRED' } : readiness;
-  const canPropose = readinessAllows(currentReadiness, strategy, fallback);
+  const canPropose = readinessAllows(currentReadiness, 'HYBRID', false);
   async function optimize() {
     if (!selected || !canPropose) return; const epoch = selection.current; setBusy(true); setError('');
-    try { const result = await api<Job>(`/api/v1/portfolios/${selected.id}/recommendations`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID(), ...(selected.asset_selection ? { 'If-Match': `"${selected.version}"` } : {}) }, body: JSON.stringify({ strategy, ...(strategy === 'BL_ML' && fallback ? { fallback_strategy: 'EW' } : {}) }) }); if (epoch === selection.current) setJob({ ...result, status: 'QUEUED', portfolio_id: selected.id }); }
+    try { const result = await api<Job>(`/api/v1/portfolios/${selected.id}/recommendations`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `"${selected.version}"` }, body: JSON.stringify({ mode: 'system' }) }); if (epoch === selection.current) setJob({ ...result, status: 'QUEUED', portfolio_id: selected.id }); }
     catch (err) { if (epoch === selection.current) { setError((err as Error).message); setReadiness(null); setReadinessFailed(true); } } finally { setBusy(false); }
   }
   async function acceptTarget() {
@@ -181,7 +181,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
           : view === 'overview' ? <PortfolioOverview portfolio={selected} dashboard={dashboard}/> : <>
             {browsingProposals ? <div className="proposal-browser-actions"><p className="muted">Mở từng đề xuất để xem lại, hoặc chọn hai phương án để so sánh.</p><a className="button quiet" href={href('proposal')}>Tạo đề xuất mới</a></div> : proposalLoading ? <section className="panel loading-state" role="status">Đang tải đề xuất…</section> : detail ? <ProposalReview portfolio={selected} recommendation={detail} accepted={accepted} stale={stale} conflict={conflict} busy={waiting} onAccept={acceptTarget} viewerBase={viewerBase}/> : <>
               {job && <section className="job-progress" role="status"><span className="badge">{job.status === 'QUEUED' ? 'Đang xếp hàng' : ['FAILED', 'CANCELLED'].includes(job.status) ? 'Chưa hoàn tất' : terminal(job.status) ? 'Đã hoàn tất' : 'Đang xử lý'}</span><h2>{job.status === 'FAILED' ? 'Chưa thể tạo đề xuất' : job.status === 'CANCELLED' ? 'Yêu cầu đã dừng' : terminal(job.status) ? 'Đã xử lý yêu cầu' : 'Đang tính phân bổ'}</h2><p>{job.error?.message ?? (terminal(job.status) ? 'Xem kết quả nếu đã có, hoặc kiểm tra lại trước khi tạo yêu cầu mới.' : 'Yêu cầu đã được tiếp nhận. Hệ thống đang tính phân bổ theo policy.')}</p><p className="muted small">Trạng thái được cập nhật tự động. Kết quả sẽ mở khi tính toán hoàn tất.</p><details className="diagnostics"><summary>Chi tiết tác vụ</summary><JobTrace reference={job} viewerBase={viewerBase}/></details>{job.recommendation_id && <a className="button" href={workspaceHash({ view: 'proposal', portfolioId: selected.id, proposalId: job.recommendation_id })}>Xem đề xuất vừa hoàn tất</a>}</section>}
-              {(!job || terminal(job.status)) && <ProposalRequest portfolio={selected} readiness={currentReadiness} strategy={strategy} fallback={fallback} busy={waiting} onStrategy={value => { setStrategy(value); setFallback(false); }} onFallback={setFallback} onSubmit={optimize}/>}
+              {(!job || terminal(job.status)) && <ProposalRequest portfolio={selected} readiness={currentReadiness} busy={waiting} onSubmit={optimize}/>}
             </>}
             {browsingProposals ? <ProposalHistory key={selected.id + historyVersion} portfolioId={selected.id} fetchPage={fetchPage}/> : <details className="proposal-history-disclosure"><summary>Các đề xuất đã tạo · Xem lại hoặc so sánh</summary><ProposalHistory key={selected.id + historyVersion} portfolioId={selected.id} fetchPage={fetchPage} selectedId={detail?.id}/></details>}
 

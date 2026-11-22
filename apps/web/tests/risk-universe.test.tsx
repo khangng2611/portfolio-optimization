@@ -29,3 +29,11 @@ it('keeps legacy creation when the server selection gate is off', () => {
   expect(html).toContain('name="universe"');
   expect(html).not.toContain('Tìm tài sản');
 });
+
+it('uses the asset basket directly when selection is enabled without a redundant mode chooser', () => {
+  const html = renderToStaticMarkup(<RiskWizard busy={false} onCreate={async () => true} catalog={{ catalog_version: 'supported-assets-v1', selection_enabled: true, assets: [] }} universes={[{ universe_id: 'DEMO', asset_ids: ['AAA', 'BBB'], as_of_date: '2026-11-12', demo: true }]}/>);
+  expect(html).toContain('Tài sản hỗ trợ');
+  expect(html).toContain('Rổ tài sản của bạn');
+  expect(html).not.toContain('Cách chọn tài sản');
+  expect(html).not.toContain('name="universe"');
+});

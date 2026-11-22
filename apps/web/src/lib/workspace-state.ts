@@ -65,6 +65,7 @@ export function comparisonDifferences(a: ComparisonPins, b: ComparisonPins): str
 }
 
 export const readinessReason: Record<string, string> = {
+  ASSET_SELECTION_REQUIRED: 'Tạo danh mục có rổ tài sản được chọn để nhận đề xuất hệ thống. Bạn vẫn có thể mở lịch sử danh mục này.',
   INSUFFICIENT_ASSETS: 'Cần ít nhất 2 tài sản để tính phân bổ; bạn vẫn có thể lưu lựa chọn.',
   RISK_PROFILE_REQUIRED: 'Cần xác nhận hồ sơ rủi ro của danh mục trước khi tính.',
   DEFENSIVE_ASSET_REQUIRED: 'Policy custom mixed cần VFF trong lựa chọn để đủ nhóm phòng thủ. Hệ thống không tự thêm mã.',
@@ -79,5 +80,9 @@ export const readinessReason: Record<string, string> = {
   VFF_STALE: 'NAV VFF đủ điều kiện đã quá 7 ngày; cần dữ liệu khả dụng mới.',
   GOLD_STALE: 'Giá GOLD đủ điều kiện đã quá 7 ngày; cần dữ liệu khả dụng mới.',
   MODEL_REVIEW_PENDING: 'Model cho kỳ fit hiện tại đang chờ phê duyệt.',
+  MODEL_UNAVAILABLE: 'Chưa có mô hình đã duyệt phù hợp với dữ liệu hiện tại.',
+  INPUT_EXPIRED: 'Dữ liệu đã hết hạn. Cần làm mới trước khi tính đề xuất.',
+  INPUT_UNAVAILABLE: 'Dữ liệu hoặc mô hình chưa sẵn sàng để tính đề xuất.',
+  INPUT_INVALID: 'Dữ liệu hoặc mô hình chưa qua kiểm tra tính toàn vẹn.',
   SELECTION_MISMATCH: 'Selection K5 và model chưa khớp kỳ phục vụ; cần publication tương thích.',
 };

@@ -1,6 +1,16 @@
 import { expect, it } from 'vitest';
 import { login, request, config, provider } from './helpers';
 const id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+it('allows authenticated investors to read only the fixed Market metadata endpoint', async () => {
+  const seen: string[] = [];
+  config.marketUrl = 'http://market-api:8000';
+  const { bff, cookie } = await login({ fetch: async url => { seen.push(String(url)); return Response.json([]); } });
+  expect((await bff.proxy(request('/api/v1/market/assets', { cookie }))).status).toBe(200);
+  expect(seen).toEqual(['http://market-api:8000/api/v1/market/assets']);
+  expect((await bff.proxy(request('/api/v1/market/assets?source=http://evil.test', { cookie }))).status).toBe(404);
+  expect((await bff.proxy(request('/api/v1/market/assets', { method: 'POST', cookie }))).status).toBe(404);
+  expect((await bff.proxy(request('/api/v1/market/assets'))).status).toBe(401);
+});
 const operator = () => { const p = provider(); return { ...p, login: async () => ({ ...await p.login(), user: { sub: 'operator', name: 'Operator', roles: ['data-operator'] } }) }; };
 it('blocks investors from operator reads and writes before contacting a backend', async () => {
   let calls = 0;

@@ -44,6 +44,7 @@ const chatRoutes = [
   { path: new RegExp(`^/api/v1/recommendations/${uuid}/explanation$`), template: '/api/v1/recommendations/{recommendation_id}/explanation', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
 ] as const;
 const routes = [
+  { path: /^\/api\/v1\/market\/assets$/, template: '/api/v1/market/assets', methods: ['GET'], query: [], service: 'market', roles: ['investor', 'researcher', 'data-operator', 'model-reviewer', 'system-admin'] },
   { path: /^\/api\/v1\/assets\/catalog$/, template: '/api/v1/assets/catalog', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/asset-selections$`), template: '/api/v1/portfolios/{portfolio_id}/asset-selections', methods: ['GET', 'POST'], query: [], idempotent: true },
   ...chatRoutes,
@@ -62,6 +63,7 @@ const routes = [
   { path: new RegExp(`^/api/v1/portfolios/${uuid}$`), template: '/api/v1/portfolios/{portfolio_id}', methods: ['GET', 'PATCH'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/recommendations$`), template: '/api/v1/portfolios/{portfolio_id}/recommendations', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
   { path: new RegExp(`^/api/v1/recommendations/${uuid}$`), template: '/api/v1/recommendations/{recommendation_id}', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/recommendations/${uuid}/evidence$`), template: '/api/v1/recommendations/{recommendation_id}/evidence', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/jobs/portfolio/${uuid}$`), template: '/api/v1/jobs/portfolio/{job_id}', methods: ['GET'], query: [] },
 ];
 async function readBounded(request: Request, max: number) {

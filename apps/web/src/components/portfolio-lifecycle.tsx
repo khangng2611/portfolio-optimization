@@ -14,10 +14,9 @@ export function Pagination({ total, offset, limit = 10, onChange, busy = false }
 export function ReadinessNotice({ value, onRefresh, busy = false, failed = false }: { value: Readiness | null; onRefresh: () => void; busy?: boolean; failed?: boolean }) {
   if (isSelectionReadiness(value)) return <aside className={`readiness notice selection-readiness ${value.can_submit ? '' : 'warning'}`} data-testid="readiness-notice" aria-label="Tình trạng dữ liệu và model">
     <div className="readiness-summary">
-      <strong>{value.can_submit ? 'Sẵn sàng tạo đề xuất' : 'Lựa chọn chưa đủ điều kiện tính toán'}</strong>
-      <p>{value.candidate_asset_ids.length} tài sản được cân nhắc · {value.strategies.filter(item => item.can_submit).length}/{value.strategies.length} phương pháp sẵn sàng</p>
-      <p>{readinessReason[value.reason_code] ?? (value.reason_code === 'READY' ? 'Dữ liệu được kiểm tra lại khi gửi yêu cầu. Kết quả phân bổ phụ thuộc phương pháp và giới hạn của danh mục.' : 'Cần kiểm tra dữ liệu và model hiện hành.')}</p>
-      <ul className="capability-list" aria-label="Trạng thái từng phương pháp">{value.strategies.map(item => <li key={item.strategy}><span className={`badge ${item.can_submit ? 'success' : ''}`}>{strategyName(item.strategy)} · {item.can_submit ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span>{!item.can_submit && <p>{readinessReason[item.reason_code] ?? item.reason_code}</p>}</li>)}</ul>
+      <strong>{value.can_submit ? 'Sẵn sàng tạo đề xuất' : 'Chưa thể tạo đề xuất'}</strong>
+      {value.candidate_asset_ids.length > 0 && <p>{value.candidate_asset_ids.length} tài sản được cân nhắc</p>}
+      <p>{readinessReason[value.reason_code] ?? (value.reason_code === 'READY' ? 'Dữ liệu được kiểm tra lại khi gửi yêu cầu.' : 'Cần kiểm tra dữ liệu và model hiện hành.')}</p>
       <details className="readiness-detail"><summary>Xem chi tiết dữ liệu và tài sản</summary>
         <p>Tài sản được cân nhắc: {value.candidate_asset_ids.join(' · ')}</p>
         {value.asset_status.length > 0 && <table className="readiness-asset-table"><caption className="sr-only">Dữ liệu từng tài sản</caption><thead><tr><th scope="col">Tài sản</th><th scope="col">Ngày dữ liệu</th><th scope="col">Độ trễ dữ liệu</th></tr></thead><tbody>{value.asset_status.map((item, index) => <tr key={String(item.asset_id ?? index)}><th scope="row">{String(item.asset_id ?? '—')}</th><td>{String(item.eligible_observation_date ?? item.observation_date ?? 'Chưa có dữ liệu')}</td><td>{item.age_days != null ? `tuổi ${String(item.age_days)} ngày / tối đa 7 ngày` : 'Chưa xác minh'}</td></tr>)}</tbody></table>}
@@ -94,11 +93,11 @@ export function EditPortfolio({ portfolio, api, onSaved, onReload }: { portfolio
     try { const latest = await api<Portfolio>(`/api/v1/portfolios/${portfolio.id}`); setName(latest.name); setCapital(latest.capital_vnd); setVersion(latest.version); setConflict(false); setError(''); onReload?.(); }
     catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
-  return <form className="panel" onSubmit={submit} aria-busy={busy}>
+  return <form className="panel plan-information-editor" onSubmit={submit} aria-busy={busy}>
     <h2>Thông tin kế hoạch</h2><p className="muted">Thay đổi tạo phiên bản danh mục mới. Mục tiêu đã lưu được giữ nguyên; đề xuất cũ cần được tính lại.</p>
     {error && <div className="error" role="alert" tabIndex={-1} ref={alert} data-testid={conflict ? 'conflict-notice' : 'edit-error'}><strong>{conflict ? 'Danh mục đã thay đổi ở nơi khác' : 'Chưa lưu được thay đổi'}</strong><p>{conflict ? 'Tải phiên bản mới trước khi sửa tiếp. Thao tác này thay nội dung biểu mẫu bằng thông tin mới nhất.' : error}</p>{conflict && <button type="button" className="quiet" onClick={reload} disabled={busy}>Tải phiên bản mới</button>}</div>}
     <div className="form-grid"><label>Tên danh mục<input data-testid="portfolio-name-input" required minLength={1} maxLength={120} value={name} onChange={e => setName(e.target.value)} disabled={busy}/></label><label>Vốn kế hoạch (VND)<input data-testid="portfolio-capital-input" type="number" required min="1" max="10000000000000000000" step="1" value={capital} onChange={e => setCapital(e.target.value)} disabled={busy}/></label></div>
-    <p className="muted small">Phiên bản {version} · Hồ sơ rủi ro và policy giữ nguyên.</p><TaskActions hint="Thay đổi kế hoạch sẽ tạo một phiên bản danh mục mới."><button data-testid="edit-portfolio-submit" disabled={busy || conflict || !name.trim()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi'}</button><a className="button quiet" href={workspaceHash({ view: 'overview', portfolioId: portfolio.id })}>Hủy chỉnh sửa</a></TaskActions>
+    <p className="muted small">Phiên bản {version} · Hồ sơ rủi ro và policy giữ nguyên.</p><TaskActions hint="Chỉ lưu tên và vốn kế hoạch; lựa chọn tài sản được lưu riêng. Thay đổi tạo phiên bản danh mục mới."><button data-testid="edit-portfolio-submit" disabled={busy || conflict || !name.trim()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi'}</button><a className="button quiet" href={workspaceHash({ view: 'overview', portfolioId: portfolio.id })}>Hủy chỉnh sửa</a></TaskActions>
   </form>;
 }
 

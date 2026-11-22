@@ -19,6 +19,9 @@ test.beforeAll(() => {
   const url = new URL(origin);
   if (process.env.E2E_DISPOSABLE_STACK !== '1' || !['localhost', '127.0.0.1'].includes(url.hostname) || url.port === '3000') throw new Error('Use the disposable localhost stack on port3100; port3000 is reserved');
 });
+test.afterEach(async ({ browser }) => {
+  for (const context of browser.contexts()) await context.close();
+});
 function phase(info: TestInfo, value: string) { info.annotations.push({ type: 'safe-phase', description: value }); console.log(`BROWSER_PHASE: ${value}`); }
 async function login(browser: Browser, username: string) {
   const accounts = JSON.parse(await readFile(resolve(generated, 'accounts.json'), 'utf8'));
@@ -40,8 +43,8 @@ async function create(page: Page, ids: string[]) {
   await page.getByLabel(/^Tên danh mục/).fill(`User selection ${Date.now()}`);
   await page.getByLabel(/^Vốn kế hoạch \(VND\)/).fill('100000000');
   await page.getByLabel('Thời gian đầu tư (tháng)').fill('36');
-  for (const asset of ids) await page.locator(`.risk-wizard input[type="checkbox"][value="${asset}"]`).check();
-  if (!ids.includes('VFF')) await expect(page.locator('.risk-wizard input[type="checkbox"][value="VFF"]')).not.toBeChecked();
+  for (const asset of ids) await page.getByTestId('available-assets').getByRole('button', { name: `Thêm ${asset} vào rổ tài sản`, exact: true }).click();
+  if (!ids.includes('VFF')) await expect(page.getByTestId('selected-assets').locator('[data-asset-id="VFF"]')).toHaveCount(0);
   await expect(page.getByText('Hệ thống có thể phân bổ 0% vào tài sản đã chọn.', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
   await page.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
@@ -97,6 +100,64 @@ async function optionalReviewPublication(browser: Browser, snapshotOverride?: st
   await expect.poll(async () => (await get(operator, `/api/v1/market/publications/${publication.result.job_id}`)).status, { timeout: 90_000 }).toBe('SUCCEEDED');
   return { model_id: modelId, model: await get(reviewer, `/api/v1/ml/models/${modelId}`), publication: await get(operator, `/api/v1/market/publications/${publication.result.job_id}`) };
 }
+
+test('Asset basket moves individual and filtered bulk choices without creating a portfolio', async ({ browser }) => {
+  const page = await login(browser, 'alice');
+  await page.goto('/#create');
+  const available = page.getByTestId('available-assets'), basket = page.getByTestId('selected-assets');
+  await expect(available.locator('[data-asset-id]')).toHaveCount(32);
+  await available.getByRole('button', { name: 'Thêm FPT vào rổ tài sản', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(available.locator('[data-asset-id="FPT"]')).toHaveCount(0);
+  await expect(basket.locator('[data-asset-id="FPT"]')).toHaveCount(1);
+  await expect(available.getByRole('button', { name: 'Thêm GAS vào rổ tài sản', exact: true })).toBeFocused();
+  await page.getByRole('searchbox', { name: 'Tìm tài sản để thêm', exact: true }).fill('VFF');
+  await available.getByRole('button', { name: 'Thêm tất cả kết quả', exact: true }).click();
+  await expect(basket.locator('[data-asset-id]')).toHaveCount(2);
+  await basket.getByRole('button', { name: 'Bỏ FPT khỏi rổ tài sản', exact: true }).click();
+  await expect(basket.locator('[data-asset-id]')).toHaveCount(1);
+  await basket.getByRole('button', { name: 'Bỏ tất cả', exact: true }).click();
+  await expect(basket.getByText('Rổ tài sản đang trống', { exact: true })).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Tìm tài sản để thêm', exact: true }).fill('');
+  await expect(available.locator('[data-asset-id]')).toHaveCount(32);
+  await expect(page.getByRole('button', { name: 'Tiếp tục', exact: true })).toBeDisabled();
+  await page.getByRole('combobox', { name: 'Loại tài sản', exact: true }).selectOption('gold');
+  await expect(available.locator('[data-asset-id]')).toHaveCount(1);
+  await expect(available.locator('[data-asset-id="GOLD"]')).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Loại tài sản', exact: true }).selectOption('');
+  const search = page.getByRole('searchbox', { name: 'Tìm tài sản để thêm', exact: true });
+  await search.fill('chuyển đổi số');
+  await expect(available.locator('[data-asset-id]')).toHaveCount(1);
+  await expect(available.locator('[data-asset-id="FPT"]')).toHaveCount(1);
+  await search.fill('asset-does-not-exist');
+  await expect(available.getByText('Không có tài sản khớp bộ lọc.', { exact: true })).toBeVisible();
+  await search.fill('');
+  const captures = resolve('../../output/playwright/asset-transfer-v26-real');
+  await mkdir(captures, { recursive: true });
+  await available.getByRole('button', { name: 'Thêm FPT vào rổ tài sản', exact: true }).click();
+  await available.getByRole('region', { name: 'Danh sách tài sản hỗ trợ', exact: true }).evaluate(element => { element.scrollTop = 0; });
+  for (const [name, width] of [['desktop', 1440], ['mobile', 375]] as const) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: resolve(captures, `${name}.png`), fullPage: true });
+  }
+  await page.close();
+});
+
+test('User selection basket preserves newer search focus after clearing selections', async ({ browser }, info) => {
+  phase(info, 'asset-basket-focus');
+  const page = await login(browser, 'alice');
+  await page.goto('/#create');
+  await page.getByTestId('available-assets').getByRole('button', { name: 'Thêm FPT vào rổ tài sản', exact: true }).click();
+  await page.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('[data-testid="selected-assets"] .asset-transfer-header button')!.click();
+    document.querySelector<HTMLInputElement>('input[type="search"]')!.focus();
+  });
+  await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => done())));
+  await expect(page.getByRole('searchbox', { name: 'Tìm tài sản để thêm', exact: true })).toBeFocused();
+  await expect(page.getByTestId('selected-assets').locator('[data-asset-id]')).toHaveCount(0);
+  await page.close();
+});
 
 test('User selection catalog and drafts preserve policy while stale VFF blocks submission', async ({ browser }, info) => {
   test.skip(verifyOnly, 'Persistence mode'); test.setTimeout(300_000); phase(info, 'user-selection-drafts');
@@ -183,6 +244,91 @@ test('User selection explicit BL_ML succeeds only with actual eligible data', as
   await save(saved);
   if (requirePositive) expect(succeeded).toBe(saved.cases.length);
   test.skip(!succeeded, 'Actual selected data/model blocked every positive case; private receipt records the reasons');
+});
+
+test('User selection basket saves all 32 assets, edits, reloads and accepts a real MVO target', async ({ browser }, info) => {
+  test.skip(verifyOnly, 'Persistence mode'); test.setTimeout(300_000); phase(info, 'asset-basket-save-edit-accept');
+  const page = await login(browser, 'alice');
+  const catalog = await get(page, '/api/v1/assets/catalog');
+  const ids: string[] = catalog.assets.map((asset: Value) => asset.asset_id);
+  expect(ids).toHaveLength(32);
+  expect(catalog.assets.every((asset: Value) => asset.description === null && asset.display_name === asset.asset_id)).toBe(true);
+  const metadata = await get(page, '/api/v1/market/assets');
+  const supportedMetadata = metadata.filter((asset: Value) => ids.includes(asset.asset_id));
+  expect(supportedMetadata).toHaveLength(32);
+  expect(supportedMetadata.every((asset: Value) => asset.description && asset.metadata_source)).toBe(true);
+  expect(metadata.find((asset: Value) => asset.asset_id === 'VFF')).toMatchObject({ metadata_source: 'fmarket:vff:21', metadata_source_symbol: 'VFF' });
+  expect(metadata.find((asset: Value) => asset.asset_id === 'GOLD')).toMatchObject({ metadata_source: 'giavang:sjc-sell-hcm', metadata_source_symbol: 'GOLD' });
+  await page.goto('/#create');
+  await expect(page.getByTestId('available-assets').getByText(metadata.find((asset: Value) => asset.asset_id === 'FPT').display_name, { exact: true })).toBeVisible();
+  await page.getByLabel(/^Tên danh mục/).fill(`Asset basket V2.6 real ${Date.now()}`);
+  const available = page.getByTestId('available-assets'), basket = page.getByTestId('selected-assets');
+  await available.getByRole('button', { name: 'Thêm tất cả', exact: true }).click();
+  await expect(basket.locator('[data-asset-id]')).toHaveCount(32);
+  await expect(available.locator('[data-asset-id]')).toHaveCount(0);
+  await basket.getByRole('button', { name: 'Bỏ tất cả', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Tiếp tục', exact: true })).toBeDisabled();
+  await page.getByRole('searchbox', { name: 'Tìm tài sản để thêm', exact: true }).fill('FPT');
+  await available.getByRole('button', { name: 'Thêm tất cả kết quả', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Tìm tài sản để thêm', exact: true }).fill('');
+  await available.getByRole('button', { name: 'Thêm tất cả', exact: true }).click();
+  await expect(basket.locator('[data-asset-id]')).toHaveCount(32);
+  await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
+  for (const name of ['Vừa — chấp nhận dao động', 'Thấp — có nguồn dự phòng riêng', 'Đã có kinh nghiệm']) await page.getByRole('radio', { name, exact: true }).check();
+  await page.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
+  const created = await postUI(page, '/api/v1/onboarding/portfolios', () => page.getByTestId('create-portfolio-submit').click(), 201);
+  expect(created.body.asset_ids).toEqual(ids);
+  expect(created.body).not.toHaveProperty('universe_id');
+  const base = `/api/v1/portfolios/${created.result.id}`;
+  expect((await get(page, base)).asset_selection.candidate_asset_ids).toEqual(ids);
+
+  await page.goto(`/#edit?portfolio=${created.result.id}`);
+  const editor = page.locator('section.panel').filter({ has: page.getByRole('heading', { name: 'Lựa chọn tài sản của danh mục', exact: true }) });
+  await expect(editor.getByTestId('selected-assets').locator('[data-asset-id]')).toHaveCount(32);
+  await editor.getByRole('button', { name: 'Bỏ ACB khỏi rổ tài sản', exact: true }).click();
+  const edited = await postUI(page, base + '/asset-selections', () => editor.getByRole('button', { name: 'Lưu lựa chọn tài sản', exact: true }).click(), 201);
+  expect(edited.headers['if-match']).toBe('"1"');
+  const remaining = ids.filter(asset => asset !== 'ACB');
+  expect(edited.body.candidate_asset_ids).toEqual(remaining);
+  await page.reload();
+  await expect(editor.getByTestId('selected-assets').locator('[data-asset-id]')).toHaveCount(31);
+  await editor.getByRole('button', { name: 'Thêm ACB vào rổ tài sản', exact: true }).click();
+  const restored = await postUI(page, base + '/asset-selections', () => editor.getByRole('button', { name: 'Lưu lựa chọn tài sản', exact: true }).click(), 201);
+  expect(restored.headers['if-match']).toBe('"2"');
+  expect(restored.body.candidate_asset_ids).toEqual(ids);
+  expect(await get(page, base + '/asset-selections')).toHaveLength(3);
+
+  const readiness = await get(page, base + '/readiness');
+  expect(readiness.strategies.find((item: Value) => item.strategy === 'MVO')?.can_submit).toBe(true);
+  await page.goto(`/#proposal?portfolio=${created.result.id}`);
+  await page.getByTestId('strategy-MVO').check();
+  await page.getByTestId('propose-portfolio').click();
+  const submitted = await postUI(page, base + '/recommendations', () => page.getByTestId('confirm-proposal').click(), 202);
+  expect(submitted.headers['if-match']).toBe('"3"');
+  const job = await succeededJob(page, submitted.result.job_id);
+  const proposal = await get(page, `/api/v1/recommendations/${job.recommendation_id}`);
+  expect(proposal.asset_ids).toEqual(ids);
+  expect(proposal.selection_context.revision_id).toBe(restored.result.revision_id);
+  expect(proposal.weights.map(Number).reduce((a: number, b: number) => a + b, 0)).toBeCloseTo(1, 7);
+  const table = page.locator('.allocation-view').first().locator('table');
+  await expect(table.locator('tbody tr')).toHaveCount(proposal.weights.filter((weight: string | number) => Number(weight) !== 0).length);
+  await table.getByRole('button', { name: 'Tài sản: sắp xếp tăng dần', exact: true }).click();
+  const displayed = await table.locator('tbody th').allTextContents();
+  expect(displayed).toEqual([...displayed].sort((a, b) => a.localeCompare(b, 'vi')));
+  await expect(page.getByTestId('accept-proposal')).toBeEnabled();
+  const accepted = await postUI(page, `/api/v1/recommendations/${proposal.id}/accept`, () => page.getByTestId('accept-proposal').click(), 200);
+  expect(accepted.headers['if-match']).toBe('"3"');
+  const dashboard = await get(page, base + '/dashboard');
+  expect(dashboard.accepted_target.id).toBe(accepted.result.id);
+  expect(dashboard.accepted_target.recommendation_id).toBe(proposal.id);
+  await page.reload();
+  await expect(page.getByTestId('accept-proposal')).toBeDisabled();
+  expect((await get(page, base + '/dashboard')).accepted_target).toEqual(dashboard.accepted_target);
+  const bob = await login(browser, 'bob');
+  expect((await bob.request.get(base)).status()).toBe(404);
+  expect((await bob.request.get(`/api/v1/recommendations/${proposal.id}`)).status()).toBe(404);
+  await writeFile(resolve(directory, 'browser-ui-v26-receipt.json'), JSON.stringify({ checked_at: new Date().toISOString(), origin, portfolio_id: created.result.id, candidate_asset_ids: ids, edited_candidate_asset_ids: remaining, restored_revision: restored.result, metadata: supportedMetadata, job, proposal, target: dashboard.accepted_target, owner_isolation: true }, null, 2) + '\n', { mode: 0o600 });
+  await bob.close(); await page.close();
 });
 
 async function mutate(page: Page, path: string, body: Value, key: string, version: number, status: number) {
@@ -331,13 +477,38 @@ test('User selection reopens identical old and new proposals after restart', asy
     expect(await get(reviewer, `/api/v1/ml/models/${entry.model.model_id}`)).toEqual(entry.model);
   }
   const proposals = [saved.legacy, ...[...saved.cases, ...(saved.additional_proposals ?? [])].filter((entry: Value) => entry.proposal).map((entry: Value) => ({ portfolio_id: entry.portfolio.id, proposal: entry.proposal, job_id: entry.job.job_id }))];
+  const basket = JSON.parse(await readFile(resolve(directory, 'browser-ui-v26-receipt.json'), 'utf8'));
+  const metadata = await get(page, '/api/v1/market/assets');
+  expect(metadata.filter((asset: Value) => basket.candidate_asset_ids.includes(asset.asset_id))).toEqual(basket.metadata);
+  const basketPortfolio = await get(page, `/api/v1/portfolios/${basket.portfolio_id}`);
+  expect(basketPortfolio.asset_selection).toEqual(basket.restored_revision);
+  expect(await get(page, `/api/v1/portfolios/${basket.portfolio_id}/asset-selections`)).toHaveLength(3);
+  expect((await get(page, `/api/v1/portfolios/${basket.portfolio_id}/dashboard`)).accepted_target).toEqual(basket.target);
+  proposals.push({ portfolio_id: basket.portfolio_id, proposal: basket.proposal, job_id: basket.job.job_id });
   for (const entry of proposals) {
     const actual = await get(page, `/api/v1/recommendations/${entry.proposal.id}`); expect(actual).toEqual(entry.proposal);
     await page.goto(`/#proposal?portfolio=${entry.portfolio_id}&proposal=${entry.proposal.id}`);
     await expect(page.locator('.allocation-tags').getByText(entry.proposal.strategy === 'BL_ML' ? 'BL + ML' : entry.proposal.strategy, { exact: true })).toBeVisible();
-    for (const asset of entry.proposal.asset_ids) await expect(page.locator('.allocation-view').first().locator('tbody th').filter({ hasText: asset })).toBeVisible();
+    const rows = page.locator('.allocation-view').first().locator('tbody');
+    await expect(rows.locator('tr')).toHaveCount(entry.proposal.weights.filter((weight: string | number) => Number(weight) !== 0).length);
+    for (const [index, asset] of entry.proposal.asset_ids.entries()) {
+      const row = rows.getByRole('rowheader', { name: asset, exact: true });
+      if (Number(entry.proposal.weights[index]) === 0) await expect(row).toHaveCount(0);
+      else await expect(row).toBeVisible();
+    }
+    if (entry.proposal.id === basket.proposal.id) {
+      const allocation = entry.proposal.asset_ids.map((asset: string, index: number) => ({ asset, weight: Number(entry.proposal.weights[index]), capital: Number(entry.proposal.capital_vnd) * Number(entry.proposal.weights[index]) })).filter((row: Value) => row.weight !== 0);
+      for (const [key, label] of [['asset', 'Tài sản'], ['weight', 'Tỷ trọng mục tiêu'], ['capital', 'Vốn mục tiêu (VND)']] as const) {
+        for (const direction of ['tăng', 'giảm'] as const) {
+          await page.locator('.allocation-view').first().getByRole('button', { name: `${label}: sắp xếp ${direction} dần`, exact: true }).click();
+          const expected = [...allocation].sort((a, b) => (direction === 'tăng' ? 1 : -1) * (key === 'asset' ? a.asset.localeCompare(b.asset, 'vi') : a[key] - b[key]));
+          await expect(rows.getByRole('rowheader')).toHaveText(expected.map(row => row.asset));
+        }
+      }
+    }
     const current = await get(page, `/api/v1/portfolios/${entry.portfolio_id}`);
-    if (Date.parse(entry.proposal.valid_until) <= Date.now() || entry.proposal.portfolio_version !== current.version) { await expect(page.getByTestId('accept-proposal')).toBeDisabled(); await expect(page.getByTestId('stale-proposal-notice')).toBeVisible(); }
+    if (entry.proposal.id === basket.proposal.id) await expect(page.getByTestId('accept-proposal')).toBeDisabled();
+    else if (Date.parse(entry.proposal.valid_until) <= Date.now() || entry.proposal.portfolio_version !== current.version) { await expect(page.getByTestId('accept-proposal')).toBeDisabled(); await expect(page.getByTestId('stale-proposal-notice')).toBeVisible(); }
     else await expect(page.getByTestId('accept-proposal')).toBeEnabled();
     const job = await get(page, `/api/v1/jobs/portfolio/${entry.job_id}`); expect(job.status).toBe('SUCCEEDED'); expect(job.recommendation_id).toBe(entry.proposal.id);
   }

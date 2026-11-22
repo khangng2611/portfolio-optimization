@@ -38,11 +38,11 @@ it('never offers an enabled accept for a stale proposal', () => {
   expect(html).toContain('Cần tính lại');
 });
 it('starts with input review, not a mutation confirmation or a preaccepted target', () => {
-  const html = renderToStaticMarkup(<ProposalRequest portfolio={portfolio} readiness={null} strategy="MVO" fallback={false} busy={false} onStrategy={() => {}} onFallback={() => {}} onSubmit={() => {}}/>);
+  const html = renderToStaticMarkup(<ProposalRequest portfolio={portfolio} readiness={null} busy={false} onSubmit={() => {}}/>);
   expect(html).toContain('Xem lại yêu cầu');
   expect(html).not.toContain('data-testid="confirm-proposal"');
-  expect(html).toContain('EW');
-  expect(html).toContain('BL + ML');
+  expect(html).not.toContain('type="radio"');
+  expect(html).not.toContain('type="checkbox"');
 });
 it('prioritizes the accepted allocation over the number of proposals', () => {
   const html = renderToStaticMarkup(<PortfolioOverview portfolio={portfolio} dashboard={{ portfolio, accepted_target: { id: 't', recommendation_id: 'a', accepted_at: '2026-11-05T00:00:00Z', portfolio_version: 1, allocation: a }, proposal_count: 9281, target_matches_portfolio: true }}/>);

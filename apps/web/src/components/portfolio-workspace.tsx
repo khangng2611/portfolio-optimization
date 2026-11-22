@@ -52,19 +52,23 @@ export function PortfolioOverview({ portfolio, dashboard }: { portfolio: Portfol
 }
 
 export function ProposalRequest({ portfolio, readiness, busy, onSubmit }: {
-  portfolio: Portfolio; readiness: Readiness | null; busy: boolean; onSubmit: () => void;
+  portfolio: Portfolio; readiness: Readiness | null; busy: boolean; onSubmit: (strategy: 'EW' | 'MVO' | 'HYBRID') => void;
 }) {
   const [reviewed, setReviewed] = useState<string | null>(null);
-  const fingerprint = JSON.stringify([portfolio.id, portfolio.version, readiness]);
+  const [demoStrategy, setDemoStrategy] = useState<'EW' | 'MVO'>('EW');
+  const demo = portfolio.universe_id === 'DEMO' && readiness && !isSelectionReadiness(readiness) && readiness.demo;
+  const strategy = demo ? demoStrategy : 'HYBRID';
+  const fingerprint = JSON.stringify([portfolio.id, portfolio.version, readiness, strategy]);
   const reviewing = reviewed === fingerprint;
-  const allowed = readinessAllows(readiness, 'HYBRID', false);
+  const allowed = readinessAllows(readiness, strategy, false);
   const custom = isSelectionReadiness(readiness) ? readiness : null;
   return <section className="proposal-request" aria-label="Tạo đề xuất phân bổ">
     <dl className="plan-context"><div><dt>Danh mục</dt><dd>{portfolio.name}</dd></div><div><dt>Vốn kế hoạch</dt><dd>{money(portfolio.capital_vnd)}</dd></div><div><dt>Hồ sơ</dt><dd>{profileName(portfolio.risk_profile?.profile)}</dd></div></dl>
     {reviewing ? <section className="request-review"><h2>Xem lại yêu cầu</h2>
-      <dl className="review-list"><div><dt>Tài sản được cân nhắc</dt><dd>{custom?.candidate_asset_ids.join(' · ')}</dd></div><div><dt>Ngày dữ liệu</dt><dd>{custom?.decision_session ?? 'Chưa xác định'}</dd></div><div><dt>Tỷ trọng tối đa mỗi mã</dt><dd>{percentage(custom?.effective_constraints?.max_position_weight ?? portfolio.constraints.max_position_weight)}</dd></div></dl>
-      <TaskActions hint="Bạn có thể xem tỷ trọng trước khi lưu làm mục tiêu."><button data-testid="confirm-proposal" disabled={busy || !allowed} onClick={() => { if (allowed && !busy) { setReviewed(null); onSubmit(); } }}>Xác nhận tạo đề xuất</button><button className="quiet" disabled={busy} onClick={() => setReviewed(null)}>Quay lại</button></TaskActions>
+      <dl className="review-list"><div><dt>Tài sản được cân nhắc</dt><dd>{demo ? readiness.asset_ids.join(' · ') : custom?.candidate_asset_ids.join(' · ')}</dd></div><div><dt>Ngày dữ liệu</dt><dd>{(demo ? readiness.as_of_date : custom?.decision_session) ?? 'Chưa xác định'}</dd></div><div><dt>Tỷ trọng tối đa mỗi mã</dt><dd>{percentage(custom?.effective_constraints?.max_position_weight ?? portfolio.constraints.max_position_weight)}</dd></div></dl>
+      <TaskActions hint="Bạn có thể xem tỷ trọng trước khi lưu làm mục tiêu."><button data-testid="confirm-proposal" disabled={busy || !allowed} onClick={() => { if (allowed && !busy) { setReviewed(null); onSubmit(strategy); } }}>Xác nhận tạo đề xuất</button><button className="quiet" disabled={busy} onClick={() => setReviewed(null)}>Quay lại</button></TaskActions>
     </section> : <>
+      {demo && <fieldset><legend>Phương pháp DEMO</legend>{(['EW', 'MVO'] as const).map(method => <label className="method-choice-title" key={method}><input type="radio" name="demo-strategy" data-testid={`strategy-${method}`} checked={strategy === method} disabled={busy || !readinessAllows(readiness, method, false)} onChange={() => setDemoStrategy(method)}/>{method}</label>)}</fieldset>}
       <p>Hệ thống tính tỷ trọng từ rổ tài sản, hồ sơ rủi ro và dữ liệu thị trường.</p>
       <TaskActions><button data-testid="propose-portfolio" disabled={busy || !allowed} onClick={() => setReviewed(fingerprint)}>Xem lại yêu cầu</button><a className="button quiet" href={portfolioLink(portfolio.id, 'overview')}>Về tổng quan</a></TaskActions>
     </>}

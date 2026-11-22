@@ -142,10 +142,9 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
     catch (err) { setError((err as Error).message); return false; } finally { setBusy(false); }
   }
   const currentReadiness = readiness && !isSelectionReadiness(readiness) && readiness.valid_until && Date.parse(readiness.valid_until) <= clock ? { ...readiness, status: 'EXPIRED' } : readiness;
-  const canPropose = readinessAllows(currentReadiness, 'HYBRID', false);
-  async function optimize() {
-    if (!selected || !canPropose) return; const epoch = selection.current; setBusy(true); setError('');
-    try { const result = await api<Job>(`/api/v1/portfolios/${selected.id}/recommendations`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `"${selected.version}"` }, body: JSON.stringify({ mode: 'system' }) }); if (epoch === selection.current) setJob({ ...result, status: 'QUEUED', portfolio_id: selected.id }); }
+  async function optimize(strategy: 'EW' | 'MVO' | 'HYBRID') {
+    if (!selected || !readinessAllows(currentReadiness, strategy, false)) return; const epoch = selection.current; setBusy(true); setError('');
+    try { const result = await api<Job>(`/api/v1/portfolios/${selected.id}/recommendations`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `"${selected.version}"` }, body: JSON.stringify(strategy === 'HYBRID' ? { mode: 'system' } : { strategy }) }); if (epoch === selection.current) setJob({ ...result, status: 'QUEUED', portfolio_id: selected.id }); }
     catch (err) { if (epoch === selection.current) { setError((err as Error).message); setReadiness(null); setReadinessFailed(true); } } finally { setBusy(false); }
   }
   async function acceptTarget() {

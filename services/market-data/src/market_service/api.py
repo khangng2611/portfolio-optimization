@@ -37,6 +37,7 @@ from .models import (
 from .registry import bootstrap, metadata, dataset_json
 from .quality import terminal_quality
 from .snapshots import build_snapshot, observation_json, snapshot_json
+from .selected_snapshots import SelectedSnapshotRequest, build_selected_snapshot
 
 HUMAN_ROLES = {
     "investor",
@@ -508,7 +509,14 @@ def create_app(*, sessions, verifier, provider):
     def assets(identity=Depends(principal)):
         with sessions() as session:
             return [
-                {"asset_id": row.id, "kind": row.kind, "unit": row.unit}
+                {
+                    "asset_id": row.id, "kind": row.kind, "unit": row.unit,
+                    "display_name": row.display_name or row.id,
+                    "description": row.description,
+                    "metadata_source": row.metadata_source,
+                    "metadata_source_symbol": row.metadata_source_symbol,
+                    "metadata_fetched_at": row.metadata_fetched_at,
+                }
                 for row in session.scalars(select(Asset).order_by(Asset.id).limit(1000))
             ]
 
@@ -548,6 +556,15 @@ def create_app(*, sessions, verifier, provider):
                 value = build_snapshot(session, body)
             except ValueError as exc:
                 raise HTTPException(409, str(exc)) from None
+            return snapshot_json(value)
+
+    @app.post("/api/v1/market/selected-snapshots", status_code=201)
+    def selected_snapshot(body: SelectedSnapshotRequest, identity=Depends(principal)):
+        with sessions.begin() as session:
+            try:
+                value = build_selected_snapshot(session, as_of=body.as_of_date, directory=provider.directory)
+            except (ValueError, OSError, KeyError, TypeError):
+                raise HTTPException(409, "Selected snapshot source inputs unavailable") from None
             return snapshot_json(value)
 
     @app.get("/api/v1/market/snapshots/{snapshot_id}")

@@ -1,5 +1,6 @@
 """Read-only prepared input adapter; a future Market/ML resolver can replace it."""
 
+import copy
 import hashlib
 import json
 import re
@@ -9,13 +10,22 @@ from uuid import UUID
 
 from portfolio_contracts import ModelUnavailable, ReadyInput, utcnow
 from portfolio_core import validate_numerical_inputs
-from .ml import ArtifactRef, ModelManifest, infer, read_artifact
+from .ml import ArtifactRef, infer, parse_manifest, read_artifact
+from .full import (
+    FullDataUnavailable,
+    FullModelPending,
+    FullSelectionMismatch,
+    check_full_availability,
+    TZ,
+)
 
 
 class ArtifactCatalog:
     def __init__(self, directory, *, allow_demo=False):
         self.directory = Path(directory).resolve()
         self.allow_demo = allow_demo
+        from .selection_catalog import SelectionCatalog
+        self.selection_catalog = SelectionCatalog(self.directory)
 
     def _entries(
         self, *, universe_id=None, bundle_id=None, skip_universes=None, entries=None
@@ -76,6 +86,8 @@ class ArtifactCatalog:
                 checksum = hashlib.sha256(data).hexdigest()
                 if checksum != entry["sha256"]:
                     raise ValueError("Artifact checksum mismatch")
+                if value.get('schema_version') == 2 and value.get('universe_id') == 'VN_USER_SELECTION':
+                    continue
                 if value["schema_version"] != 1 or (
                     value["demo"] and not self.allow_demo
                 ):
@@ -96,10 +108,14 @@ class ArtifactCatalog:
             raise ValueError("Prepared input catalog unavailable") from exc
 
     def _check(self, value, ready, strategy):
+        if (ready.provenance or {}).get("phase1_full"):
+            check_full_availability(ready.provenance["phase1_full"])
         if ready.valid_until <= utcnow():
             raise ValueError("Prepared input expired")
         if strategy not in value["strategies"]:
             if strategy == "BL_ML":
+                if (ready.provenance or {}).get("phase1_full"):
+                    raise FullModelPending("Full fit epoch requires an approved model")
                 raise ModelUnavailable("No compatible model strategy")
             raise ValueError("Strategy has no compatible prepared inputs")
         if strategy == "BL_ML" and value.get("ml_inference"):
@@ -125,11 +141,9 @@ class ArtifactCatalog:
                     raise ValueError(
                         "Pinned input no longer matches immutable artifact"
                     )
-                self._check(value, ready, strategy)
-                if strategy == "BL_ML" and value.get("ml_inference"):
-                    numerical, provenance = infer(
-                        self.directory, value, allow_demo=self.allow_demo
-                    )
+                inferred = self._check(value, ready, strategy)
+                if inferred is not None:
+                    numerical, provenance = inferred
                     return numerical | {"inference_provenance": provenance}
                 return value["numerical"]
         raise ValueError("Pinned artifact unavailable")
@@ -143,6 +157,11 @@ class ArtifactCatalog:
             seen.add(identity)
             if ready.valid_until <= utcnow():
                 continue
+            if (ready.provenance or {}).get("phase1_full"):
+                try:
+                    check_full_availability(ready.provenance["phase1_full"])
+                except (ValueError, KeyError, TypeError):
+                    continue
             values.append(
                 {
                     "universe_id": identity,
@@ -165,7 +184,13 @@ class ArtifactCatalog:
         status = {"READY": "READY", "INPUT_EXPIRED": "EXPIRED"}.get(
             reason, "UNAVAILABLE"
         )
-        provenance = ready.provenance or {} if ready is not None else {}
+        provenance = copy.deepcopy(ready.provenance or {}) if ready is not None else {}
+        if provenance.get("phase1_full"):
+            for item in provenance["phase1_full"].get("availability", {}).values():
+                item["age_days"] = (
+                    checked_at.astimezone(TZ).date()
+                    - date.fromisoformat(item["observation_date"])
+                ).days
         origin = provenance.get("data_origin", "unverified")
         if ready is not None and ready.demo:
             origin = "synthetic"
@@ -183,6 +208,7 @@ class ArtifactCatalog:
             "valid_until": ready.valid_until.isoformat() if ready is not None else None,
             "demo": ready.demo if ready is not None else False,
             "data_origin": origin,
+            "provenance": provenance or None,
             "status": status,
             "reason_code": reason,
             "strategies": [
@@ -190,7 +216,10 @@ class ArtifactCatalog:
                 for strategy in ("EW", "MVO", "BL_ML")
             ],
             "next_action": {"READY": "NONE", "INPUT_EXPIRED": "REFRESH_DATA"}.get(
-                reason, "CONTACT_OPERATOR"
+                reason,
+                "REFRESH_DATA"
+                if reason in {"VFF_STALE", "GOLD_STALE"}
+                else "CONTACT_OPERATOR",
             ),
             "checked_at": checked_at.isoformat(),
         }
@@ -207,9 +236,7 @@ class ArtifactCatalog:
             reference = ArtifactRef.model_validate(value["ml_inference"]["manifest"])
             if reference.sha256 != ready.model_bundle_id:
                 return empty
-            manifest = ModelManifest.model_validate_json(
-                read_artifact(self.directory, reference)
-            )
+            manifest = parse_manifest(read_artifact(self.directory, reference))
             if manifest.status != "APPROVED":
                 return empty
             return {
@@ -239,6 +266,13 @@ class ArtifactCatalog:
             )
             return self._readiness_result(universe_id, checked_at, reason)
         reason = "INPUT_EXPIRED" if ready.valid_until <= checked_at else "READY"
+        if (ready.provenance or {}).get("phase1_full"):
+            try:
+                check_full_availability(ready.provenance["phase1_full"], checked_at)
+            except FullDataUnavailable as exc:
+                reason = exc.code
+            except (ValueError, KeyError, TypeError):
+                reason = "INPUT_INVALID"
         result = self._readiness_result(universe_id, checked_at, reason, ready=ready)
         result.update(self._selected_model_pins(value, ready))
         if reason != "READY":
@@ -253,6 +287,12 @@ class ArtifactCatalog:
                         inferred[0] if inferred is not None else value["numerical"]
                     )
                     validate_numerical_inputs(numerical, strategy=name)
+            except (
+                FullDataUnavailable,
+                FullModelPending,
+                FullSelectionMismatch,
+            ) as exc:
+                code = exc.code
             except ModelUnavailable:
                 code = "MODEL_UNAVAILABLE"
             except (ValueError, KeyError, TypeError, IndexError, OverflowError):

@@ -5,8 +5,6 @@ import json
 import subprocess
 import sys
 import time
-from html.parser import HTMLParser
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
@@ -35,62 +33,16 @@ def compose(*arguments):
     )
 
 
-class LoginForm(HTMLParser):
-    action = None
-
-    def handle_starttag(self, tag, attributes):
-        values = dict(attributes)
-        if tag == "form" and values.get("id") == "kc-form-login":
-            self.action = values.get("action")
-
-
 def browser_login(client, accounts):
-    response = client.get(WEB + "/auth/login")
-    require(response.status_code == 302, "BFF login redirect missing")
-    location = response.headers["location"]
-    require(
-        urlsplit(location).hostname == "localhost" and urlsplit(location).port == 8080,
-        "Unexpected identity redirect",
-    )
-    page = client.get(location)
-    parser = LoginForm()
-    parser.feed(page.text)
-    require(parser.action is not None, "Keycloak login form missing")
-    action = urlsplit(parser.action)
-    require(
-        action.hostname == "localhost"
-        and action.port == 8080
-        and action.path.startswith("/realms/portfolio/login-actions/"),
-        "Unexpected login action",
-    )
     account = next(item for item in accounts["users"] if item["username"] == "alice")
-    # Browsers consider localhost a secure context; HTTPX needs explicit local cookies.
-    cookies = "; ".join(
-        cookie.name + "=" + cookie.value
-        for cookie in client.cookies.jar
-        if cookie.domain in {"localhost", "localhost.local"}
-        and action.path.startswith(cookie.path)
-    )
     response = client.post(
-        parser.action,
-        data={"username": "alice", "password": account["password"], "credentialId": ""},
-        headers={"Cookie": cookies, "Origin": "http://localhost:8080"},
+        WEB + "/auth/login",
+        json={"username": "alice", "password": account["password"]},
+        headers={"Origin": WEB},
     )
-    require(response.status_code in {302, 303}, "Keycloak code login failed")
-    callback = response.headers["location"]
-    parsed = urlsplit(callback)
-    require(
-        parsed.hostname == "localhost"
-        and parsed.port == 3000
-        and parsed.path == "/auth/callback",
-        "Unexpected BFF callback",
-    )
-    require(client.get(callback).status_code in {302, 303}, "BFF callback failed")
+    require(response.status_code == 204, "BFF login failed")
     response = client.get(WEB + "/auth/session")
-    require(
-        response.status_code == 200 and response.json().get("authenticated"),
-        "BFF session unavailable",
-    )
+    require(response.status_code == 200 and response.json().get("authenticated"), "BFF session unavailable")
     return response.json()["csrfToken"]
 
 
@@ -193,11 +145,6 @@ def main():
     )
     args = parser.parse_args()
     accounts = json.loads((GENERATED / "accounts.json").read_text())
-    settings = dict(
-        line.split("=", 1)
-        for line in (GENERATED / ".env").read_text().splitlines()
-        if line and not line.startswith("#")
-    )
     forbidden = [account["password"] for account in accounts["users"]]
     receipt = {
         "schema_version": 1,
@@ -298,7 +245,7 @@ def main():
             if stopped:
                 compose("start", "portfolio-dispatch")
             client.post(WEB + "/auth/logout", headers=headers)
-    operator = login("data-operator", accounts, settings)
+    operator = login("data-operator")
     forbidden.append(operator)
     status, accepted = request(
         "POST",
@@ -325,7 +272,7 @@ def main():
         json.dumps(receipt, indent=2) + "\n"
     )
     print(
-        "PASS: BFF code/PKCE + async MVO + Market, durable trace propagation, idempotency and export privacy"
+        "PASS: BFF login + async MVO + Market, durable trace propagation, idempotency and export privacy"
     )
     for item in (receipt["portfolio"], receipt["market"]):
         print(item["trace_url"] + " (" + str(item["span_count"]) + " spans)")

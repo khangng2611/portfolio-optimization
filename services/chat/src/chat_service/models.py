@@ -31,9 +31,11 @@ class Conversation(Base):
     title: Mapped[str] = mapped_column(String(120))
     portfolio_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     active_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Historical receipt fields. Provider access uses developer configuration.
     llm_consent: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    consent_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -65,6 +67,7 @@ class Job(Base):
     )
     owner_key: Mapped[str] = mapped_column(String(64), index=True)
     message_id: Mapped[str] = mapped_column(ForeignKey("message.id"))
+    knowledge_checkpoint: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     request: Mapped[dict] = mapped_column(JSON)
     reauthorization_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     grant_id: Mapped[str] = mapped_column(String(36))
@@ -94,6 +97,10 @@ class ProviderInvocation(Base):
     __tablename__ = "provider_invocation"
     job_id: Mapped[str] = mapped_column(ForeignKey("chat_job.id"), primary_key=True)
     purpose: Mapped[str] = mapped_column(String(24), primary_key=True)
+    budget_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reserved_usd: Mapped[str] = mapped_column(
+        String(32), default="0", server_default="0"
+    )
     owner_key: Mapped[str] = mapped_column(String(64), index=True)
     output: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -122,4 +129,12 @@ class ToolCall(Base):
     result_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     result_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class KnowledgeEvidence(Base):
+    __tablename__ = "knowledge_evidence"
+    job_id: Mapped[str] = mapped_column(ForeignKey("chat_job.id"), primary_key=True)
+    evidence_hash: Mapped[str] = mapped_column(String(64))
+    evidence: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)

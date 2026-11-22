@@ -1,10 +1,11 @@
+import { submitLogin } from './login-form';
 import { test, expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-// Real localhost browser/PKCE/BFF/Chat/PostgreSQL/Portfolio/RabbitMQ/Quant.
+// Real localhost browser/Auth/BFF/Chat/PostgreSQL/Portfolio/RabbitMQ/Quant.
 // No HTTP routing/interception, synthetic result SQL, provider mocks or browser tokens.
 const root = resolve('../..');
 const generated = resolve(root, 'infra/local/.generated');
@@ -30,21 +31,8 @@ async function authenticate(page: Page, destination: string) {
   const account = accounts.users.find((a: Value) => a.username === 'alice');
   if (!account?.password) throw new Error('Disposable Chat investor missing');
   await page.goto(destination);
-  const authorize = page.waitForRequest(r => new URL(r.url()).pathname === '/realms/portfolio/protocol/openid-connect/auth');
-  await page.getByRole('link', { name: 'Đăng nhập qua Identity', exact: true }).click();
-  const auth = new URL((await authorize).url());
-  expect(auth.searchParams.get('response_type')).toBe('code');
-  expect(auth.searchParams.get('client_id')).toBe('portfolio-web');
-  expect(auth.searchParams.get('code_challenge_method')).toBe('S256');
-  expect(Boolean(auth.searchParams.get('code_challenge'))).toBe(true);
-  const form = await page.locator('#username').waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
-  if (form) {
-    await page.locator('#username').fill(account.username);
-    await page.locator('#password').fill(account.password);
-    await page.locator('#kc-login').click();
-  }
-  await page.waitForURL(url => url.origin === origin && url.pathname === '/');
-  await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+  await submitLogin(page, account);
   expect((await get(page.context(), '/auth/session')).authenticated).toBe(true);
   await page.goto(destination);
 }
@@ -121,7 +109,7 @@ test('real Chat LLM dialogue clarification grounded result and explicit accept',
     expect(usage.reduce((n: number, p: Value) => n + p.output_tokens, 0)).toBe(saved.output_tokens);
     return;
   }
-  phase(info, 'chat-llm-pkce');
+  phase(info, 'chat-llm-login');
   const input = JSON.parse(await readFile(resolve(generated, 'chat-real-input-receipt.json'), 'utf8'));
   await authenticate(page, '/#chat');
   const session = await get(page.context(), '/auth/session');
@@ -132,9 +120,7 @@ test('real Chat LLM dialogue clarification grounded result and explicit accept',
   await page.getByTestId('chat-title').fill('LLM hỗ trợ làm rõ kế hoạch');
   const created = await uiPost(page, '/api/v1/conversations', () => page.getByTestId('chat-create').click(), 201);
   const cid = created.value.id, path = `/api/v1/conversations/${cid}`;
-  await expect(page.getByTestId('chat-llm-consent')).not.toBeChecked();
-  await uiPost(page, path + '/preferences', () => page.getByTestId('chat-llm-consent').click(), 200);
-  await expect(page.getByTestId('chat-llm-consent')).toBeChecked();
+  await expect(page.getByTestId('chat-llm-consent')).toHaveCount(0);
   async function natural(content: string, expectedStatus: string) {
     await page.getByTestId('chat-input').fill(content);
     const receipt = await uiPost(page, path + '/messages', () => page.getByTestId('chat-send').click(), 202);
@@ -176,22 +162,19 @@ test('real Chat LLM dialogue clarification grounded result and explicit accept',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await capture(page, 'chat-llm-grounded-mobile');
   await page.setViewportSize({ width: 1440, height: 1000 });
-  phase(info, 'chat-llm-consent-revoke');
-  await uiPost(page, path + '/preferences', () => page.getByTestId('chat-llm-consent').click(), 200);
-  await expect(page.getByTestId('chat-llm-consent')).not.toBeChecked();
-  const noConsent = await natural('Xin chào', 'SUCCEEDED');
-  expect(noConsent.message.structured.dialogue.reason).toBe('CONSENT_REQUIRED');
+  phase(info, 'chat-llm-developer-policy');
+  await expect(page.getByTestId('chat-llm-consent')).toHaveCount(0);
   await page.getByTestId('chat-open-recommendation').last().click();
   const accepted = await uiPost(page, `/api/v1/recommendations/${facts.id}/accept`, () => page.getByTestId('accept-proposal').click(), 200);
   rows = await get(page.context(), path + '/messages?limit=100&offset=0');
-  const jobs = await Promise.all([first.receipt, second.receipt, confirmed, followup.receipt, noConsent.receipt].map(intent => get(page.context(), intent.value.status_url)));
+  const jobs = await Promise.all([first.receipt, second.receipt, confirmed, followup.receipt].map(intent => get(page.context(), intent.value.status_url)));
   const usage = jobs.flatMap((job: Value) => job.provider_usage).filter((p: Value) => p?.reason === 'VERIFIED' && p.provider === 'openai');
   expect(usage.length).toBe(5);
   const saved = {
-    schema_version: 1, conversation_id: cid, portfolio_id: pid, job_id: noConsent.state.job_id,
+    schema_version: 1, conversation_id: cid, portfolio_id: pid, job_id: followup.state.job_id,
     recommendation_id: facts.id, target_id: accepted.value.id, input_hash: facts.input_hash,
     facts_hash: digest(facts), messages_hash: digest(rows), target_allocation_hash: digest(accepted.value.allocation),
-    intents: [first.receipt, second.receipt, confirmed, followup.receipt, noConsent.receipt],
+    intents: [first.receipt, second.receipt, confirmed, followup.receipt],
     provider_calls: usage.length, input_tokens: usage.reduce((n: number, p: Value) => n + p.input_tokens, 0),
     output_tokens: usage.reduce((n: number, p: Value) => n + p.output_tokens, 0),
     estimated_cost_usd: usage.reduce((n: number, p: Value) => n + p.estimated_cost_usd, 0),
@@ -201,10 +184,10 @@ test('real Chat LLM dialogue clarification grounded result and explicit accept',
   phase(info, 'chat-llm-complete');
 });
 
-test('real Chat PKCE confirmation allocation explanation accept and reconnect', async ({ page }, info) => {
+test('real Chat login confirmation allocation explanation accept and reconnect', async ({ page }, info) => {
   test.skip(persistence, 'Receipt mode reads the original Chat resources after restart');
   test.setTimeout(240_000);
-  phase(info, 'chat-pkce');
+  phase(info, 'chat-login');
   const baseline = JSON.parse(await readFile(resolve(generated, 'chat-api-receipt.json'), 'utf8'));
   await authenticate(page, '/#chat');
   const session = await get(page.context(), '/auth/session');
@@ -293,7 +276,7 @@ test('real Chat PKCE confirmation allocation explanation accept and reconnect', 
 
 test('real Chat saved conversation recommendation target and histories after restart', async ({ page }, info) => {
   test.skip(!persistence, 'Requires receipt produced before an external restart');
-  phase(info, 'chat-restart-pkce');
+  phase(info, 'chat-restart-login');
   const receipt = JSON.parse(await readFile(receiptFile, 'utf8'));
   await authenticate(page, `/#chat?conversation=${receipt.conversation_id}&job=${receipt.job_id}`);
   await verify(page, receipt);
@@ -304,7 +287,7 @@ test('real Chat saved conversation recommendation target and histories after res
 test('real Chat session expiry requires explicit reconfirmation before retry', async ({ page }, info) => {
   test.skip(persistence, 'Session recovery creates a separate disposable conversation');
   test.setTimeout(180_000);
-  phase(info, 'chat-session-pkce');
+  phase(info, 'chat-session-login');
   const baseline = JSON.parse(await readFile(resolve(generated, 'chat-browser-receipt.json'), 'utf8'));
   const pid = baseline.portfolio_id;
   await authenticate(page, `/#chat?portfolio=${pid}`);
@@ -326,7 +309,7 @@ test('real Chat session expiry requires explicit reconfirmation before retry', a
   phase(info, 'chat-session-denied-confirmation');
   const denied = await uiPost(page, path, () => page.getByTestId('chat-confirm').last().click(), 401);
   await expect(page.getByTestId('session-expired-notice')).toBeVisible();
-  phase(info, 'chat-session-fresh-pkce');
+  phase(info, 'chat-session-fresh-login');
   await authenticate(page, `/#chat?conversation=${cid}`);
   await expect(page.getByTestId('chat-retry')).toBeVisible();
   expect(await get(page.context(), path + '?limit=100&offset=0')).toEqual(history);
@@ -344,7 +327,7 @@ test('real Chat session expiry requires explicit reconfirmation before retry', a
 
 test('real Chat late refresh cannot hide a newer accepted turn', async ({ page }, info) => {
   test.skip(persistence, 'Creates one extra read-only Chat turn against real APIs');
-  phase(info, 'chat-race-pkce');
+  phase(info, 'chat-race-login');
   const saved = JSON.parse(await readFile(receiptFile, 'utf8'));
   await authenticate(page, `/#chat?conversation=${saved.conversation_id}&job=${saved.job_id}`);
   await expect(page.getByTestId('chat-result').last()).toBeVisible();
@@ -380,7 +363,7 @@ test('real Chat late refresh cannot hide a newer accepted turn', async ({ page }
 
 test('real Chat late conversation creation preserves subsequent navigation', async ({ page }, info) => {
   test.skip(persistence, 'Creates a separate empty disposable conversation');
-  phase(info, 'chat-create-race-pkce');
+  phase(info, 'chat-create-race-login');
   await authenticate(page, '/#chat');
   const existing = page.getByRole('link', { name: /Tiếp tục hội thoại/ }).first();
   await expect(existing).toBeVisible();

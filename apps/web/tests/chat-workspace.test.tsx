@@ -1,18 +1,20 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ChatConfirmation, ChatRecommendation, ChatConsent } from '../src/components/chat-workspace';
+import { ChatConfirmation, ChatRecommendation, ChatWorkspace } from '../src/components/chat-workspace';
 import type { ConfirmationCard, RecommendationCard } from '../src/lib/chat-types';
 import type { Recommendation } from '../src/lib/portfolio-types';
 
 const canonical: Recommendation = { id: 'recommendation', portfolio_id: 'portfolio', portfolio_version: 3, asset_ids: ['FPT', 'VCB'], weights: ['0.5', '0.5'], capital_vnd: '100000000', strategy: 'MVO', bundle_hash: 'original', inputs_provenance: { data_origin: 'real' } };
 const card: RecommendationCard = { type: 'recommendation', recommendation_id: canonical.id, facts: { ...canonical }, facts_hash: 'a'.repeat(64), explanation_status: 'TEMPLATE', provider: { reason: 'PROVIDER_UNAVAILABLE' }, schema_version: 'fact-plan-v1', prompt_version: 'chat-v1' };
 
-it('requires an explicit unchecked consent and explains outbound context', () => {
-  const html = renderToStaticMarkup(<ChatConsent checked={false} disabled={false} onChange={() => {}}/>);
-  expect(html).toContain('type="checkbox"');
-  expect(html).not.toContain('checked=""');
-  expect(html).toContain('OpenAI');
-  expect(html).toContain('ngữ cảnh');
+it('keeps provider configuration out of the conversation composer', () => {
+  const unavailable = async () => { throw new Error('SSR must not fetch'); };
+  const html = renderToStaticMarkup(<ChatWorkspace api={unavailable} apiPage={unavailable} route={{ view:'chat', conversationId:'test-conversation' }} navigate={() => {}} ownerKey="alice" onSessionExpired={() => {}}/>);
+  expect(html).toContain('chat-input');
+  expect(html).toContain('Tùy chọn hội thoại');
+  expect(html).not.toContain('chat-llm-consent');
+  expect(html).not.toContain('Dữ liệu gửi tới OpenAI');
+  expect(html).not.toContain('Cho phép OpenAI');
 });
 
 it('withholds stored prose and allocation until canonical API facts are available', () => {
@@ -20,6 +22,14 @@ it('withholds stored prose and allocation until canonical API facts are availabl
   expect(html).toContain('Đang đối chiếu');
   expect(html).not.toContain('99%');
   expect(html).not.toContain('chat-open-recommendation');
+});
+
+it('withholds evidence-derived saved prose after an evidence mismatch', () => {
+  const saved = { schema_version: 'recommendation-evidence-v1', recommendation_id: canonical.id, run_id: 'run', facts_hash: card.facts_hash, evidence_hash: 'b'.repeat(64), status: 'PARTIAL', quant: null, limitations: [] } as const;
+  const html = renderToStaticMarkup(<ChatRecommendation card={{ ...card, facts: {...canonical, run_id:'run'}, explanation_evidence: { ...saved, limitations: [] } }} canonical={{...canonical, run_id:'run'}} evidence={{...saved, evidence_hash:'c'.repeat(64),limitations:[]}} content="SECRET_SAVED_EVIDENCE_CLAIM"/>);
+  expect(html).toContain('chưa khớp');
+  expect(html).not.toContain('SECRET_SAVED_EVIDENCE_CLAIM');
+  expect(html).toContain('Phân bổ chính');
 });
 it('rejects a provenance mismatch before rendering a result/action', () => {
   const html = renderToStaticMarkup(<ChatRecommendation card={card} canonical={{ ...canonical, bundle_hash: 'changed' }} content="Stored claim"/>);
@@ -46,9 +56,11 @@ it('reviews pinned risk answers/constraints and disables historical confirmation
   expect(html).toMatch(/data-testid="chat-confirm" disabled=""/);
   expect(html).toContain('policy-v3');
 });
-it('distinguishes a pending consent write without claiming it is already saved', () => {
-  const html = renderToStaticMarkup(<ChatConsent compact checked={false} disabled saving onChange={() => {}}/>);
-  expect(html).toContain('Đang lưu lựa chọn');
-  expect(html).toContain('aria-busy="true"');
-  expect(html).not.toContain('checked=""');
+
+it('opens the explanation when the user asks about a previous recommendation', () => {
+  const html = renderToStaticMarkup(<ChatRecommendation card={{...card, explanation_requested:true}} canonical={canonical} content="Giải thích đúng đề xuất đang trao đổi."/>);
+  expect(html).toMatch(/class="chat-explanation"[^>]*open=""/);
+  expect(html).toContain('Giải thích đúng đề xuất đang trao đổi.');
+  const original = renderToStaticMarkup(<ChatRecommendation card={card} canonical={canonical} content="Giải thích ban đầu."/>);
+  expect(original).not.toMatch(/class="chat-explanation"[^>]*open=""/);
 });

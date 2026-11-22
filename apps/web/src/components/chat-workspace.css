@@ -48,10 +48,6 @@
 .chat-job > p { margin: 12px 0 0; }
 .chat-job > button { margin-top: 16px; }
 .chat-composer { margin-top: 20px; padding: 20px; }
-.chat-consent { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
-.chat-consent > label { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
-.chat-consent input[type="checkbox"] { width: 20px; height: 20px; min-height: 20px; min-width: 20px; flex-shrink: 0; accent-color: var(--green); }
-.chat-consent > p { margin: 4px 0 0; }
 .chat-composer-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .chat-composer label { font-size: 13px; }
 .chat-composer > label { margin-top: 16px; }
@@ -100,3 +96,41 @@
   .chat-workspace .pagination { flex-wrap: wrap; }
   .chat-starters { flex-direction: column; }
 }
+
+.chat-knowledge :is(ul, ol), .chat-knowledge-sources ol { padding-inline-start: 24px; margin-block: 12px; }
+.chat-knowledge li + li, .chat-knowledge-sources li + li { margin-top: 16px; }
+.chat-knowledge-sources blockquote { margin: 8px 0 16px; color: var(--ink); font-size: inherit; }
+.chat-knowledge-sources a { display: inline-block; padding-block: 10px; text-underline-offset: 3px; }
+
+.workspace-chat .chat-focused .chat-recommendation { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.chat-recommendation :is(.chat-result-summary, .chat-main-allocation, .chat-verified-basis, .chat-result-limits) { margin-top: 28px; }
+.chat-recommendation h3 { margin-bottom: 12px; font-size: 20px; line-height: 1.5; }
+.chat-recommendation .chat-result-summary > p { margin: 0; font-size: 14px; }
+.chat-recommendation .chat-main-allocation > .allocation-view { margin-top: 0; }
+.chat-recommendation .allocation-legend { margin-block: 20px 0; }
+.chat-recommendation .allocation-legend > li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-block: 8px; }
+.chat-recommendation :is(.chat-verified-basis, .chat-result-limits) > p { max-width: 75ch; }
+.chat-recommendation :is(.chat-explanation, .chat-original-explanation, .chat-all-weights, .chat-knowledge-sources, .chat-audit) > summary { min-height: 44px; padding-block: 12px; font-size: 14px; font-weight: 600; }
+.chat-recommendation .chat-original-explanation { border-top: 1px solid var(--line); }
+.chat-recommendation .chat-missing-sources { margin-top: 20px; }
+.chat-recommendation .chat-all-weights ul { padding-left: 20px; }
+.chat-followups { margin-top: 28px; }
+.chat-followups > p { margin-block: 8px; }
+.chat-followups > button { min-height: 48px; }
+@media (max-width: 600px) {
+  .chat-recommendation .allocation-legend-values { display: grid; gap: 4px; }
+  .chat-recommendation .allocation-legend > li { gap: 12px; }
+  .chat-followups > button { width: 100%; }
+}
+.recommendation-evidence { min-width: 0; }
+.recommendation-evidence > section { margin-block: var(--space-6, 24px); }
+.recommendation-evidence h4 { margin-block: 0 var(--space-2, 8px); }
+.recommendation-evidence h5 { font: inherit; font-weight: 600; margin-block: var(--space-4, 16px) var(--space-2, 8px); }
+.recommendation-evidence p { overflow-wrap: anywhere; }
+.recommendation-evidence dl { margin: 0; }
+.recommendation-evidence dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3, 12px); padding-block: var(--space-2, 8px); border-bottom: 1px solid var(--line); }
+.recommendation-evidence dd { margin: 0; font-variant-numeric: tabular-nums; }
+.recommendation-evidence dt { min-width: 0; }
+.explanation-view-list { list-style: none; padding: 0; }
+.explanation-view-list > li { padding-block: var(--space-3, 12px); border-bottom: 1px solid var(--line); }
+.explanation-view-list p { margin-block: var(--space-2, 8px) 0; }

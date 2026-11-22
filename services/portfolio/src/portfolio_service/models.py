@@ -3,6 +3,7 @@ from uuid import uuid4
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     JSON,
     Numeric,
@@ -32,6 +33,11 @@ class User(Base):
 
 class Portfolio(Base):
     __tablename__ = "portfolio"
+    __table_args__ = (ForeignKeyConstraint(
+        ["id", "asset_selection_revision_id"],
+        ["portfolio_asset_selection.portfolio_id", "portfolio_asset_selection.id"],
+        name="fk_portfolio_owned_asset_selection", use_alter=True,
+    ),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     owner_user_id: Mapped[str] = mapped_column(ForeignKey("app_user.id"), index=True)
     name: Mapped[str] = mapped_column(String(120))
@@ -41,7 +47,30 @@ class Portfolio(Base):
     risk_profile: Mapped[dict | None] = mapped_column(
         JSON(none_as_null=True), nullable=True
     )
+    asset_selection_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PortfolioAssetSelection(Base):
+    """Append-only candidate revisions; NULL Portfolio pointer preserves legacy."""
+    __tablename__ = "portfolio_asset_selection"
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "portfolio_version"),
+        UniqueConstraint("portfolio_id", "id"),
+        UniqueConstraint("owner_user_id", "portfolio_id", "idempotency_key"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolio.id"), index=True)
+    owner_user_id: Mapped[str] = mapped_column(ForeignKey("app_user.id"), index=True)
+    portfolio_version: Mapped[int] = mapped_column(Integer)
+    candidate_asset_ids: Mapped[list] = mapped_column(JSON)
+    candidate_hash: Mapped[str] = mapped_column(String(64))
+    selection_policy_id: Mapped[str] = mapped_column(String(64), default="user-k5-v1")
+    risk_policy_id: Mapped[str] = mapped_column(String(64), default="custom-mixed-risk-v1")
+    actor: Mapped[str] = mapped_column(String(64))
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    body_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -103,6 +132,7 @@ class Recommendation(Base):
     portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolio.id"))
     run_id: Mapped[str] = mapped_column(String(36))
     result: Mapped[dict] = mapped_column(JSON)
+    explanation_evidence: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

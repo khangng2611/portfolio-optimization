@@ -14,7 +14,7 @@ from pydantic import Field
 from sqlalchemy import select, func, text, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from portfolio_contracts import StrictModel, aware, canonical_hash, utcnow
+from portfolio_contracts import StrictModel, aware, canonical_hash, system_hybrid_managed, utcnow
 from service_auth import AuthError
 from service_observability import install_http_tracing
 from .models import Conversation, Event, Job, Message, ProviderInvocation
@@ -36,10 +36,12 @@ class NewConversation(StrictModel):
     )
     portfolio_id: UUID | None = None
     llm_consent: bool = False
+    consent_version: Literal[1, 2] = 1
 
 
 class ConversationPreferences(StrictModel):
     llm_consent: bool
+    consent_version: Literal[1, 2] = 1
 
 
 class Confirmation(StrictModel):
@@ -59,7 +61,15 @@ class NewMessage(StrictModel):
     )
     portfolio_id: UUID | None = None
     intent: (
-        Literal["allocation", "profile", "portfolio", "market", "explain", "help"]
+        Literal[
+            "allocation",
+            "profile",
+            "portfolio",
+            "market",
+            "explain",
+            "help",
+            "knowledge",
+        ]
         | None
     ) = None
     strategy: Literal["EW", "MVO", "BL_ML"] | None = None
@@ -74,6 +84,7 @@ def conversation_json(c):
         "portfolio_id": c.portfolio_id,
         "active_job_id": c.active_job_id,
         "llm_consent": c.llm_consent,
+        "consent_version": c.consent_version,
         "created_at": aware(c.created_at).isoformat(),
     }
 
@@ -200,12 +211,15 @@ def create_app(*, sessions, verifier, tools, stream_seconds=85):
 
     @app.post("/api/v1/conversations", status_code=201)
     def create(body: NewConversation, owner=Depends(principal)):
+        if body.llm_consent or body.consent_version != 1:
+            raise HTTPException(403, "PROVIDER_SETTINGS_MANAGED_BY_DEVELOPER")
         with sessions.begin() as s:
             c = Conversation(
                 owner_key=owner,
                 title=body.title.strip(),
                 portfolio_id=str(body.portfolio_id) if body.portfolio_id else None,
                 llm_consent=body.llm_consent,
+                consent_version=body.consent_version,
             )
             s.add(c)
             s.flush()
@@ -237,11 +251,9 @@ def create_app(*, sessions, verifier, tools, stream_seconds=85):
 
     @app.post("/api/v1/conversations/{cid}/preferences")
     def preferences(cid: UUID, body: ConversationPreferences, owner=Depends(principal)):
-        with sessions.begin() as s:
-            c = owned(s, cid, owner)
-            c.llm_consent = body.llm_consent
-            s.flush()
-            return conversation_json(c)
+        with sessions() as s:
+            owned(s, cid, owner)
+        raise HTTPException(403, "PROVIDER_SETTINGS_MANAGED_BY_DEVELOPER")
 
     @app.get("/api/v1/conversations/{cid}/messages")
     def messages(
@@ -300,6 +312,8 @@ def create_app(*, sessions, verifier, tools, stream_seconds=85):
                 if old.body_hash != digest:
                     raise HTTPException(409, "IDEMPOTENCY_CONFLICT")
                 return accepted(s.scalar(select(Job).where(Job.message_id == old.id)))
+            if system_hybrid_managed() and "strategy" in body.model_fields_set:
+                raise HTTPException(422, "STRATEGY_MANAGED_BY_SYSTEM")
             active = s.get(Job, c.active_job_id) if c.active_job_id else None
             if active and active.status not in TERMINAL:
                 raise HTTPException(409, "TURN_IN_PROGRESS")

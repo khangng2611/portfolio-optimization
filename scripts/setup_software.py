@@ -22,11 +22,13 @@ PACKAGES = [
     "packages/service-auth",
     "packages/service-observability",
     "packages/portfolio-core",
+    "services/auth",
     "services/portfolio",
     "services/quant-serving",
     "services/market-data",
     "services/ml-platform",
     "services/chat",
+    "services/knowledge",
 ]
 TOOLS = {"pytest": "8.4.2", "ruff": "0.13.2", "httpx": "0.28.1"}
 LOCK = ROOT / "services/quant-serving/requirements.lock"
@@ -148,7 +150,8 @@ def python_environment_ready() -> bool:
         "assert all(m.version(k)==v for k,v in expected.items()); "
         "packages=json.loads(sys.argv[2]); "
         "names=['portfolio-contracts','portfolio-service-auth','portfolio-service-observability','portfolio-core',"
-        "'portfolio-service','portfolio-quant-service','portfolio-market-service','portfolio-ml-platform','portfolio-chat-service']; "
+        "'portfolio-auth','portfolio-service','portfolio-quant-service','portfolio-market-service','portfolio-ml-platform','portfolio-chat-service','portfolio-knowledge-service']; "
+        "assert len(names)==len(packages); "
         "urls=[json.loads(m.distribution(n).read_text('direct_url.json')) for n in names]; "
         "assert all(u.get('dir_info',{}).get('editable') and "
         "pathlib.Path(urllib.parse.unquote(urllib.parse.urlparse(u['url']).path)).resolve()==pathlib.Path(p).resolve() "
@@ -270,6 +273,7 @@ def verify(live: bool, tracing: bool = False) -> None:
     if live:
         run(compose + ["config", "--quiet"], quiet=True)
         run([str(PYTHON), "infra/local/verify_boundaries.py"])
+        run([str(PYTHON), "infra/local/verify_knowledge.py"])
         run([str(PYTHON), "scripts/smoke_software.py"])
         run([str(PYTHON), "scripts/smoke_g2.py"])
         if tracing:
@@ -290,11 +294,6 @@ def main() -> None:
         "--python",
         default="python3.12",
         help="Python 3.12 executable (default: python3.12)",
-    )
-    parser.add_argument(
-        "--enable-test-client",
-        action="store_true",
-        help="Bật portfolio-test cho disposable local realm; cần cho Swagger/Postman/smoke",
     )
     parser.add_argument(
         "--refresh-demo",
@@ -324,8 +323,7 @@ def main() -> None:
     args = parser.parse_args()
     compose = compose_command(args.tracing)
     if args.mode in {"check", "verify"} and (
-        args.enable_test_client
-        or args.refresh_demo
+        args.refresh_demo
         or args.skip_install
         or args.skip_build
     ):
@@ -354,8 +352,6 @@ def main() -> None:
         return
     install(executable, args.skip_install)
     command = [executable, "infra/local/bootstrap.py"]
-    if args.enable_test_client:
-        command.append("--enable-test-client")
     if args.refresh_demo:
         command.append("--refresh-demo")
     run(command)
@@ -363,14 +359,14 @@ def main() -> None:
     if args.mode == "up":
         if not args.skip_build:
             run(compose + ["build"])
-        dependencies = ["postgres", "rabbitmq", "redis", "keycloak"]
+        dependencies = ["postgres", "knowledge-postgres", "rabbitmq", "redis"]
         if args.tracing:
             dependencies.append("jaeger")
         run(compose + ["up", "-d", "--wait", "--wait-timeout", "240"] + dependencies)
         run([str(PYTHON), "infra/local/upgrade.py"])
         run(compose + ["up", "-d", "--wait", "--wait-timeout", "240"])
         print(
-            "Stack healthy: http://localhost:3000 | Swagger: :8001/docs, :8002/docs, :8003/docs, :8004/docs, :8005/docs"
+            "Stack healthy: http://localhost:3000 | Swagger: :8001/docs, :8002/docs, :8003/docs, :8004/docs, :8005/docs, :8006/docs"
         )
     else:
         print("Đã chuẩn bị; chạy up để khởi động Docker stack.")

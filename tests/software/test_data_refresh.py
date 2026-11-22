@@ -243,6 +243,32 @@ def run(market, provider, now=None):
     return run_once(market[1], provider, market[3] / "refresh", now=now or NOW)
 
 
+def test_refresh_keeps_seven_day_freshness_across_observed_holiday(market):
+    from market_service.models import RefreshJob, Snapshot
+
+    before_holiday = SECOND - timedelta(days=10)
+    schedule = create_schedule(
+        market, initial_start_date=before_holiday.isoformat(), max_age_days=7
+    )
+    accepted = enqueue(market, schedule["id"])
+    with market[1].begin() as session:
+        session.get(RefreshJob, accepted["id"]).cutoff_date = SECOND
+
+    class HolidayCalendar(WireProvider):
+        def fetch_raw(self, symbol, start, end, *, index=False):
+            return json.dumps({"data_day": [
+                {"t": day.isoformat(), "c": 12500} for day in [before_holiday, SECOND]
+            ]}).encode()
+
+    assert run(market, HolidayCalendar())
+    with market[1]() as session:
+        job = session.get(RefreshJob, accepted["id"])
+        assert job.status == "SUCCEEDED", job.error
+        snapshot = session.get(Snapshot, job.snapshot_id)
+        assert snapshot.manifest["max_age_days"] == 7
+        assert snapshot.manifest["observation_count"] == 4
+
+
 def test_source_batch_passes_quality_before_snapshot_and_keeps_full_adjusted_history(
     market,
 ):

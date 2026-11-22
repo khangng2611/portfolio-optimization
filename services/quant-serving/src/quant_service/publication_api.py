@@ -296,11 +296,17 @@ class CredentialModelResolver:
             if (
                 value["model_id"] != identity
                 or path.is_absolute()
-                or len(path.parts) != 3
+                or len(path.parts) not in (3, 4)
                 or path.parts[0] != "ml-models"
                 or ".." in path.parts
                 or path.suffix != ".json"
             ):
                 raise ModelResolutionUnavailable()
-            UUID(path.parts[1])
+            if len(path.parts) == 4 and path.parts[2] != f"phase1-{identity}":
+                raise ModelResolutionUnavailable()
+            if len(path.parts) == 4 or path.parts[1] != f"phase1-{identity}":
+                try:
+                    UUID(path.parts[1])
+                except ValueError:
+                    raise ModelResolutionUnavailable() from None
             return ref.model_dump()

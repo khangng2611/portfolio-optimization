@@ -1,10 +1,11 @@
+import { submitLogin } from './login-form';
 import { test, expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-// Real localhost Identity/BFF/Market/Quant/Portfolio only. No route interception.
+// Real localhost Auth/BFF/Market/Quant/Portfolio only. No route interception.
 const root = resolve('../..');
 const generated = resolve(root, 'infra/local/.generated');
 const receiptFile = resolve(generated, 'market-operations-browser-receipt.json');
@@ -33,21 +34,8 @@ async function authenticate(page: Page, username: 'alice' | 'data-operator', des
   const account = accounts.users.find((item: { username: string }) => item.username === username);
   if (!account?.password) throw new Error('Disposable browser account unavailable');
   await page.goto(destination);
-  await page.getByRole('link', { name: 'Đăng nhập qua Identity', exact: true }).click();
-  await page.waitForURL(url => url.origin === 'http://localhost:8080');
-  // One-time authorization state and credentials remain only in browser memory.
-  const authorization = new URL(page.url());
-  expect(authorization.searchParams.get('client_id')).toBe('portfolio-web');
-  expect(authorization.searchParams.get('response_type')).toBe('code');
-  expect(authorization.searchParams.get('code_challenge_method')).toBe('S256');
-  expect(Boolean(authorization.searchParams.get('code_challenge'))).toBe(true);
-  await page.locator('#username').fill(account.username);
-  await page.locator('#password').fill(account.password);
-  await Promise.all([
-    page.waitForURL(url => url.origin === origin && url.pathname === '/'),
-    page.locator('#kc-login').click(),
-  ]);
-  await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+  await submitLogin(page, account);
   expect((await get(page.context(), '/auth/session')).authenticated).toBe(true);
 }
 
@@ -157,7 +145,7 @@ test('real operator source to publication to investor accepted target', async ({
     { cwd: root, encoding: 'utf8', timeout: 30_000 });
   if (prepared.status !== 0) throw new Error('Disposable Market Operations source preparation failed');
   const fixture: Fixture = JSON.parse(await readFile(resolve(generated, 'market-operations-fixture.json'), 'utf8'));
-  phase(info, 'market-operator-pkce');
+  phase(info, 'market-operator-login');
   await authenticate(page, 'data-operator', '/#market');
   await page.goto('/#market');
 
@@ -295,7 +283,7 @@ test('real operator source to publication to investor accepted target', async ({
 
 test('same market operations and accepted target receipt after process restart', async ({ page, browser }, info) => {
   test.skip(!persistence || retryOutage, 'Run explicitly after actual Compose process restart');
-  phase(info, 'market-restart-operator-pkce');
+  phase(info, 'market-restart-operator-login');
   const receipt: Receipt = JSON.parse(await readFile(receiptFile, 'utf8'));
   await authenticate(page, 'data-operator', '/#market');
   phase(info, 'market-restart-same-durable-records');
@@ -318,7 +306,7 @@ test('same market operations and accepted target receipt after process restart',
 test('real transient Market outage retries one durable publication to identical output', async ({ page }, info) => {
   test.skip(!retryOutage || persistence, 'Explicit optional outage gate; stops only the disposable market-api service');
   test.setTimeout(240_000);
-  phase(info, 'market-outage-operator-pkce');
+  phase(info, 'market-outage-operator-login');
   const originalReceipt = await readFile(receiptFile, 'utf8');
   const receipt: Receipt = JSON.parse(originalReceipt);
   await authenticate(page, 'data-operator', '/#market-publications');

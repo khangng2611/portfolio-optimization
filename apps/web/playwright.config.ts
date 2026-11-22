@@ -14,7 +14,7 @@ export default defineConfig({
   outputDir: '../../output/playwright/private-results',
   reporter: [['./tests/browser/safe-reporter.ts']],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
     browserName: 'chromium',
     headless: true,
     viewport: { width: 1440, height: 1000 },

@@ -1,0 +1,14 @@
+inputs/
+runs/
+outputs/
+figures/
+qa/
+submission/
+__pycache__/
+*.log
+# Bulky generated derivatives are preserved in run folders/evidence ZIP.
+C1_daily.csv
+C1_trades.csv
+C1_units.csv
+C1_class_exposures.csv
+*_holdings_weights.csv

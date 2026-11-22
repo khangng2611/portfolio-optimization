@@ -69,60 +69,21 @@ def test_missing_existing_password_requires_restore_instead_of_rotation(tmp_path
     assert (tmp_path / "secrets.json").read_bytes() == before
 
 
-def test_market_scopes_optional_for_web_with_operator_backend_role_gate(
-    tmp_path,
-):
+def test_auth_database_and_signing_key_are_separate_and_persistent(tmp_path):
+    import base64
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
     bootstrap = load_bootstrap()
     bootstrap.GENERATED = tmp_path
     values = bootstrap.create_secrets()
-    realm = bootstrap.make_realm(values, [], test_client=True)
-    clients = {client["clientId"]: client for client in realm["clients"]}
-    assert {"market:read", "market:write"} <= {
-        scope["name"] for scope in realm["clientScopes"]
-    }
-    assert clients["market-api"]["bearerOnly"] is True
-    test = clients["portfolio-test"]
-    assert {"market:read", "market:write"} <= set(test["defaultClientScopes"])
-    assert {"portfolio-api", "market-api", "chat-api"} == {
-        mapper["config"]["included.client.audience"]
-        for mapper in test["protocolMappers"]
-    }
-    web = clients["portfolio-web"]
-    assert not {"market:read", "market:write"} & set(web["defaultClientScopes"])
-    assert [
-        mapper["config"]["included.client.audience"]
-        for mapper in web["protocolMappers"]
-    ] == ["portfolio-api", "market-api", "quant-api", "ml-api", "chat-api"]
-    assert set(web["optionalClientScopes"]) == {
-        "market:read",
-        "market:write",
-        "quant:publish",
-        "ml:read",
-        "ml:train",
-        "ml:review",
-    }
-    assert "portfolio-test" not in {
-        client["clientId"]
-        for client in bootstrap.make_realm(values, [], test_client=False)["clients"]
-    }
-
-
-def test_every_token_issuing_client_provides_a_subject_for_api_ownership(tmp_path):
-    bootstrap = load_bootstrap()
-    bootstrap.GENERATED = tmp_path
-    realm = bootstrap.make_realm(bootstrap.create_secrets(), [], test_client=True)
-    scopes = {scope["name"]: scope for scope in realm["clientScopes"]}
-    for client in realm["clients"]:
-        if client.get("bearerOnly"):
-            continue
-        mappers = list(client.get("protocolMappers", []))
-        for scope in client["defaultClientScopes"]:
-            mappers.extend(scopes[scope].get("protocolMappers", []))
-        assert any(
-            mapper["protocolMapper"] == "oidc-sub-mapper"
-            and mapper["config"]["access.token.claim"] == "true"
-            for mapper in mappers
-        ), client["clientId"]
+    sql = bootstrap.make_database_sql(values)
+    assert "CREATE DATABASE auth_db OWNER auth_owner" in sql
+    assert "GRANT CONNECT ON DATABASE auth_db TO auth_migrator, auth_runtime" in sql
+    assert "identity_db" not in sql
+    key = bootstrap.signing_key()
+    assert bootstrap.signing_key() == key
+    assert load_pem_private_key(base64.b64decode(key), None).key_size == 2048
+    assert (tmp_path / "auth-signing-key.b64").stat().st_mode & 0o777 == 0o600
 
 
 def test_market_broker_users_cannot_write_read_or_declare_another_owners_resources(

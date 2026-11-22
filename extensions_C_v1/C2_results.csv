@@ -1,0 +1,2 @@
+strategy,status,N,final_nav,ann_return,ann_volatility,sharpe,max_drawdown,turnover,reason
+VN30TRI,NOT_RUN_SOURCE_GATE_NOT_MET,0,,,,,,,"No accepted daily levels with vendor_record_date, historical vintage and research-use evidence"

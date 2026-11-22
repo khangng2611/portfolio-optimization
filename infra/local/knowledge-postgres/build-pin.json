@@ -1,0 +1,8 @@
+{
+  "base": "postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652",
+  "pgvector_version": "0.8.1",
+  "pgvector_commit": "778dacf20c07caf904557a88705142631818d8cb",
+  "verified_local_image_id": "sha256:71e383618a96f811594241a6746118988c0dcd80ace583a7f124e16d91b676fb",
+  "architecture": "arm64",
+  "note": "Local image content digest; no registry distribution digest without push. Rebuild verifies pinned source/base, architecture may change image ID."
+}

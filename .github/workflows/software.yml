@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -c services/quant-serving/requirements.lock -e packages/contracts -e packages/service-auth -e packages/service-observability -e packages/portfolio-core -e services/portfolio -e services/quant-serving -e services/market-data -e services/ml-platform -e services/chat pytest==8.4.2 ruff==0.13.2
+      - run: python -m pip install -c services/quant-serving/requirements.lock -e packages/contracts -e packages/service-auth -e packages/service-observability -e packages/portfolio-core -e services/auth -e services/portfolio -e services/quant-serving -e services/market-data -e services/ml-platform -e services/chat -e services/knowledge pytest==8.4.2 ruff==0.13.2
       - run: python -m pytest tests/software packages/portfolio-core/tests -q
       - run: ruff check packages services tests/software infra scripts/export_software_contracts.py scripts/lock_software_dependencies.py scripts/smoke_software.py scripts/smoke_g2.py scripts/smoke_ml_serving.py scripts/smoke_market_quant.py scripts/fetch_serving_prices.py scripts/browser_fixture.py scripts/smoke_tracing.py scripts/setup_software.py scripts/market_operations_fixture.py scripts/smoke_chat.py scripts/smoke_chat_authorization.py
       - run: python scripts/export_software_contracts.py && git diff --exit-code -- packages/contracts/openapi packages/contracts/events
@@ -52,6 +52,9 @@ jobs:
     needs: [backend, web]
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      # DEMO lifecycle exercises the explicit EW/MVO/BL_ML endpoints.
+      SYSTEM_HYBRID_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -67,7 +70,7 @@ jobs:
         working-directory: apps/web
         run: npx --no-install playwright install --with-deps chromium
       - run: python -m pip install kombu==5.5.4 'psycopg[binary]==3.2.10' httpx==0.28.1
-      - run: python infra/local/bootstrap.py --enable-test-client
+      - run: python infra/local/bootstrap.py
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml build
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --wait --wait-timeout 300
       - name: Reconcile local configuration twice without resets
@@ -75,12 +78,12 @@ jobs:
       - run: python infra/local/verify_boundaries.py
       - run: python scripts/smoke_software.py
       - run: python scripts/smoke_g2.py
-      - name: Real browser PKCE and deterministic DEMO lifecycle
+      - name: Real browser login and deterministic DEMO lifecycle
         working-directory: apps/web
         env:
           E2E_DISPOSABLE_STACK: '1'
         run: npm run test:browser
-      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml restart web portfolio-api portfolio-consume portfolio-dispatch quant-api quant-consume quant-dispatch quant-publication market-api market-consume market-dispatch
+      - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml restart auth-api web portfolio-api portfolio-consume portfolio-dispatch quant-api quant-consume quant-dispatch quant-publication market-api market-consume market-dispatch
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --wait --wait-timeout 120
       - run: python scripts/smoke_software.py --verify-receipt
       - run: python scripts/smoke_g2.py --verify-receipt
@@ -113,13 +116,15 @@ jobs:
     needs: [backend, web]
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      SYSTEM_HYBRID_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install kombu==5.5.4 'psycopg[binary]==3.2.10' httpx==0.28.1
-      - run: python infra/local/bootstrap.py --enable-test-client
+      - run: python infra/local/bootstrap.py
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml config --quiet
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml build
       - run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.tracing.yaml up -d --wait --wait-timeout 300

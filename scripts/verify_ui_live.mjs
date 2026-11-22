@@ -1,4 +1,4 @@
-/** Real browser/BFF/Keycloak/DB/broker gate. Local disposable stack only.
+/** Real browser/BFF/Auth/DB/broker gate. Local disposable stack only.
  * No mocks/interception. Reads ignored local credentials without logging them.
  * PORTFOLIO_PLAYWRIGHT_MODULE may point to an existing Playwright package entry.
  */
@@ -49,19 +49,14 @@ async function openPortfolio(name) {
 try {
   await page.goto(origin, { waitUntil: 'domcontentloaded' });
   check(await page.getByRole('heading', { name: 'Đầu tư có kế hoạch. Quyết định có cơ sở.', exact: true }).count() === 1, 'Port 3000 does not serve the updated UI');
-  await page.getByRole('link', { name: 'Đăng nhập qua Identity', exact: true }).click();
-  await page.waitForURL(url => url.hostname === 'localhost' && url.port === '8080');
-  const authURL = new URL(page.url());
-  check(authURL.searchParams.get('client_id') === 'portfolio-web', 'Unexpected OIDC browser client');
-  check(authURL.searchParams.get('code_challenge_method') === 'S256' && !!authURL.searchParams.get('code_challenge'), 'PKCE S256 challenge missing');
-  check(authURL.searchParams.get('response_type') === 'code', 'Authorization code flow missing');
-  evidence.auth = { client: 'portfolio-web', authorization_code: true, pkce_s256: true, issuer_origin: 'http://localhost:8080' };
-  await page.locator('#username').fill(account.username);
-  await page.locator('#password').fill(account.password);
-  await Promise.all([
-    page.waitForURL(url => url.origin === origin && url.pathname === '/', { timeout: 45000 }),
-    page.locator('#kc-login').click(),
-  ]);
+  await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+  await page.getByRole('heading', { name: 'Đăng nhập', exact: true }).waitFor();
+  await page.getByLabel('Tên đăng nhập', { exact: true }).fill(account.username);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill(account.password);
+  const loggedIn = page.waitForResponse(r => new URL(r.url()).pathname === '/auth/login');
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+  check((await loggedIn).status() === 204, 'Internal login failed');
+  evidence.auth = { internal_login: true };
   await page.getByRole('button', { name: 'Đăng xuất', exact: true }).waitFor();
   const sessionResponse = await context.request.get(origin + '/auth/session');
   const session = await sessionResponse.json();

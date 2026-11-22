@@ -1,57 +1,55 @@
-name: portfolio-software
-
-x-keycloak-environment: &keycloak-environment
-  KC_DB: postgres
-  KC_DB_URL: jdbc:postgresql://postgres:5432/identity_db
-  KC_HOSTNAME: http://localhost:8080
-  KC_HEALTH_ENABLED: "true"
-  KC_HTTP_ENABLED: "true"
-  KC_CACHE: local
+name: portfolio-auth-demo
 
 x-portfolio-environment: &portfolio-environment
+  SYSTEM_HYBRID_ENABLED: ${SYSTEM_HYBRID_ENABLED:-paused}
+  USER_SELECTED_ASSETS_ENABLED: ${USER_SELECTED_ASSETS_ENABLED:-false}
   DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
-  OIDC_ISSUER: http://localhost:8080/realms/portfolio
-  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_ISSUER: http://auth-api:8000
+  OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
   OIDC_AUDIENCE: portfolio-api
-  OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
-  OIDC_ACCOUNT_READER_SECRET: ${PORTFOLIO_ACCOUNT_READER_SECRET:?Run bootstrap.py}
+  OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token
+  AUTH_ACCOUNT_STATUS_URL: http://auth-api:8000/internal/v1/accounts
+  AUTH_ACCOUNT_READER_SECRET: ${PORTFOLIO_ACCOUNT_READER_SECRET:?Run bootstrap.py}
   QUANT_API_URL: http://quant-api:8000
   QUANT_CLIENT_SECRET: ${QUANT_CLIENT_SECRET:?Run bootstrap.py}
 
 x-quant-environment: &quant-environment
+  USER_SELECTED_ASSETS_ENABLED: ${USER_SELECTED_ASSETS_ENABLED:-false}
   DATABASE_URL: postgresql+psycopg://quant_runtime:${QUANT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/quant_db
-  OIDC_ISSUER: http://localhost:8080/realms/portfolio
-  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_ISSUER: http://auth-api:8000
+  OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
   OIDC_AUDIENCE: quant-api
   BUNDLE_DIRECTORY: /bundles
   ALLOW_DEMO_INPUTS: "true"
-  OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+  OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token
   ML_API_URL: http://ml-api:8000
   ML_READER_CLIENT_SECRET: ${ML_READER_CLIENT_SECRET:?Run bootstrap.py}
 
 x-market-environment: &market-environment
   DATABASE_URL: postgresql+psycopg://market_runtime:${MARKET_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/market_db
-  OIDC_ISSUER: http://localhost:8080/realms/portfolio
-  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_ISSUER: http://auth-api:8000
+  OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
   OIDC_AUDIENCE: market-api
   DATASET_DIRECTORY: /datasets
 
 x-ml-environment: &ml-environment
   DATABASE_URL: postgresql+psycopg://ml_runtime:${ML_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/ml_db
-  OIDC_ISSUER: http://localhost:8080/realms/portfolio
-  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_ISSUER: http://auth-api:8000
+  OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
   OIDC_AUDIENCE: ml-api
   ML_ARTIFACT_DIRECTORY: /ml-models
 
 x-chat-environment: &chat-environment
+  SYSTEM_HYBRID_ENABLED: ${SYSTEM_HYBRID_ENABLED:-paused}
   DATABASE_URL: postgresql+psycopg://chat_runtime:${CHAT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/chat_db
-  OIDC_ISSUER: http://localhost:8080/realms/portfolio
-  OIDC_JWKS_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/certs
+  OIDC_ISSUER: http://auth-api:8000
+  OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
   OIDC_AUDIENCE: chat-api
-  OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+  OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token
   CHAT_CLIENT_SECRET: ${CHAT_CLIENT_SECRET:?Run bootstrap.py}
   PORTFOLIO_API_URL: http://portfolio-api:8000
   MARKET_API_URL: http://market-api:8000
+  KNOWLEDGE_API_URL: http://knowledge-api:8000
 
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
@@ -111,38 +109,34 @@ services:
       retries: 20
     restart: unless-stopped
 
-  identity-migrate:
-    image: quay.io/keycloak/keycloak:26.7.4
-    entrypoint: ["/bin/bash", "/init/keycloak-init.sh"]
+  auth-migrate:
+    build: {context: ../.., dockerfile: services/auth/Dockerfile}
+    image: portfolio-auth-demo-auth:local
+    command: ["/bin/sh", "-ec", "alembic -c /app/services/auth/alembic.ini upgrade head && python -m auth_service.main"]
     environment:
-      <<: *keycloak-environment
-      KC_DB_USERNAME: identity_migrator
-      KC_DB_PASSWORD: ${IDENTITY_MIGRATOR_PASSWORD:?Run bootstrap.py}
-      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run bootstrap.py}
-    volumes:
-      - ./keycloak-init.sh:/init/keycloak-init.sh:ro
-      - ./.generated/keycloak:/opt/keycloak/data/import:ro
+      DATABASE_URL: postgresql+psycopg://auth_migrator:${AUTH_MIGRATOR_PASSWORD:?Run bootstrap.py}@postgres:5432/auth_db
+      AUTH_SEED_ACCOUNTS_B64: ${AUTH_SEED_ACCOUNTS_B64:?Run bootstrap.py}
     depends_on:
       postgres: {condition: service_healthy}
     restart: "no"
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.7.4
-    command: ["start-dev", "--spi-connections-jpa--quarkus--migration-strategy=validate"]
+  auth-api:
+    build: {context: ../.., dockerfile: services/auth/Dockerfile}
+    image: portfolio-auth-demo-auth:local
     environment:
-      <<: *keycloak-environment
-      KC_DB_USERNAME: identity_runtime
-      KC_DB_PASSWORD: ${IDENTITY_RUNTIME_PASSWORD:?Run bootstrap.py}
-    ports: ["127.0.0.1:8080:8080"]
+      DATABASE_URL: postgresql+psycopg://auth_runtime:${AUTH_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/auth_db
+      OIDC_ISSUER: http://auth-api:8000
+      AUTH_SIGNING_KEY_B64: ${AUTH_SIGNING_KEY_B64:?Run bootstrap.py}
+      AUTH_WEB_SECRET: ${AUTH_WEB_SECRET:?Run bootstrap.py}
+      PORTFOLIO_ACCOUNT_READER_SECRET: ${PORTFOLIO_ACCOUNT_READER_SECRET:?Run bootstrap.py}
+      QUANT_CLIENT_SECRET: ${QUANT_CLIENT_SECRET:?Run bootstrap.py}
+      MARKET_READER_CLIENT_SECRET: ${MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
+      ML_MARKET_READER_CLIENT_SECRET: ${ML_MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
+      ML_READER_CLIENT_SECRET: ${ML_READER_CLIENT_SECRET:?Run bootstrap.py}
+      CHAT_CLIENT_SECRET: ${CHAT_CLIENT_SECRET:?Run bootstrap.py}
     depends_on:
-      identity-migrate: {condition: service_completed_successfully}
-    healthcheck:
-      test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; read -r status <&3; [[ \"$$status\" == *'200 OK'* ]]"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
+      auth-migrate: {condition: service_completed_successfully}
+    healthcheck: *api-healthcheck
     restart: unless-stopped
 
   portfolio-migrate:
@@ -175,6 +169,59 @@ services:
       postgres: {condition: service_healthy}
     restart: "no"
 
+  knowledge-postgres:
+    build: {context: ./knowledge-postgres}
+    image: portfolio-software-knowledge-postgres:pg17-vector081
+    environment:
+      POSTGRES_USER: knowledge_admin
+      POSTGRES_PASSWORD: ${KNOWLEDGE_ADMIN_PASSWORD:?Run bootstrap.py}
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - knowledge-data:/var/lib/postgresql/data
+      - ./.generated/knowledge-postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U knowledge_admin -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  knowledge-migrate:
+    build: {context: ../.., dockerfile: services/knowledge/Dockerfile}
+    image: portfolio-software-knowledge:local
+    command: ["alembic", "-c", "/app/services/knowledge/alembic.ini", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://knowledge_migrator:${KNOWLEDGE_MIGRATOR_PASSWORD:?Run bootstrap.py}@knowledge-postgres:5432/knowledge_db
+    depends_on:
+      knowledge-postgres: {condition: service_healthy}
+
+  knowledge-api:
+    image: portfolio-software-knowledge:local
+    environment: &knowledge-environment
+      DATABASE_URL: postgresql+psycopg://knowledge_runtime:${KNOWLEDGE_RUNTIME_PASSWORD:?Run bootstrap.py}@knowledge-postgres:5432/knowledge_db
+      OIDC_ISSUER: http://auth-api:8000
+      OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
+      OIDC_AUDIENCE: knowledge-api
+    ports: ["127.0.0.1:8006:8000"]
+    depends_on:
+      knowledge-migrate: {condition: service_completed_successfully}
+    healthcheck: *api-healthcheck
+    restart: unless-stopped
+
+  knowledge-worker:
+    image: portfolio-software-knowledge:local
+    command: ["python", "-m", "knowledge_service.worker"]
+    environment: *knowledge-environment
+    depends_on:
+      knowledge-migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "from knowledge_service.runtime import sessions_from_env; from sqlalchemy import text; s=sessions_from_env()(); s.execute(text('SELECT id FROM indexing_job LIMIT 1')); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   chat-migrate:
     build: {context: ../.., dockerfile: services/chat/Dockerfile}
     image: portfolio-software-chat:local
@@ -191,7 +238,7 @@ services:
     ports: ["127.0.0.1:8005:8000"]
     depends_on:
       chat-migrate: {condition: service_completed_successfully}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     healthcheck: *api-healthcheck
     restart: unless-stopped
 
@@ -209,7 +256,7 @@ services:
       chat-migrate: {condition: service_completed_successfully}
       portfolio-api: {condition: service_healthy}
       market-api: {condition: service_healthy}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     restart: unless-stopped
 
   ml-migrate:
@@ -229,7 +276,7 @@ services:
     volumes: ["./.generated/ml-models:/ml-models:ro"]
     depends_on:
       ml-migrate: {condition: service_completed_successfully}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     healthcheck: *api-healthcheck
     restart: unless-stopped
 
@@ -239,7 +286,7 @@ services:
     command: ["python", "-m", "ml_platform.worker"]
     environment:
       <<: *ml-environment
-      OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+      OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token
       MARKET_API_URL: http://market-api:8000
       ML_MARKET_READER_CLIENT_SECRET: ${ML_MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
     volumes: ["./.generated/ml-models:/ml-models:rw"]
@@ -252,8 +299,19 @@ services:
     depends_on:
       ml-migrate: {condition: service_completed_successfully}
       market-api: {condition: service_healthy}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     restart: unless-stopped
+
+  market-metadata-sync:
+    profiles: ["metadata"]
+    image: portfolio-software-market:local
+    command: ["python", "-m", "market_service.asset_metadata"]
+    environment:
+      <<: *market-environment
+      FHSC_API_KEY: ${FHSC_API_KEY:-}
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+    restart: "no"
 
   market-api:
     image: portfolio-software-market:local
@@ -262,7 +320,7 @@ services:
     volumes: ["./.generated/datasets:/datasets:ro", "./.generated/datasets/refresh:/datasets/refresh:ro"]
     depends_on:
       market-migrate: {condition: service_completed_successfully}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     healthcheck: *api-healthcheck
     restart: unless-stopped
 
@@ -314,7 +372,7 @@ services:
     ports: ["127.0.0.1:8001:8000"]
     depends_on:
       portfolio-migrate: {condition: service_completed_successfully}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
       quant-api: {condition: service_healthy}
     healthcheck: *api-healthcheck
     restart: unless-stopped
@@ -326,7 +384,7 @@ services:
     volumes: ["./.generated/bundles:/bundles:ro", "./.generated/ml-models:/bundles/ml-models:ro"]
     depends_on:
       quant-migrate: {condition: service_completed_successfully}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     healthcheck: *api-healthcheck
     restart: unless-stopped
 
@@ -337,7 +395,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://quant_runtime:${QUANT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/quant_db
       BUNDLE_DIRECTORY: /bundles
-      OIDC_TOKEN_URL: http://keycloak:8080/realms/portfolio/protocol/openid-connect/token
+      OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token
       MARKET_API_URL: http://market-api:8000
       MARKET_READER_CLIENT_SECRET: ${MARKET_READER_CLIENT_SECRET:?Run bootstrap.py}
       PUBLICATION_SCHEDULES: "[]"
@@ -351,7 +409,7 @@ services:
     depends_on:
       quant-migrate: {condition: service_completed_successfully}
       market-api: {condition: service_healthy}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
     restart: unless-stopped
 
   portfolio-dispatch:
@@ -369,6 +427,9 @@ services:
     image: portfolio-software-portfolio:local
     command: ["python", "-m", "portfolio_service.worker", "consume"]
     environment:
+      OIDC_TOKEN_URL: http://auth-api:8000/internal/v1/token
+      QUANT_API_URL: http://quant-api:8000
+      QUANT_CLIENT_SECRET: ${QUANT_CLIENT_SECRET:?Run bootstrap.py}
       DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
       BROKER_URL: amqp://portfolio_consumer:${PORTFOLIO_CONSUMER_PASSWORD:?Run bootstrap.py}@rabbitmq:5672/portfolio
     depends_on:
@@ -405,12 +466,9 @@ services:
     image: portfolio-software-web:local
     environment:
       APP_ORIGIN: http://localhost:3000
-      OIDC_ISSUER: http://localhost:8080/realms/portfolio
-      OIDC_INTERNAL_ORIGIN: http://keycloak:8080
-      OIDC_CLIENT_ID: portfolio-web
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Run bootstrap.py}
-      OIDC_AUDIENCE: portfolio-api
-      OIDC_SCOPE: openid profile email portfolio:read portfolio:write market:read market:write quant:publish ml:read ml:train ml:review chat:read chat:write
+      OIDC_ISSUER: http://auth-api:8000
+      AUTH_API_URL: http://auth-api:8000
+      AUTH_WEB_SECRET: ${AUTH_WEB_SECRET:?Run bootstrap.py}
       REDIS_URL: redis://:${REDIS_PASSWORD:?Run bootstrap.py}@redis:6379/0
       SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Run bootstrap.py}
       PORTFOLIO_API_URL: http://portfolio-api:8000
@@ -422,7 +480,7 @@ services:
     ports: ["127.0.0.1:3000:3000"]
     depends_on:
       portfolio-api: {condition: service_healthy}
-      keycloak: {condition: service_healthy}
+      auth-api: {condition: service_healthy}
       redis: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
@@ -433,6 +491,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  knowledge-data:
   postgres-data:
   rabbitmq-data:
   redis-data:

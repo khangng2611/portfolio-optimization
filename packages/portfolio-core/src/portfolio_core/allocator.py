@@ -7,6 +7,7 @@ import cvxpy as cp
 import numpy as np
 
 from .errors import CoreError
+from .phase1_full import validate_active_assets
 from .version import __version__
 
 
@@ -97,8 +98,10 @@ def _policy(value, assets: list[str]) -> Policy:
     return Policy(risk, cap, defensive, non_defensive, minimum, maximum, lower, upper)
 
 
-def _covariance(value, size: int) -> tuple[np.ndarray, dict]:
+def _covariance(value, size: int, active=None) -> tuple[np.ndarray, dict]:
     sigma = _matrix(value, size, size, "covariance")
+    if active is not None:
+        sigma = sigma[np.ix_(active, active)]
     if not np.allclose(sigma, sigma.T, rtol=1e-8, atol=1e-12):
         raise CoreError("invalid_covariance", "covariance must be symmetric")
     if np.any(np.diag(sigma) < 0):
@@ -232,42 +235,135 @@ def _optimize(mu: np.ndarray, sigma: np.ndarray, policy: Policy) -> tuple[np.nda
     }
 
 
+def _active_indices(request, assets, strategy):
+    if "active_policy_version" in request:
+        if request["active_policy_version"] != "user-selection-active-v1":
+            raise _invalid("active_policy_version", "Unsupported active policy version")
+        from .assets import canonical_candidates
+        from .phase1_full import EQUITY_IDS
+
+        try:
+            canonical = canonical_candidates(assets)
+        except ValueError as error:
+            raise _invalid("asset_ids", str(error)) from None
+        if assets != canonical or len(assets) < 2:
+            raise _invalid("asset_ids", "At least two candidates in canonical order are required")
+        active = _asset_ids(request.get("active_asset_ids"), "active_asset_ids")
+        if (not set(active) <= set(assets)
+                or active != [a for a in assets if a in active]):
+            raise _invalid("active_asset_ids", "Active assets must preserve candidate membership and order")
+        if strategy in {"EW", "MVO"}:
+            if active != assets:
+                raise _invalid("active_asset_ids", "EW and MVO must use all candidates")
+        else:
+            equities = [a for a in assets if a in EQUITY_IDS]
+            if (sum(a in EQUITY_IDS for a in active) != min(5, len(equities))
+                    or [a for a in active if a not in EQUITY_IDS] != [a for a in assets if a not in EQUITY_IDS]):
+                raise _invalid("active_asset_ids", "BL_ML requires up to five candidate equities and every chosen alternative")
+        return [assets.index(a) for a in active]
+    if "active_asset_ids" not in request:
+        return None
+    try:
+        return validate_active_assets(assets, request["active_asset_ids"])
+    except ValueError as error:
+        raise _invalid("active_asset_ids", str(error)) from None
+
+
+def _active_market(market, indices):
+    if indices is not None:
+        expected = np.zeros(len(market))
+        expected[indices] = 1.0 / len(indices)
+        if not np.allclose(market, expected, rtol=0, atol=1e-12):
+            raise _invalid("market_weights", "Active-universe prior requires equal active weights and zero inactive weights")
+        return market[indices]
+    return market
+
+
+def _active_views(views, indices):
+    if views is None or indices is None:
+        return views
+    p, q, confidence = views
+    inactive = np.ones(p.shape[1], dtype=bool)
+    inactive[indices] = False
+    if np.any(p[:, inactive] != 0):
+        raise _invalid("views_p", "Active-universe views cannot involve inactive assets")
+    return p[:, indices], q, confidence
+
+
+def _threshold_weights(weights: np.ndarray, policy: Policy) -> np.ndarray:
+    """Frozen 1% pruning: retain feasibility before removing micro-positions."""
+    tiny = weights < .01
+    if not tiny.any():
+        return weights
+    candidate = weights.copy()
+    candidate[tiny] = 0
+    if candidate.sum() <= 0:
+        return weights
+    candidate /= candidate.sum()
+    if max(_residuals(candidate, policy).values()) <= 1e-12:
+        return candidate
+    defensive = policy.defensive[~tiny[policy.defensive]]
+    non_defensive = policy.non_defensive[~tiny[policy.non_defensive]]
+    lower = max(policy.min_defensive, 1 - policy.max_non_defensive,
+                1 - len(non_defensive) * policy.cap, 0.)
+    upper = min(1., len(defensive) * policy.cap)
+    if lower > upper + 1e-14:
+        return weights
+    total = float(np.clip(candidate[defensive].sum(), min(lower, upper), upper))
+    result = np.zeros_like(weights)
+    result[defensive] = _project_group(candidate[defensive], total, policy.cap)
+    result[non_defensive] = _project_group(candidate[non_defensive], 1 - total, policy.cap)
+    return result if max(_residuals(result, policy).values()) <= 1e-12 else weights
+
+
 def _allocate(request: dict) -> dict:
     if not isinstance(request, dict):
         raise _invalid("request", "request must be an object")
     allowed = {"strategy", "asset_ids", "mean_returns", "covariance", "market_weights",
-               "views_p", "views_q", "view_confidences", "constraints", "tau", "delta"}
+               "views_p", "views_q", "view_confidences", "constraints", "tau", "delta", "active_asset_ids", "active_policy_version"}
     if set(request) - allowed:
         raise _invalid("request", "request contains unsupported fields")
     strategy = request.get("strategy")
     if not isinstance(strategy, str) or strategy not in {"EW", "MVO", "BL_ML"}:
         raise CoreError("unsupported_strategy", "Supported strategies are EW, MVO, and BL_ML")
     assets = _asset_ids(request.get("asset_ids"), "asset_ids")
+    active = _active_indices(request, assets, strategy)
+    numerical_assets = assets if active is None else [assets[i] for i in active]
     mu = _vector(request.get("mean_returns"), len(assets), "mean_returns")
-    sigma, regularization = _covariance(request.get("covariance"), len(assets))
-    policy = _policy(request.get("constraints"), assets)
+    if active is not None:
+        mu = mu[active]
+    sigma, regularization = _covariance(request.get("covariance"), len(assets), active)
+    policy = _policy(request.get("constraints"), numerical_assets)
     tau = _positive(request.get("tau", 0.05), "tau")
     delta = _positive(request.get("delta", 2.5), "delta")
-    views = _views(request, len(assets), required=strategy == "BL_ML")
+    views = _active_views(_views(request, len(assets), required=strategy == "BL_ML"), active)
     market = None
     if request.get("market_weights") is not None:
         market = _vector(request["market_weights"], len(assets), "market_weights")
         if np.any(market < 0) or abs(market.sum() - 1.0) > 1e-8:
             raise _invalid("market_weights", "market_weights must be nonnegative and sum to one")
+        market = _active_market(market, active)
     diagnostics = {"return_units": "daily", "covariance_regularization": regularization}
+    if active is not None:
+        diagnostics["active_asset_ids"] = numerical_assets
     if strategy == "BL_ML":
         if market is None:
             raise _invalid("market_weights", "BL_ML requires market_weights")
         mu, posterior_details = _posterior(sigma, market, views, tau, delta)
         diagnostics.update(posterior_details)
     if strategy == "EW":
-        weights = np.full(len(assets), 1.0 / len(assets))
+        weights = np.full(len(numerical_assets), 1.0 / len(numerical_assets))
         if max(_residuals(weights, policy).values()) > 1e-13:
             raise CoreError("infeasible_constraints", "Equal weights violate the supplied policy; EW cannot adjust its weights")
         diagnostics.update(solver=None, solver_status="not_run", maximum_feasibility_adjustment=0.0)
     else:
         weights, solver_details = _optimize(mu, sigma, policy)
         diagnostics.update(solver_details)
+        if active is not None:
+            before_threshold = weights
+            weights = _threshold_weights(weights, policy)
+            diagnostics["maximum_threshold_adjustment"] = float(np.max(np.abs(weights - before_threshold)))
+            diagnostics["min_weight_threshold"] = .01
     residuals = _residuals(weights, policy)
     if max(residuals.values()) > 1e-12:
         raise CoreError("solver_failure", "Final weights violate the supplied policy", {"constraint_residuals": residuals})
@@ -275,6 +371,10 @@ def _allocate(request: dict) -> dict:
     if not np.isfinite(objective):
         raise CoreError("numerical_failure", "The allocation objective is not finite")
     diagnostics.update(objective=objective, constraint_residuals=residuals)
+    if active is not None:
+        full_weights = np.zeros(len(assets))
+        full_weights[active] = weights
+        weights = full_weights
     return {
         "strategy": strategy,
         "asset_ids": assets,
@@ -298,22 +398,24 @@ def validate_numerical_inputs(inputs: dict, *, strategy: str = "MVO") -> None:
                 raise _invalid("inputs", "inputs must be an object")
             allowed = {
                 "asset_ids", "mean_returns", "covariance", "market_weights",
-                "views_p", "views_q", "view_confidences", "tau", "delta",
+                "views_p", "views_q", "view_confidences", "tau", "delta", "active_asset_ids", "active_policy_version",
             }
             if set(inputs) - allowed:
                 raise _invalid("inputs", "inputs contain unsupported fields")
             if not isinstance(strategy, str) or strategy not in {"EW", "MVO", "BL_ML"}:
                 raise CoreError("unsupported_strategy", "Unsupported strategy")
             assets = _asset_ids(inputs.get("asset_ids"), "asset_ids")
+            active = _active_indices(inputs, assets, strategy)
             _vector(inputs.get("mean_returns"), len(assets), "mean_returns")
-            _covariance(inputs.get("covariance"), len(assets))
+            _covariance(inputs.get("covariance"), len(assets), active)
             _positive(inputs.get("tau", 0.05), "tau")
             _positive(inputs.get("delta", 2.5), "delta")
-            _views(inputs, len(assets), required=strategy == "BL_ML")
+            _active_views(_views(inputs, len(assets), required=strategy == "BL_ML"), active)
             if inputs.get("market_weights") is not None:
                 market = _vector(inputs["market_weights"], len(assets), "market_weights")
                 if np.any(market < 0) or abs(market.sum() - 1.0) > 1e-8:
                     raise _invalid("market_weights", "market_weights must be nonnegative and sum to one")
+                _active_market(market, active)
             elif strategy == "BL_ML":
                 raise _invalid("market_weights", "BL_ML requires market_weights")
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError):

@@ -105,13 +105,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify-receipt", action="store_true")
     args = parser.parse_args()
-    accounts = json.loads((GENERATED / "accounts.json").read_text())
-    settings = dict(
-        line.split("=", 1)
-        for line in (GENERATED / ".env").read_text().splitlines()
-        if line and not line.startswith("#")
-    )
-    alice, bob = login("alice", accounts, settings), login("bob", accounts, settings)
+    alice, bob = login("alice"), login("bob")
     receipt_file = GENERATED / "g2-receipt.json"
     if args.verify_receipt:
         verify(json.loads(receipt_file.read_text()), alice, bob)

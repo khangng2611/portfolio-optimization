@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -8,6 +9,7 @@ from sqlalchemy import (
     JSON,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -36,6 +38,11 @@ class Asset(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     kind: Mapped[str] = mapped_column(String(16))
     unit: Mapped[str] = mapped_column(String(32))
+    display_name: Mapped[str | None] = mapped_column(String(500))
+    description: Mapped[str | None] = mapped_column(Text)
+    metadata_source: Mapped[str | None] = mapped_column(String(100))
+    metadata_source_symbol: Mapped[str | None] = mapped_column(String(100))
+    metadata_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PriceRevision(Base):

@@ -22,7 +22,14 @@
     "test:browser:chat:llm:persistence": "CHAT_LLM_LIVE=1 CHAT_VERIFY_RECEIPT=1 playwright test chat.e2e.ts --grep 'real Chat LLM'",
     "test:browser:chat": "playwright test chat.e2e.ts",
     "test:browser:chat:persistence": "CHAT_VERIFY_RECEIPT=1 playwright test chat.e2e.ts",
-    "test:browser:chat:outage": "CHAT_PROVIDER_OUTAGE=1 playwright test chat.e2e.ts"
+    "test:browser:chat:outage": "CHAT_PROVIDER_OUTAGE=1 playwright test chat.e2e.ts",
+    "test:browser:knowledge": "playwright test knowledge.e2e.ts",
+    "test:browser:knowledge:persistence": "KNOWLEDGE_VERIFY_RECEIPT=1 playwright test knowledge.e2e.ts",
+    "test:browser:phase1-full": "playwright test phase1-full.e2e.ts",
+    "test:browser:phase1-full:stale": "PHASE1_FULL_EXPECT=vff-stale playwright test phase1-full.e2e.ts",
+    "test:browser:phase1-full:persistence": "PHASE1_FULL_VERIFY_RECEIPT=1 playwright test phase1-full.e2e.ts",
+    "test:browser:user-selection": "playwright test user-selection.e2e.ts",
+    "test:browser:user-selection:persistence": "USER_SELECTION_VERIFY_RECEIPT=1 playwright test user-selection.e2e.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",
@@ -33,8 +40,7 @@
     "@opentelemetry/sdk-trace-base": "2.12.0",
     "@opentelemetry/sdk-trace-node": "2.12.0",
     "jose": "6.2.12",
-    "next": "16.3.6",
-    "openid-client": "6.8.8",
+    "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "redis": "6.2.1"

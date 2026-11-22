@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "primary_run": "extensions-C-20261104T210906",
+  "repeat_run": "extensions-C-20261104T211105",
+  "identical_numerical_csv_files": 12,
+  "source_inputs_unchanged": true,
+  "core_checks": {
+    "status": "PASS",
+    "selection_events": 78,
+    "trade_events": 310,
+    "OOS_return_count": 641,
+    "independent_units_max_abs_NAV_error": 8.659739592076221e-14,
+    "same_B1_B2_memberships": true,
+    "targets_feasible": true,
+    "cost_grid_reconciles_frozen_B1_B2": true,
+    "input_hashes_unchanged": true,
+    "traded_notional_equals_2TO": true,
+    "C2_status": "SOURCE_GATE_PENDING"
+  },
+  "C2_status": "NOT_RUN_SOURCE_GATE_NOT_MET",
+  "note": "C1 source/tests snapshots are the pre-result versions; later report/C2/test additions are recorded in publication manifest"
+}

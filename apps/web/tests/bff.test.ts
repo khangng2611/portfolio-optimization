@@ -30,16 +30,6 @@ describe('browser authentication boundary', () => {
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(await response.json()).toEqual({ authenticated: true, user: { sub: 'alice', name: 'Alice', roles: ['investor'] }, csrfToken: csrf });
   });
-  it('rejects missing or mismatched state and consumes the transaction once', async () => {
-    const backend = new MemoryBackend();
-    const bff = createBff(config, new EncryptedStore(backend, config.key), provider());
-    const start = await bff.login(request('/auth/login'));
-    const flowCookie = start.headers.get('set-cookie')!;
-    const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
-    expect((await bff.callback(request('/auth/callback?code=code&state=wrong', { cookie: flowCookie }))).status).toBe(400);
-    expect((await bff.callback(request(`/auth/callback?code=code&state=${state}`, { cookie: flowCookie }))).status).toBe(400);
-    expect((await bff.callback(request(`/auth/callback?code=code&state=${state}`))).status).toBe(400);
-  });
   it('rejects a cross-origin mutation, missing CSRF, and arbitrary proxy paths', async () => {
     const { bff, cookie, csrf } = await login();
     for (const headers of [{ origin: 'https://evil.test', 'x-csrf-token': csrf }, { origin: config.origin }] as Record<string, string>[]) {
@@ -92,15 +82,15 @@ describe('browser authentication boundary', () => {
   });
   it('serializes refresh across BFF replicas and uses the rotated token', async () => {
     let refreshes = 0;
-    const oidc = provider();
-    oidc.exchange = async () => ({ ...await provider().exchange(), accessExpiresAt: Date.now() + 100 });
-    oidc.refresh = async () => {
+    const identity = provider();
+    identity.login = async () => ({ ...await provider().login(), accessExpiresAt: Date.now() + 100 });
+    identity.refresh = async () => {
       refreshes++;
       await new Promise(resolve => setTimeout(resolve, 30));
-      return { ...await provider().exchange(), accessToken: 'rotated-access', refreshToken: 'rotated-refresh' };
+      return { ...await provider().login(), accessToken: 'rotated-access', refreshToken: 'rotated-refresh' };
     };
-    const { bff, cookie, store } = await login({ oidc });
-    const replica = createBff(config, store, oidc);
+    const { bff, cookie, store } = await login({ identity });
+    const replica = createBff(config, store, identity);
     const responses = await Promise.all([bff.session(request('/auth/session', { cookie })), replica.session(request('/auth/session', { cookie }))]);
     expect(responses.map(r => r.status)).toEqual([200, 200]);
     expect(refreshes).toBe(1);
@@ -115,21 +105,21 @@ describe('browser authentication boundary', () => {
     expect((await bff.session(request('/auth/session', { cookie }))).status).toBe(503);
   });
   it('revokes on logout and prevents refresh from restoring a deleted session', async () => {
-    let resolveRefresh: (value: Awaited<ReturnType<ReturnType<typeof provider>['exchange']>>) => void = () => {};
+    let resolveRefresh: (value: Awaited<ReturnType<ReturnType<typeof provider>['login']>>) => void = () => {};
     let started: () => void = () => {};
     const ready = new Promise<void>(resolve => { started = resolve; });
-    const oidc = provider();
+    const identity = provider();
     let revoked = false;
-    oidc.revoke = async () => { revoked = true; };
-    const { bff, cookie, csrf, store } = await login({ oidc });
+    identity.revoke = async () => { revoked = true; };
+    const { bff, cookie, csrf, store } = await login({ identity });
     const id = cookie.match(/portfolio_session=([^;]+)/)![1];
     const session = await store.get<Record<string, unknown>>(`session:${id}`);
     await store.put(`session:${id}`, { ...session, accessExpiresAt: Date.now() - 1 }, 60);
-    oidc.refresh = async () => { started(); return new Promise(resolve => { resolveRefresh = resolve; }); };
+    identity.refresh = async () => { started(); return new Promise(resolve => { resolveRefresh = resolve; }); };
     const pending = bff.session(request('/auth/session', { cookie }));
     await ready;
     const result = await bff.logout(request('/auth/logout', { method: 'POST', cookie, headers: { origin: config.origin, 'x-csrf-token': csrf } }));
-    resolveRefresh(await provider().exchange());
+    resolveRefresh(await provider().login());
     expect((await pending).status).toBe(401);
     expect(result.status).toBe(200);
     expect(result.headers.get('set-cookie')).toContain('Max-Age=0');

@@ -1,8 +1,13 @@
 # Setup và kiểm thử API phần mềm
 
+Giải thích phân bổ có evidence (22/11/2026): xem
+[API, migration, eval và same-receipt verification](ALLOCATION_EXPLANATION.md).
+Endpoint evidence là read-only, tách khỏi canonical recommendation/hash; paid
+acceptance phải qua dry-run, không dùng API key/config cũ thay cho budget approval.
+
 Để xem timeline của request qua BFF, RabbitMQ và workers, xem
 [hướng dẫn OpenTelemetry + Jaeger](TRACING.md). Có thể bật cùng quá trình setup:
-`python3 scripts/setup_software.py up --enable-test-client --tracing`.
+`python3 scripts/setup_software.py up --tracing`.
 
 Đây là điểm vào cho phần ứng dụng trong `apps/`, `services/`, `packages/` và
 `infra/`. Các lệnh dưới đây chạy từ repo root. Môi trường `.venv-software` độc
@@ -16,15 +21,16 @@ Docker Desktop với Compose v2. Mở Docker Desktop, kiểm tra còn đủ dung
 trống cho images/build/volumes. Chỉ chạy stack local trên máy phát triển.
 
 ```sh
-python3 scripts/setup_software.py up --enable-test-client
+python3 scripts/setup_software.py up
 ```
 
 Script kiểm tra công cụ, tạo hoặc dùng lại `.venv-software`, cài các package
 software theo constraints, dùng `npm ci` khi cần, bootstrap secrets/demo,
 kiểm tra Compose, build images và chạy stack. Nó khởi động PostgreSQL,
-RabbitMQ, Redis, Keycloak trước; sau đó chạy `infra/local/upgrade.py` để bổ
-sung DB/broker/scopes/client cho cấu hình local cũ, rồi bật toàn bộ service
-và chờ healthchecks. Không có bước xóa volume hoặc đặt lại realm.
+RabbitMQ và Redis trước, sau đó bổ sung DB/broker grants và chạy Auth
+migration, seed cùng các service. Project `portfolio-auth-demo` dùng volume
+riêng. Nếu stack `portfolio-software` cũ còn giữ cổng localhost, dừng container
+cũ và giữ lại volume của nó.
 
 Các chế độ hỗ trợ:
 
@@ -32,9 +38,9 @@ Các chế độ hỗ trợ:
 | --- | --- |
 | `python3 scripts/setup_software.py --help` | Xem tùy chọn |
 | `python3 scripts/setup_software.py check` | Chỉ đọc: công cụ, Docker daemon, môi trường và Compose config |
-| `python3 scripts/setup_software.py prepare --enable-test-client` | Cài dependency và sinh cấu hình; chưa khởi động container |
+| `python3 scripts/setup_software.py prepare` | Cài dependency và sinh cấu hình; chưa khởi động container |
 | `python3 scripts/setup_software.py up --skip-install --skip-build` | Dùng môi trường/images hiện có đã hợp lệ |
-| `python3 scripts/setup_software.py up --enable-test-client --refresh-demo` | Làm mới demo bất biến rồi chạy stack; giữ secrets và dữ liệu cũ |
+| `python3 scripts/setup_software.py up --refresh-demo` | Làm mới demo bất biến rồi chạy stack; giữ secrets và dữ liệu cũ |
 | `python3 scripts/setup_software.py verify` | Python/API/core tests, Ruff, export contracts, web tests/typecheck/build |
 | `python3 scripts/setup_software.py verify --live` | Thêm DB/broker/auth boundary và real-JWT asynchronous smoke trên stack healthy |
 
@@ -43,33 +49,16 @@ Các chế độ hỗ trợ:
 hiện tại. `check` không sửa file hoặc khởi động container; lỗi Docker có nghĩa
 chưa kiểm chứng runtime, không đồng nghĩa API tests thất bại.
 
-Mở [web](http://localhost:3000), đăng nhập với tài khoản local. Credentials nằm
-trong hai file ignored:
-
-- `infra/local/.generated/accounts.json`: `users[]` có `username`, `password`,
-  `roles`; dùng `alice`/`bob` cho kiểm thử owner, `data-operator` cho Market/ML
-  training và `model-reviewer` cho duyệt/từ chối model.
-- `infra/local/.generated/.env`: `OIDC_TEST_CLIENT_SECRET` và
-  `QUANT_CLIENT_SECRET` cho các request auth bên dưới.
-
-Đọc các file này tại máy, giữ credentials trong kho bí mật hoặc giá trị local
-của Postman. Không đưa nội dung vào commit, log, ảnh chụp hoặc environment export.
-Giữ `secrets.json`, `.env` và volumes đi cùng nhau. Bootstrap giữ secrets cũ;
-thay password trong file không tự đổi password đã cài vào database/identity.
-
-`--enable-test-client` cần được bật **trước lần realm import đầu tiên**. Client
-`portfolio-test` cho password grant chỉ phục vụ disposable local realm.
-Với stack cũ đã import, chạy lại lệnh `up --enable-test-client`: bước upgrade
-bổ sung client thiếu và Portfolio/Market/Quant/ML scopes/audience qua admin API mà không reset
-realm. `portfolio-web` của trình duyệt luôn dùng authorization code + S256
-PKCE; password grant và implicit grant bị tắt.
+Mở [web](http://localhost:3000), tạo tài khoản ở `/register` rồi đăng nhập ở `/login`.
+Tài khoản mới có role `investor`. Tài khoản demo `alice`, `bob`, `data-operator` và
+`model-reviewer` được seed từ `infra/local/.generated/accounts.json`. Giữ mật khẩu,
+signing key và `.env` trong thư mục ignored, cùng volume của demo.
 
 ## 2. Địa chỉ và quyền truy cập
 
 | Thành phần | Local URL |
 | --- | --- |
 | Web/BFF | [localhost:3000](http://localhost:3000) |
-| Keycloak | [localhost:8080](http://localhost:8080) |
 | Portfolio Swagger | [localhost:8001/docs](http://localhost:8001/docs) |
 | Quant Swagger | [localhost:8002/docs](http://localhost:8002/docs) |
 | Market Data Swagger | [localhost:8003/docs](http://localhost:8003/docs) |
@@ -77,13 +66,8 @@ PKCE; password grant và implicit grant bị tắt.
 | OpenAPI JSON | `/openapi.json` trên mỗi API port |
 | Health | `/health/live`, `/health/ready` trên mỗi API port; không cần JWT |
 
-JWT phải có chữ ký hợp lệ, issuer `http://localhost:8080/realms/portfolio`,
-audience đúng service, chưa hết hạn, role và scope phù hợp. Không dùng ID token
-hoặc cookie BFF để gọi Bearer API trực tiếp.
-
-Access token phải có `sub` để owner-scoping hoạt động. Bootstrap/upgrade gắn
-default scope `basic` với Subject mapper cho web, service và test client.
-Realm local cũ cần chạy bước upgrade để bổ sung; lấy token mới sau upgrade.
+JWT phải có chữ ký hợp lệ, issuer `http://auth-api:8000`, audience đúng service,
+`sub` ổn định, thời hạn, role và scope phù hợp. Auth chỉ lắng nghe trong Compose.
 
 | API | Token/quyền |
 | --- | --- |
@@ -105,27 +89,14 @@ Market ingestion job chỉ người tạo được đọc.
 
 ## 3. Nhận JWT và dùng Swagger
 
-Import Postman ở mục 4 là cách thuận tiện để nhận token mà không viết password
-vào lệnh shell. Request token của human user là:
+Smoke test lấy JWT qua helper dùng Compose exec. Để thử Bearer API thủ công
+trên macOS, chép JWT ngắn hạn vào clipboard. Đổi `alice` thành `bob` hoặc
+`data-operator` để kiểm tra quyền theo role.
 
-```text
-POST http://localhost:8080/realms/portfolio/protocol/openid-connect/token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=password
-client_id=portfolio-test
-client_secret=<OIDC_TEST_CLIENT_SECRET từ file ignored .env>
-username=<alice hoặc data-operator>
-password=<password tương ứng từ accounts.json>
-scope=openid portfolio:read portfolio:write market:read market:write quant:publish ml:read ml:train ml:review
+```sh
+PYTHONPATH=scripts python3 -c 'from local_auth import login; print(login("alice"), end="")' | pbcopy
+PYTHONPATH=scripts python3 -c 'from local_auth import service_token; print(service_token("portfolio-service"), end="")' | pbcopy
 ```
-
-Token của `alice` đọc được Market nhưng không được Market write vì thiếu role
-`data-operator`. Lấy token của `data-operator` cho ingestion/snapshot. Token test
-client được upgrade các audiences Portfolio/Market/Quant/ML; quyền human không
-mở các endpoint internal service-to-service.
-Với Quant, dùng `grant_type=client_credentials`, `client_id=portfolio-service`,
-`client_secret=<QUANT_CLIENT_SECRET>`, `scope=quant:resolve`.
 
 Tại `/docs`, nhấn **Authorize**, dán giá trị `access_token` vào Bearer security
 scheme rồi nhấn **Authorize** và **Close**. Chỉ dán token, không thêm tiền tố
@@ -144,16 +115,13 @@ Import hai file:
 - [Collection](postman/portfolio-software.postman_collection.json)
 - [Environment](postman/local.postman_environment.json)
 
-Chọn environment **Portfolio software — local**. Điền các giá trị secret tại
-máy: `test_client_secret`, `alice_password`, `bob_password`,
-`operator_password`; `quant_client_secret` nếu muốn thử Quant. Các giá trị
-secret/token trong file đã lưu đều để trống. Không đồng bộ hoặc export environment
-sau khi điền nếu chưa xóa credentials và tokens.
+Chọn environment **Portfolio software — local**. Điền `access_token` (Alice),
+`bob_token`, `market_token` (data-operator) và `quant_token` (tùy chọn) từ mục 3
+vào giá trị local. Giữ token khỏi log và environment export.
 
 Thứ tự chạy thủ công:
 
-1. Folder **01 Auth**: lấy token Alice, Bob, data-operator. Scripts lưu token vào
-   environment để những request sau dùng lại; không in token ra console.
+1. Folder **00 Health** để kiểm tra readiness.
 2. Folder **02 Portfolio**: tạo danh mục → GET để lấy `ETag` → PATCH với
    `If-Match` → gửi MVO → retry cùng key → đổi nội dung cùng key (409).
    Request đầu tiên lưu `portfolio_id`, `job_id`, `status_url`; key được giữ lại
@@ -168,7 +136,7 @@ Thứ tự chạy thủ công:
    `market_as_of_date` còn trống; sửa các ngày theo dữ liệu thật trong
    demo/provider khi cần. `market_asset_id` mặc định là `DEMO_STOCK`, tách biệt
    với tài sản `AAA` của numerical demo bundle.
-6. Folder **05 Quant** là tùy chọn: lấy service token rồi đọc ready
+6. Folder **05 Quant** là tùy chọn: dùng service token để đọc ready
    inputs của `DEMO`/`MVO`. Human token không thay service token.
 
 Các request có kiểm tra HTTP status, tự lưu ID/ETag và kiểm tra result weights/
@@ -388,7 +356,7 @@ job, recommendation và snapshot sau restart để kiểm tra thủ công.
 | Hiện tượng | Bước kiểm tra |
 | --- | --- |
 | Docker không đáp ứng / build I/O error | Mở Docker Desktop; kiểm tra dung lượng rồi chạy `check` lại |
-| Token endpoint lỗi | Kiểm tra secrets/account local và test client; chạy lại `up --enable-test-client` để upgrade realm cũ |
+| Token endpoint lỗi | Kiểm tra `auth-api`, `auth-migrate` và account seed trong Compose |
 | 401 | Dùng access token mới, issuer/audience đúng service |
 | 403 Market write | Dùng `data-operator` với scope `market:write` |
 | 404 dữ liệu riêng | Kiểm tra đúng owner và ID; cross-owner 404 là hành vi mong đợi |
@@ -438,7 +406,7 @@ with tempfile.TemporaryDirectory(prefix='portfolio-public-build-') as directory:
         '-f', 'infra/local/compose.yaml', 'build',
     ], env=environment, check=True)
 PY
-python3 scripts/setup_software.py up --enable-test-client --skip-install --skip-build
+python3 scripts/setup_software.py up --skip-install --skip-build
 ```
 
 Workaround này dành cho Docker Desktop macOS/context `desktop-linux` đang dùng;
@@ -477,7 +445,7 @@ và X-Service-Authorization của chat-service. Delayed call tới
 `/internal/v1/chat-tools/{tool}` nhận service bearer và các headers
 X-Delegation-Grant/X-Chat-Job/X-Chat-Conversation. Grant mặc định 5 phút, binding
 subject/actor/conversation/job/portfolio/tools; mỗi call kiểm tra account/role
-hiện hành qua read-only Keycloak identity và ownership tại Portfolio.
+hiện hành qua endpoint Auth chỉ đọc trạng thái tài khoản và ownership tại Portfolio.
 Grant chỉ cấp request_allocation cho lượt đã xác nhận. Grant replay không gia hạn;
 resume phải được người dùng cấp lại quyền. `/api/v1/chat/delegations/revoke` thu
 hồi grants của user; BFF gọi khi logout. Grant/token không vào bus, SSE hoặc logs.
@@ -548,6 +516,14 @@ chuỗi số định danh phổ biến. Đây không phải cam kết loại m�
 Không gửi owner/grant/service tokens hoặc provider key trong context/logs/SSE.
 `store=false` không đồng nghĩa Zero Data Retention của provider.
 
+### Chính sách cấu hình dev — 18/11/2026
+
+Checkbox OpenAI và popover dữ liệu đã được bỏ khỏi Chat. Dev bật/tắt qua
+CHAT_LLM_ENABLED, embedding truy vấn qua CHAT_QUERY_EMBEDDINGS_ENABLED (mặc định 0).
+API preferences trả 403 và các trường consent cũ chỉ giữ để đọc receipt lịch sử.
+Xem phần Developer-managed provider policy trong KNOWLEDGE_RAG.md để có lệnh
+Compose đúng với demo 127.0.0.1:3100. Các bước consent bên dưới là mô tả lịch sử.
+
 ### Bật local
 
 Tạo project API key trong API organization đã nhận subscription credits. Lưu
@@ -601,3 +577,189 @@ Live gate cần real-price MVO universe READY và receipt
 thật. Receipt Chat LLM riêng là `.generated/chat-llm-browser-receipt.json`; báo
 cáo/ảnh nằm trong `output/playwright/sanitized/chat-llm-*`, ngoài Git. Xem
 [browser guide](../../apps/web/tests/browser/README.md#chat-llm-paid-gate).
+
+## Knowledge/RAG — 07/11/2026
+
+Use the [Knowledge runbook](KNOWLEDGE_RAG.md) for port 8006, separate
+PostgreSQL/pgvector roles/migrations, corpus CLI, lexical receipts, consent v2 and
+frozen Vietnamese evaluation. Existing Chat OpenAI configuration above does not
+authorize new Knowledge ingestion/query/selection spending. New provider budget
+is zero until a specific user grant; paid dry-run is offline. Do not enable
+Auto Recharge. Release eval and real-provider acceptance remain separate gates.
+
+
+### Refresh dữ liệu và kiểm tra lỗi hết hạn — 18/11/2026
+
+Chạy operator refresh selected-assets từ repo root, tạo snapshot mới và giữ bản
+cũ. Snapshot phải được phát hành qua publication API hoặc publication queue
+trước khi dùng cho yêu cầu mới. Không sửa valid_until của artifact cũ.
+
+```sh
+docker compose -p portfolio-auth-demo --env-file infra/local/.generated/.env -f infra/local/compose.yaml exec -T market-refresh python -m market_service.selected_refresh --directory /datasets/refresh/full-phase1 --seed /datasets/refresh/full-phase1/seed.json
+.venv-software/bin/python scripts/smoke_chat_input_refresh.py --phase fresh --portfolio-id TEST_PORTFOLIO_UUID
+.venv-software/bin/python scripts/smoke_chat_input_refresh.py --verify-receipt
+```
+
+Fresh phase chỉ chạy khi readiness MVO là READY. Khi nguồn thật chưa đủ mới,
+phase stale kiểm nhánh VFF_STALE. Chỉ dùng danh mục kiểm thử do alice sở hữu.
+Script tạo hội thoại và đề xuất mới nếu đủ điều kiện, dừng ở kết quả, không accept.
+Receipt mặc định output/chat-input-refresh/chat-flow-receipt.json. Verify dùng
+đúng receipt sau restart, không gửi luồng mới. Input đã phát hành còn hạn vẫn có
+thể bị VFF_STALE vì buffer 5 phiên; refresh không tự bỏ các ràng buộc đó.
+
+### NAV live v2 — 18/11/2026
+
+User đã duyệt tách policy live. Snapshot selected mới mặc định
+`user-selection-live-nav-v2`: VFF quality PASS, identity và source hash đã kiểm
+tra được dùng sau verification/ingestion thật, không chờ thêm 5 phiên. NAV vẫn
+không vượt phiên hoàn tất mới nhất; tuổi tối đa 7 ngày lịch từ ngày định giá.
+Schema 2 và selected v1 giữ nguyên buffer và kết quả cũ. Cần snapshot/bundle mới;
+không chỉnh manifest/hash/TTL của artifact đã phát hành.
+
+Rebuild `market-migrate portfolio-migrate quant-migrate` để cập nhật ba image.
+Rollout Quant/Portfolio readers và workers trước khi phát hành input mới. Khi
+recreate local API, giữ override đang bật danh mục tùy chọn:
+
+```sh
+docker compose -p portfolio-auth-demo --env-file infra/local/.generated/.env \
+  -f infra/local/compose.yaml \
+  -f infra/local/.generated/user-selection/compose.web3100.yaml \
+  up -d --no-deps --wait --wait-timeout 120 \
+  market-api market-refresh market-consume market-dispatch \
+  quant-api quant-publication quant-consume quant-dispatch \
+  portfolio-api portfolio-consume portfolio-dispatch
+```
+
+Với JWT operator, tạo snapshot qua `POST :8003/api/v1/market/selected-snapshots`
+body `{}` (xác minh lại nguồn đã lưu, không cần crawl lại nếu nguồn còn mới).
+Sau đó `POST :8002/api/v1/market/publications` với Idempotency-Key mới, body
+`{"snapshot_id":"<id>","snapshot_hash":"<content_hash>","universe_id":"VN_USER_SELECTION","max_age_days":7}`.
+Đợi publication SUCCEEDED và kiểm readiness MVO READY, provenance
+`data_policy_id=user-selection-live-nav-v2`, VFF eligible date/age đúng nguồn.
+Model là tùy chọn cho EW/MVO; không giả định BL_ML READY nếu chưa ghim model.
+
+```sh
+.venv-software/bin/python -m pytest tests/software packages/portfolio-core/tests -q
+.venv-software/bin/python scripts/smoke_chat_input_refresh.py --phase fresh \
+  --portfolio-id TEST_PORTFOLIO_UUID --receipt output/live-nav-policy/chat-flow-receipt.json
+# Sau restart API/workers/Web: dùng chính receipt trên, không gửi luồng mới.
+.venv-software/bin/python scripts/smoke_chat_input_refresh.py --verify-receipt \
+  --receipt output/live-nav-policy/chat-flow-receipt.json
+```
+
+Smoke kiểm confirmation, async result, canonical facts/hash, policy và ràng buộc
+tỷ trọng; không accept target. Để không gọi provider, tạm recreate chat-worker
+với `CHAT_LLM_ENABLED=0` cùng overlay Chat đang dùng, rồi khôi phục cấu hình dev
+ban đầu sau test. Đợt kiểm chứng 18/11 dùng cách này, provider_usage rỗng.
+Không cần migration hoặc backfill. Thống kê live v2 dùng đường NAV theo ngày
+định giá đã biết tại thời điểm tính; không chứng nhận historical publication,
+không dùng làm backtest first-seen ở quá khứ hoặc thay thế baseline v1.
+
+### BL_ML: kiểm tra model trước publication
+
+Đọc đủ trang registry `GET :8004/api/v1/ml/models?status=APPROVED&limit=100`
+bằng operator JWT; chỉ model `artifact_ready=true`, schema5 asset ensemble,
+demo=false được dùng cho selected portfolio. Xác minh native hashes/runtime,
+coverage tất cả equity candidate, fit epoch và từng training-prefix hash qua
+production `check_equity_model_inputs`. Không coi APPROVED là đủ điều kiện
+cho mọi snapshot. Epoch bắt buộc được tính từ calendar đã pin và lịch refit
+10 phiên (`selection_ready.fit_index`), không suy từ ngày publication.
+
+Ngày 18/11: decision session17/11 yêu cầu fit_epoch16/11, training price end06/11.
+Registry có đúng3 model APPROVED, chỉ một schema5; model đó fit02/11 với cutoff
+23/10. Native150member hợp lệ nhưng bị MODEL_EPOCH_MISMATCH và training-prefix
+hiện tại khác hash. Hai model schema3/4 không thể thay thế ensemble schema5.
+Không sửa epoch/manifest, lùi decision session hoặc nới gate để dùng lại.
+
+Probe publication thật với approved_model_id hiện có bị worker từ chối
+FAILED/PUBLICATION_INVALID, không tạo bundle mới. Receipt riêng tại
+output/bl-ml-live/publication-receipt.json chỉ chứng minh nhánh từ chối;
+không phải receipt đề xuất BL_ML thành công. Sau restart Quant API/publication,
+verify chính job/hash đã lưu, rồi xác nhận bundle live cũ và MVO vẫn READY.
+
+Khi có model schema5 đã duyệt và tương thích, publish qua API với snapshot ID/
+hash hiện tại, approved_model_id và Idempotency-Key mới. Đợi SUCCEEDED và
+readiness BL_ML READY trước khi gửi Chat intent allocation/strategy BL_ML.
+Giữ bước xem đầu vào/xác nhận; không truyền fallback_strategy EW. Test cần
+chứng minh strategy/requested_strategy vẫn BL_ML, fallback_reason rỗng, model
+manifest và snapshot hash khớp native inference diagnostics, canonical facts/
+weight constraints đúng. Lưu receipt mới rồi restart và đọc lại đúng IDs/hash.
+Script smoke_chat_input_refresh.py hỗ trợ `--strategy BL_ML`, kiểm đúng native
+inference/model/snapshot và từ chối fallback; default MVO giữ tương thích receipt
+cũ. Không gọi endpoint training/review hoặc provider trả phí khi chưa được user
+cho phép. Lượt kiểm tra đầu ngày18/11 bị chặn vì thiếu model; lượt kế tiếp dưới
+đây được user duyệt train/review và đã tạo được đề xuất BL_ML thật.
+
+### Huấn luyện và acceptance v5 epoch16/11 — 18/11/2026
+
+API training nhận `training_cutoff`, không nhận fit_epoch tùy ý. Pipeline suy
+epoch từ lịch refit10phiên của snapshot; epoch16/11 tương ứng cutoff06/11 trong
+calendar hiện tại. Training dùng snapshot v1
+6aa157bf-aa7d-4b71-bd24-d3d0717ccd21/hash
+b058ab86a698027154cd6e62386c81354f4f52e9194dbaf542171b9952e16537.
+Đã đối chiếu nguyên prefix1700giá/30equity, calendar và validity mask khớp chính
+xác snapshot live v2 8c2dc496-7d83-4cb2-bc3f-aee78732ee73. ML worker hiện tại
+đọc được v1; phần train chỉ dùng equity, không cần thay policy NAV hay rebuild.
+Training snapshot và serving snapshot khác ID/hash được ghi trung thực; model
+chỉ được dùng khi mọi training-prefix hash khớp target live.
+
+Operator POST `:8004/api/v1/ml/training-jobs`, Idempotency-Key mới, body:
+
+```json
+{"model_family":"phase1-asset-ensemble-v5","snapshot_id":"6aa157bf-aa7d-4b71-bd24-d3d0717ccd21","snapshot_hash":"b058ab86a698027154cd6e62386c81354f4f52e9194dbaf542171b9952e16537","training_cutoff":"2026-11-06","max_age_days":7}
+```
+
+Đợi job SUCCEEDED và model CANDIDATE. Kiểm schema5/non-demo, epoch/cutoff,
+30equity/150native members, native hashes/load, nguồn code, 5seed/best_iteration,
+purged chronological split và metrics finite. So từng training-prefix hash với
+panel target; không đổi manifest để làm khớp. Lượt này MAE0.0378128444,
+RMSE0.0535328016 cho return5phiên; train label end30/06/2025 trước validation
+start01/07/2025. `point_in_time_certified=false` giữ nguyên, không chứng nhận
+hiệu quả đầu tư hoặc historical publication.
+
+Dùng JWT **model-reviewer** riêng, GET model lấy ETag, rồi POST
+`/api/v1/ml/models/<id>/reviews` body decision APPROVED/reason cụ thể,
+If-Match theo ETag và Idempotency-Key. Đợi APPROVED **và** artifact_ready=true;
+retry cùng review key phải giữ nguyên review ID/version. Quant service resolver
+kiểm lại approved native files và toàn bộ30prefix trước publication.
+
+Model được duyệt: 70716105-ef74-4203-bfa6-9657f756e0b6, approved manifest hash
+d511678a0626d8a749b4e4dbd36cc58114702212fa9ba171d180403ecd1cca89.
+Publish model này với target snapshot live v2 qua publication API như trên.
+Không chấp nhận chỉ artifact_ready hoặc chỉ publication SUCCEEDED làm bằng
+chứng allocation; cần cả readiness và kết quả thực.
+
+```sh
+.venv-software/bin/python scripts/smoke_chat_input_refresh.py --phase fresh \
+  --strategy BL_ML --portfolio-id ISOLATED_TEST_PORTFOLIO_UUID \
+  --receipt output/bl-ml-epoch-20261116/chat-flow-receipt.json
+# Chỉ sau restart thật, dùng chính receipt trên, không gửi luồng thay thế:
+.venv-software/bin/python scripts/smoke_chat_input_refresh.py --verify-receipt \
+  --receipt output/bl-ml-epoch-20261116/chat-flow-receipt.json
+```
+
+Run đã lưu receipt thì dùng verify, không chạy lại/ghi đè. Test tạo proposal
+nhưng không accept target. Provider có thể gọi nếu dev đã bật và có budget
+user duyệt; usage của chính hai Chat jobs nằm trong receipt. Native BL_ML là
+gate riêng với giải thích OpenAI. Evidence training/review/publication/model
+và canonical facts/hash nằm ngoài Git ở output/bl-ml-epoch-20261116.
+
+### Audit point-in-time của receipt v5
+
+Xem [phạm vi và khoảng trống bằng chứng](POINT_IN_TIME_AUDIT.md).
+CLI chỉ đọc original receipt/model/bundle/snapshot, Market owner transaction
+READ ONLY và cached artifacts; không tạo snapshot/train/approval/proposal mới
+hoặc gọi provider. Output audit riêng, không sửa model flag.
+
+```sh
+.venv-software/bin/python scripts/audit_model_point_in_time.py \
+  --receipt output/bl-ml-epoch-20261116/chat-flow-receipt.json \
+  --output output/point-in-time-v5
+.venv-software/bin/python -m pytest tests/software/test_point_in_time_audit.py \
+  tests/software/test_temporal_regressions.py -q
+```
+
+`report.json` tách live integrity và historical evidence; `market-evidence.json.gz`
+lưu rows/revisions/quality refs nén, ngoài Git. Exit0 không phải chứng nhận PIT:
+xem NOT_EVIDENCED, protocol limitations và cờ false. Không backdate first-seen,
+đổi epoch/snapshot/hash để biến kiểm tra thành PASS.

@@ -1,9 +1,10 @@
+import { submitLogin } from './login-form';
 import { test, expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-// Real localhost Identity/BFF/Market/ML/Quant/Portfolio only. No HTTP interception,
+// Real localhost Auth/BFF/Market/ML/Quant/Portfolio only. No HTTP interception,
 // fixture aliases, direct database writes, synthetic prices or model artifacts.
 const root = resolve('../..');
 const generated = resolve(root, 'infra/local/.generated');
@@ -51,21 +52,8 @@ async function authenticate(page: Page, username: 'alice' | 'data-operator' | 'm
   const account = accounts.users.find((item: { username: string }) => item.username === username);
   if (!account?.password) throw new Error('Disposable P1 browser account unavailable');
   await page.goto(destination);
-  await page.getByRole('link', { name: 'Đăng nhập qua Identity', exact: true }).click();
-  await page.waitForURL(url => url.origin === 'http://localhost:8080');
-  // Authorization state and account credentials stay exclusively in memory.
-  const authorization = new URL(page.url());
-  expect(authorization.searchParams.get('client_id')).toBe('portfolio-web');
-  expect(authorization.searchParams.get('response_type')).toBe('code');
-  expect(authorization.searchParams.get('code_challenge_method')).toBe('S256');
-  expect(Boolean(authorization.searchParams.get('code_challenge'))).toBe(true);
-  await page.locator('#username').fill(account.username);
-  await page.locator('#password').fill(account.password);
-  await Promise.all([
-    page.waitForURL(url => url.origin === origin && url.pathname === '/'),
-    page.locator('#kc-login').click(),
-  ]);
-  await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+  await submitLogin(page, account);
   expect((await get(page.context(), '/auth/session')).authenticated).toBe(true);
 }
 
@@ -325,7 +313,7 @@ test.beforeEach(() => {
 test('real P1 provider refresh model review publication and risk reassessment lifecycle', async ({ page, browser }, info) => {
   test.skip(persistence, 'Dedicated receipt mode verifies existing records after actual process restart');
   test.setTimeout(540_000);
-  phase(info, 'p1-operator-pkce');
+  phase(info, 'p1-operator-login');
   await authenticate(page, 'data-operator', '/#market-refresh');
   const assets = ['FPT', 'MWG', 'VCB'];
   const today = new Date().toISOString().slice(0, 10);
@@ -579,7 +567,7 @@ test('same P1 durable model risk and target receipts after process restart', asy
   test.setTimeout(180_000);
   const receipt: Receipt = JSON.parse(await readFile(receiptFile, 'utf8'));
   expect(receipt.schema_version).toBe(1);
-  phase(info, 'p1-restart-operator-pkce');
+  phase(info, 'p1-restart-operator-login');
   await authenticate(page, 'data-operator', '/#market-refresh');
   await verifyOperator(page, receipt);
   await capture(page, 'p1-model-serving-desktop');

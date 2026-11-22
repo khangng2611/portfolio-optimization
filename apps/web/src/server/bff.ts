@@ -1,7 +1,7 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Config } from './config';
 import { EncryptedStore } from './store';
-import type { Flow, IdentityProvider, Tokens } from './oidc';
+import { AuthError, type IdentityProvider, type Registration, type Tokens } from './identity';
 import { injectTraceHeaders, traceProxy } from './tracing';
 import { sanitizeTraceFields, traceViewerBase } from '../lib/job-trace';
 interface Session extends Tokens { csrfToken: string; expiresAt: number }
@@ -44,6 +44,9 @@ const chatRoutes = [
   { path: new RegExp(`^/api/v1/recommendations/${uuid}/explanation$`), template: '/api/v1/recommendations/{recommendation_id}/explanation', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
 ] as const;
 const routes = [
+  { path: /^\/api\/v1\/market\/assets$/, template: '/api/v1/market/assets', methods: ['GET'], query: [], service: 'market', roles: ['investor', 'researcher', 'data-operator', 'model-reviewer', 'system-admin'] },
+  { path: /^\/api\/v1\/assets\/catalog$/, template: '/api/v1/assets/catalog', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/portfolios/${uuid}/asset-selections$`), template: '/api/v1/portfolios/{portfolio_id}/asset-selections', methods: ['GET', 'POST'], query: [], idempotent: true },
   ...chatRoutes,
   ...operatorRoutes,
   ...mlRoutes,
@@ -60,6 +63,7 @@ const routes = [
   { path: new RegExp(`^/api/v1/portfolios/${uuid}$`), template: '/api/v1/portfolios/{portfolio_id}', methods: ['GET', 'PATCH'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/recommendations$`), template: '/api/v1/portfolios/{portfolio_id}/recommendations', methods: ['GET', 'POST'], query: ['limit', 'offset'] },
   { path: new RegExp(`^/api/v1/recommendations/${uuid}$`), template: '/api/v1/recommendations/{recommendation_id}', methods: ['GET'], query: [] },
+  { path: new RegExp(`^/api/v1/recommendations/${uuid}/evidence$`), template: '/api/v1/recommendations/{recommendation_id}/evidence', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/jobs/portfolio/${uuid}$`), template: '/api/v1/jobs/portfolio/{job_id}', methods: ['GET'], query: [] },
 ];
 async function readBounded(request: Request, max: number) {
@@ -75,7 +79,6 @@ async function readBounded(request: Request, max: number) {
 export function createBff(config: Config, store: EncryptedStore, identity: IdentityProvider, fetcher: typeof fetch = fetch) {
   const prefix = config.secureCookies ? '__Host-' : '';
   const sessionName = `${prefix}portfolio_session`;
-  const flowName = `${prefix}portfolio_login`;
   const cookie = (name: string, value: string, seconds: number) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${seconds}${config.secureCookies ? '; Secure' : ''}`;
   function cookieValue(request: Request, name: string) {
     const found = (request.headers.get('cookie') ?? '').split(';').map(part => part.trim()).filter(part => part.startsWith(`${name}=`));
@@ -106,12 +109,15 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
           if (!latest || latest.expiresAt <= Date.now()) throw new HttpError(401, 'Session expired');
           if (latest.accessExpiresAt > Date.now() + 30_000) return latest;
           let tokens: Tokens;
-          try { tokens = await identity.refresh(latest.refreshToken, latest.user.sub); }
-          catch { await store.del(`session:${id}`); throw new HttpError(401, 'Please sign in again'); }
+          try { tokens = await identity.refresh(latest.sessionId, latest.refreshToken, latest.user.sub); }
+          catch (error) {
+            if (!(error instanceof AuthError) || error.status !== 401) throw error;
+            await store.del(`session:${id}`); throw new HttpError(401, 'Please sign in again');
+          }
           const next: Session = { ...latest, ...tokens };
           const remaining = Math.floor((latest.expiresAt - Date.now()) / 1000);
           if (remaining <= 0 || !await store.saveRefreshed(id, next, remaining, owner)) {
-            await identity.revoke(tokens.refreshToken).catch(() => {});
+            await identity.revoke(tokens.sessionId).catch(() => {});
             throw new HttpError(401, 'Session expired');
           }
           return next;
@@ -127,7 +133,12 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
   function guarded(handler: (request: Request) => Promise<Response>) {
     return async (request: Request) => {
       try { return await handler(request); }
-      catch (error) { return error instanceof HttpError ? json({ error: error.message }, error.status) : json({ error: 'Authentication service unavailable' }, 503); }
+      catch (error) {
+        if (error instanceof HttpError || (error instanceof AuthError && [401, 409, 422].includes(error.status))) {
+          return json({ error: error.message }, error.status);
+        }
+        return json({ error: 'Dịch vụ đăng nhập chưa sẵn sàng.' }, 503);
+      }
     };
   }
   function traced(handler: (request: Request) => Promise<Response>) {
@@ -136,35 +147,49 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       return route ? traceProxy(request, route.template, () => handler(request)) : handler(request);
     };
   }
+  async function authBody(request: Request, action: 'register' | 'login') {
+    if (request.headers.get('origin') !== config.origin) throw new HttpError(403, 'Origin validation failed');
+    if (request.headers.get('content-type')?.split(';')[0] !== 'application/json') throw new HttpError(415, 'JSON required');
+    const raw = await readBounded(request, 4096);
+    let body: unknown;
+    try { body = JSON.parse(raw); } catch { throw new HttpError(422, 'Thông tin tài khoản không hợp lệ.'); }
+    const exceeded = () => new HttpError(429, 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.');
+    if (await store.increment('auth-attempt:' + action, 900) > 120) throw exceeded();
+    if (!body || typeof body !== 'object' || !('username' in body) || typeof body.username !== 'string') {
+      throw new HttpError(422, 'Thông tin tài khoản không hợp lệ.');
+    }
+    const key = createHash('sha256').update(body.username.trim().toLowerCase()).digest('hex');
+    if (await store.increment('auth-attempt:' + action + ':' + key, 900) > 10) throw exceeded();
+    return body as Registration;
+  }
+
   return {
-    login: guarded(async () => {
-      const id = opaque();
-      const flow: Flow = { state: opaque(), nonce: opaque(), verifier: opaque(), expiresAt: Date.now() + 300_000 };
-      const url = await identity.authorize(flow);
-      await store.put(`flow:${id}`, flow, 300);
-      return new Response(null, { status: 302, headers: { location: url.href, 'set-cookie': cookie(flowName, id, 300), 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' } });
+    register: guarded(async request => {
+      await identity.register(await authBody(request, 'register'));
+      return json({}, 201);
     }),
-    callback: guarded(async request => {
-      const id = cookieValue(request, flowName);
-      const flow = id ? await store.take<Flow>(`flow:${id}`) : null;
-      const received = new URL(request.url);
-      const state = received.searchParams.get('state') ?? '';
-      if (!flow || flow.expiresAt <= Date.now() || !equal(state, flow.state) || received.searchParams.getAll('state').length !== 1) throw new HttpError(400, 'Invalid or expired login transaction');
-      // Never derive redirect_uri from an untrusted Host/X-Forwarded-Host header.
-      const callback = new URL('/auth/callback', config.origin);
-      callback.search = received.search;
-      let tokens: Tokens;
-      try { tokens = await identity.exchange(callback, flow); }
-      catch { throw new HttpError(400, 'Login could not be verified'); }
-      const old = cookieValue(request, sessionName);
-      if (old) await store.del(`session:${old}`);
+    login: guarded(async request => {
+      const body = await authBody(request, 'login');
+      const tokens = await identity.login(body);
       const next = opaque();
-      const session: Session = { ...tokens, csrfToken: opaque(), expiresAt: Date.now() + config.sessionSeconds * 1000 };
-      await store.put(`session:${next}`, session, config.sessionSeconds);
-      const headers = new Headers({ location: config.origin + '/', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
-      headers.append('set-cookie', cookie(flowName, '', 0));
-      headers.append('set-cookie', cookie(sessionName, next, config.sessionSeconds));
-      return new Response(null, { status: 303, headers });
+      const expiresAt = Math.min(tokens.sessionExpiresAt, Date.now() + config.sessionSeconds * 1000);
+      const seconds = Math.max(1, Math.floor((expiresAt - Date.now()) / 1000));
+      try {
+        const old = cookieValue(request, sessionName);
+        if (old) {
+          const previous = await store.get<Session>('session:' + old);
+          await store.del('session:' + old);
+          if (previous?.sessionId) await identity.revoke(previous.sessionId).catch(() => {});
+        }
+        const session: Session = { ...tokens, csrfToken: opaque(), expiresAt };
+        await store.put('session:' + next, session, seconds);
+      } catch (error) {
+        await identity.revoke(tokens.sessionId).catch(() => {});
+        throw error;
+      }
+      return new Response(null, {
+        status: 204, headers: { 'set-cookie': cookie(sessionName, next, seconds), 'cache-control': 'no-store' },
+      });
     }),
     session: guarded(async request => {
       const { id, session } = await load(request);
@@ -184,10 +209,9 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       }
       await store.del(`session:${id}`);
       let providerRevoked = true;
-      try { await identity.revoke(session.refreshToken); } catch { providerRevoked = false; }
+      try { await identity.revoke(session.sessionId); } catch { providerRevoked = false; }
       const response = json({ loggedOut: true, providerRevoked, delegationRevoked });
       response.headers.append('set-cookie', cookie(sessionName, '', 0));
-      response.headers.append('set-cookie', cookie(flowName, '', 0));
       return response;
     }),
     proxy: traced(guarded(async request => {
@@ -228,6 +252,7 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
         try { JSON.parse(body); } catch { throw new HttpError(400, 'Invalid JSON'); }
         headers.set('content-type', 'application/json');
         const precondition = request.headers.get('if-match');
+        if (url.pathname.endsWith('/asset-selections') && !precondition) throw new HttpError(428, 'If-Match required');
         if (precondition) headers.set('if-match', precondition);
         const idempotency = request.headers.get('idempotency-key');
         if ((('idempotent' in route && route.idempotent) || url.pathname.endsWith('/recommendations') || ['/api/v1/market/ingestions', '/api/v1/market/datasets', '/api/v1/market/publications'].includes(url.pathname)) && !idempotency) throw new HttpError(400, 'Idempotency-Key required');

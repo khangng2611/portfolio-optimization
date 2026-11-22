@@ -14,15 +14,8 @@ from test_chat_openai import response
 chat = chat_fixture
 
 
-def consent(c, cid, value=True, user="alice"):
-    return c.post(
-        f"/api/v1/conversations/{cid}/preferences",
-        headers=headers(user),
-        json={"llm_consent": value},
-    )
-
-
 def configured(monkeypatch, handler):
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
     monkeypatch.setenv("CHAT_LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "private-test-key")
     original = httpx.AsyncClient
@@ -37,16 +30,21 @@ def last(c, cid):
     return c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()[-1]
 
 
-def test_consent_defaults_off_and_is_owner_scoped(chat):
+def test_historical_consent_fields_remain_readable_and_not_editable(chat):
     c, s, t = chat
     cid = conversation(c, t.summary["id"])
     assert (
         c.get(f"/api/v1/conversations/{cid}", headers=headers()).json()["llm_consent"]
         is False
     )
-    assert consent(c, cid, user="bob").status_code == 404
-    assert consent(c, cid).json()["llm_consent"] is True
-    assert consent(c, cid, False).json()["llm_consent"] is False
+    path = f"/api/v1/conversations/{cid}/preferences"
+    assert (
+        c.post(path, headers=headers("bob"), json={"llm_consent": True}).status_code
+        == 404
+    )
+    assert (
+        c.post(path, headers=headers(), json={"llm_consent": True}).status_code == 403
+    )
 
 
 def test_llm_allocation_still_requires_structured_confirmation(chat, monkeypatch):
@@ -64,7 +62,6 @@ def test_llm_allocation_still_requires_structured_confirmation(chat, monkeypatch
 
     configured(monkeypatch, serve)
     cid = conversation(c, t.summary["id"])
-    assert consent(c, cid).status_code == 200
     receipt = send(
         c,
         cid,
@@ -108,7 +105,6 @@ def test_strategy_followup_uses_same_conversation_context(chat, monkeypatch):
     send(c, other, content="private other conversation")
     run(s, t)
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid, content="Giúp tôi chia vốn", intent=None, strategy=None)
     run(s, t)
     assert last(c, cid)["structured"]["fields"] == ["strategy"]
@@ -120,15 +116,14 @@ def test_strategy_followup_uses_same_conversation_context(chat, monkeypatch):
     assert not t.allocations
 
 
-def test_revoked_consent_and_explicit_intents_do_not_spend(chat, monkeypatch):
+def test_dev_disabled_and_explicit_intents_do_not_spend(chat, monkeypatch):
     c, s, t = chat
     configured(monkeypatch, lambda _: pytest.fail("no provider call allowed"))
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid)
     run(s, t)  # explicit UI intent is authoritative, no interpretation
     send(c, cid, content="Do something", intent=None, strategy=None)
-    consent(c, cid, False)
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "0")
     run(s, t)
     assert last(c, cid)["structured"]["type"] == "help"
 
@@ -141,7 +136,6 @@ def test_paid_plan_replay_uses_saved_output_and_global_budget_survives_restart(
     c, s, t = chat
     monkeypatch.setenv("CHAT_LLM_DAILY_CALL_LIMIT", "1")
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid)
     job = Queue(s).claim()
     ledger = InvocationLedger(s)
@@ -156,7 +150,6 @@ def test_paid_plan_replay_uses_saved_output_and_global_budget_survives_restart(
     assert InvocationLedger(s).invoke(job, "intent", call)[0] == result
     assert len(calls) == 1
     cid2 = conversation(c, t.summary["id"])
-    consent(c, cid2)
     send(c, cid2)
     second = Queue(s).claim()
     assert (
@@ -170,7 +163,6 @@ def test_uncertain_paid_call_is_not_repeated_after_crash(chat):
 
     c, s, t = chat
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid)
     q = Queue(s)
     old = q.claim()
@@ -202,7 +194,6 @@ def test_concurrent_workers_respect_global_daily_cap(chat, monkeypatch):
     monkeypatch.setenv("CHAT_LLM_DAILY_CALL_LIMIT", "1")
     for _ in range(4):
         cid = conversation(c, t.summary["id"])
-        consent(c, cid)
         send(c, cid)
     jobs = [Queue(s).claim() for _ in range(4)]
     calls = []
@@ -237,7 +228,6 @@ def test_invalid_model_confirmation_falls_back_without_mutation(chat, monkeypatc
         ),
     )
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid, content="Đồng ý làm hết", intent=None, strategy=None)
     run(s, t)
     assert not t.allocations and last(c, cid)["structured"]["type"] == "help"
@@ -255,7 +245,6 @@ def test_model_cannot_pick_strategy_without_user_evidence(chat, monkeypatch):
         ),
     )
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid, content="Giúp tôi chia vốn", intent=None, strategy=None)
     run(s, t)
     assert last(c, cid)["structured"]["fields"] == ["strategy"]
@@ -274,7 +263,6 @@ def test_strategy_extraction_accepts_ui_bl_plus_ml_spelling(chat, monkeypatch):
         ),
     )
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     send(c, cid, content="BL + ML nhé", intent=None, strategy=None)
     run(s, t)
     assert last(c, cid)["structured"]["type"] == "confirmation"
@@ -289,7 +277,6 @@ def test_job_reports_all_durable_provider_usage_including_interpretation(
 
     c, s, t = chat
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     receipt = send(c, cid).json()
     job = Queue(s).claim()
     ledger = InvocationLedger(s)
@@ -324,7 +311,6 @@ def test_revoked_owner_grant_blocks_paid_interpretation(chat, monkeypatch):
 
     configured(monkeypatch, serve)
     cid = conversation(c, t.summary["id"])
-    consent(c, cid)
     receipt = send(
         c, cid, content="Nhắc lại mức chịu rủi ro của tôi", intent=None, strategy=None
     ).json()

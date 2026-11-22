@@ -1,0 +1,177 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "asset_id": {
+      "pattern": "^[A-Z0-9_-]{1,64}$",
+      "title": "Asset Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "stock",
+        "gold",
+        "fund"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "display_name": {
+      "title": "Display Name",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "unit": {
+      "enum": [
+        "VND/share",
+        "VND/tael",
+        "VND/unit"
+      ],
+      "title": "Unit",
+      "type": "string"
+    },
+    "currency": {
+      "const": "VND",
+      "default": "VND",
+      "title": "Currency",
+      "type": "string"
+    },
+    "catalog_version": {
+      "const": "supported-assets-v1",
+      "default": "supported-assets-v1",
+      "title": "Catalog Version",
+      "type": "string"
+    },
+    "data_status": {
+      "default": "UNKNOWN",
+      "enum": [
+        "UNKNOWN",
+        "MISSING",
+        "QUARANTINED",
+        "FRESH",
+        "STALE"
+      ],
+      "title": "Data Status",
+      "type": "string"
+    },
+    "latest_observation_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latest Observation Date"
+    },
+    "eligible_observation_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Eligible Observation Date"
+    },
+    "available_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Available At"
+    },
+    "age_days": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Age Days"
+    },
+    "checked_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Checked At"
+    },
+    "ml_status": {
+      "default": "UNKNOWN",
+      "enum": [
+        "UNKNOWN",
+        "NOT_COVERED",
+        "REVIEW_PENDING",
+        "COVERED"
+      ],
+      "title": "Ml Status",
+      "type": "string"
+    },
+    "approved_model_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved Model Id"
+    },
+    "model_manifest_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Manifest Hash"
+    }
+  },
+  "required": [
+    "asset_id",
+    "kind",
+    "display_name",
+    "unit"
+  ],
+  "title": "AssetCatalogItem",
+  "type": "object"
+}

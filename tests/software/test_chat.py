@@ -60,6 +60,17 @@ class Tools:
             from chat_service.tools import ToolError
 
             raise ToolError("AUTHORIZATION_REQUIRED", permanent=True)
+        if tool == "retrieve_knowledge":
+            return {
+                "corpus_id": None,
+                "corpus_version": None,
+                "corpus_hash": None,
+                "index_version": "openai-small-1536-v1",
+                "retrieval_version": "knowledge-retrieval-v1",
+                "mode": "LEXICAL",
+                "reason": "NO_EVIDENCE",
+                "passages": [],
+            }
         if tool == "get_profile":
             return {"portfolio": self.summary}
         if tool == "get_portfolio_summary":
@@ -71,6 +82,8 @@ class Tools:
             return {"job_id": self.allocations[job.id]}
         if tool == "get_allocation_job":
             return {"status": "SUCCEEDED", "recommendation_id": args["resource_id"]}
+        if tool == "get_recommendation_evidence":
+            return {}  # Legacy fixture has no retained Quant evidence.
         if tool == "get_recommendation":
             return {
                 "id": args["resource_id"],
@@ -89,7 +102,10 @@ class Tools:
 
 
 @pytest.fixture
-def chat(tmp_path):
+def chat(tmp_path, monkeypatch):
+    # Tests which inject a provider explicitly enable it as developer config.
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
+    monkeypatch.setenv("CHAT_QUERY_EMBEDDINGS_ENABLED", "0")
     sessions = sessionmaker(
         create_engine(
             f"sqlite:///{tmp_path}/chat.db", connect_args={"check_same_thread": False}
@@ -99,7 +115,7 @@ def chat(tmp_path):
     Base.metadata.create_all(sessions.kw["bind"])
     tools = Tools()
     app = create_app(
-        sessions=sessions, verifier=Verifier(), tools=tools, stream_seconds=0.05
+        sessions=sessions, verifier=Verifier(), tools=tools, stream_seconds=1
     )
     with TestClient(app) as c:
         yield c, sessions, tools
@@ -209,6 +225,23 @@ def test_no_allocation_until_explicit_confirmation_and_canonical_result(chat):
         .headers["content-type"]
         .startswith("text/event-stream")
     )
+
+
+def test_chat_creates_system_confirmation_without_client_strategy(chat, monkeypatch):
+    monkeypatch.setenv('SYSTEM_HYBRID_ENABLED', 'true')
+    c, s, tools = chat
+    cid = conversation(c, tools.summary['id'])
+    assert send(c, cid, strategy='EW').status_code == 422
+    key = str(uuid4())
+    path = f'/api/v1/conversations/{cid}/messages'
+    received = c.post(path, headers=headers(key=key), json={
+        'client_message_id': key, 'intent': 'allocation', 'content': 'Tạo đề xuất',
+    })
+    assert received.status_code == 202
+    assert run(s, tools)
+    card = c.get(path, headers=headers()).json()[-1]['structured']
+    assert card['type'] == 'confirmation' and card['input']['strategy'] == 'HYBRID'
+    assert not tools.allocations
 
 
 def test_stale_confirmation_and_missing_input_do_not_mutate(chat):

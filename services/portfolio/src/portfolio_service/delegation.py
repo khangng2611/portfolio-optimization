@@ -18,6 +18,7 @@ Tool = Literal[
     "request_allocation",
     "get_recommendation",
     "get_allocation_job",
+    "get_recommendation_evidence",
 ]
 
 
@@ -26,7 +27,7 @@ class GrantRequest(StrictModel):
     job_id: UUID
     authorization_id: UUID | None = None
     portfolio_id: UUID | None = None
-    tools: list[Tool] = Field(min_length=1, max_length=5)
+    tools: list[Tool] = Field(min_length=1, max_length=6)
 
 
 class ToolArguments(StrictModel):
@@ -187,17 +188,16 @@ def install(
                 if (
                     body.expected_version is None
                     or not body.expected_policy_version
-                    or not body.strategy
                 ):
                     raise HTTPException(
-                        422, "Cần phiên bản, policy và chiến lược đã xác nhận."
+                        422, "Cần phiên bản và hồ sơ đã xác nhận."
                     )
                 # The owner use case resolves durable idempotency before checking
                 # current versions. A prior committed request remains reconcilable
                 # after portfolio edits; a new request checks pins under its lock.
                 return recommend(
                     UUID(p.id),
-                    recommendation_type(strategy=body.strategy),
+                    recommendation_type(strategy=body.strategy) if body.strategy else recommendation_type(mode="system"),
                     user_id=user.id,
                     idempotency_key="chat-" + g.chat_job_id,
                     expected_chat_version=body.expected_version,
@@ -212,7 +212,7 @@ def install(
             )
             r = (
                 s.get(Recommendation, str(body.resource_id))
-                if tool == "get_recommendation"
+                if tool in ("get_recommendation", "get_recommendation_evidence")
                 else None
             )
             resource = job or r
@@ -229,4 +229,10 @@ def install(
                     "recommendation_id": job.recommendation_id,
                     "error": job.error,
                 }
-            return recommendation_json(r, s.get(Job, r.job_id))
+            resource_job = s.get(Job, r.job_id)
+            facts = recommendation_json(r, resource_job)
+            if tool == "get_recommendation_evidence":
+                from .explanation import recommendation_evidence
+
+                return recommendation_evidence(r, resource_job, facts)
+            return facts

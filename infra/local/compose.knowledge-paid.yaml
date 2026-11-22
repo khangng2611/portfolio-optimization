@@ -1,0 +1,16 @@
+# Explicit new budget AND consent v2 are required. Never apply for lexical acceptance.
+services:
+  knowledge-worker:
+    env_file: [./knowledge-openai.env]
+    environment:
+      KNOWLEDGE_PAID_APPROVAL: ${KNOWLEDGE_PAID_APPROVAL:?New explicit approval ID required}
+      KNOWLEDGE_BUDGET_USD: ${KNOWLEDGE_BUDGET_USD:?New total USD cap required}
+  chat-worker:
+    env_file: [./knowledge-openai.env]
+    environment:
+      CHAT_LLM_ENABLED: ${CHAT_LLM_ENABLED:-1}
+      CHAT_QUERY_EMBEDDINGS_ENABLED: ${CHAT_QUERY_EMBEDDINGS_ENABLED:-0}
+      CHAT_LLM_PROVIDER: openai
+      CHAT_LLM_DAILY_CALL_LIMIT: "20"
+      KNOWLEDGE_PAID_APPROVAL: ${KNOWLEDGE_PAID_APPROVAL:?New explicit approval ID required}
+      KNOWLEDGE_BUDGET_USD: ${KNOWLEDGE_BUDGET_USD:?New total USD cap required}

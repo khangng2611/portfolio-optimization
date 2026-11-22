@@ -1,3 +1,5 @@
+import { isSelectionReadiness, type SelectionReadiness } from './selection-types';
+import type { Phase1Full } from './p1-types';
 export type WorkspaceView = 'overview' | 'portfolios' | 'create' | 'proposal' | 'profile' | 'history' | 'edit' | 'compare' | 'market' | 'market-ingestion' | 'market-quality' | 'market-snapshots' | 'market-publications' | 'market-refresh' | 'models' | 'model-training' | 'model-review' | 'risk-assessment' | 'chat';
 export type WorkspaceRoute = { view: WorkspaceView; focus?: 'history'; conversationId?: string; portfolioId?: string; proposalId?: string; compareIds?: [string, string]; invalid?: boolean; jobId?: string; snapshotId?: string; modelId?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,14 +41,21 @@ export function proposalCompletionRoute(current: WorkspaceRoute, portfolioId: st
     ? { view: 'proposal', portfolioId, proposalId } : null;
 }
 export type StrategyReadiness = { strategy: string; available: boolean; reason_code: string };
-export type Readiness = { universe_id: string; asset_ids: string[]; as_of_date: string | null; valid_until: string | null; demo: boolean; data_origin: string; status: string; reason_code: string; strategies: StrategyReadiness[]; next_action: string; checked_at: string; bundle_id?: string | null; bundle_hash?: string | null; snapshot_id?: string | null; approved_model_id?: string | null; model_manifest_hash?: string | null };
-export function readinessAllows(value: Pick<Readiness, 'status' | 'strategies'> | null, strategy: string, fallback: boolean): boolean {
+export type LegacyReadiness = { provenance?: { phase1_full?: Phase1Full } | null; universe_id: string; asset_ids: string[]; as_of_date: string | null; valid_until: string | null; demo: boolean; data_origin: string; status: string; reason_code: string; strategies: StrategyReadiness[]; next_action: string; checked_at: string; bundle_id?: string | null; bundle_hash?: string | null; snapshot_id?: string | null; approved_model_id?: string | null; model_manifest_hash?: string | null };
+export type Readiness = LegacyReadiness | SelectionReadiness;
+export function readinessAllows(value: Readiness | Pick<LegacyReadiness, 'status' | 'strategies'> | null, strategy: string, fallback: boolean): boolean {
+  if (isSelectionReadiness(value)) {
+    if (!value.selection_valid_until || Date.parse(value.selection_valid_until) <= Date.now()) return false;
+    const current = value.strategies.find(item => item.strategy === strategy);
+    if (current?.can_submit) return true;
+    return strategy === 'BL_ML' && fallback && !!current && ['MODEL_UNAVAILABLE', 'MODEL_REVIEW_PENDING', 'MODEL_COVERAGE_MISSING', 'MODEL_EPOCH_MISMATCH', 'NO_VALID_ML_VIEWS'].includes(current.reason_code) && value.strategies.some(item => item.strategy === 'EW' && item.can_submit);
+  }
   if (!value || value.status !== 'READY') return false;
   const current = value.strategies.find(s => s.strategy === strategy);
   if (current?.available) return true;
   return strategy === 'BL_ML' && fallback && current?.reason_code === 'MODEL_UNAVAILABLE' && value.strategies.some(s => s.strategy === 'EW' && s.available);
 }
-export function modelServingReady(value: Pick<Readiness, 'status' | 'strategies' | 'valid_until'>, now: number): boolean {
+export function modelServingReady(value: Pick<LegacyReadiness, 'status' | 'strategies' | 'valid_until'>, now: number): boolean {
   return !!value.valid_until && Date.parse(value.valid_until) > now && readinessAllows(value, 'BL_ML', false);
 }
 type ComparisonPins = { data_snapshot_id?: string; bundle_hash?: string; policy_version_id?: string; portfolio_version?: number; capital_vnd: string; core_version?: string; as_of_date?: string; model_bundle_id?: string | null };
@@ -54,3 +63,26 @@ export function comparisonDifferences(a: ComparisonPins, b: ComparisonPins): str
   return ([['data_snapshot_id', 'Snapshot dữ liệu'], ['bundle_hash', 'Bộ input'], ['as_of_date', 'Ngày dữ liệu'], ['policy_version_id', 'Policy'], ['portfolio_version', 'Phiên bản danh mục'], ['capital_vnd', 'Vốn kế hoạch'], ['core_version', 'Core'], ['model_bundle_id', 'Model']] as const)
     .filter(([key]) => a[key] !== b[key]).map(([, label]) => label);
 }
+
+export const readinessReason: Record<string, string> = {
+  ASSET_SELECTION_REQUIRED: 'Tạo danh mục có rổ tài sản được chọn để nhận đề xuất hệ thống. Bạn vẫn có thể mở lịch sử danh mục này.',
+  INSUFFICIENT_ASSETS: 'Cần ít nhất 2 tài sản để tính phân bổ; bạn vẫn có thể lưu lựa chọn.',
+  RISK_PROFILE_REQUIRED: 'Cần xác nhận hồ sơ rủi ro của danh mục trước khi tính.',
+  DEFENSIVE_ASSET_REQUIRED: 'Policy custom mixed cần VFF trong lựa chọn để đủ nhóm phòng thủ. Hệ thống không tự thêm mã.',
+  CONSTRAINTS_INFEASIBLE: 'Lựa chọn chưa đủ sức chứa để thỏa giới hạn vị thế và nhóm phòng thủ.',
+  ASSET_DATA_MISSING: 'Một tài sản đã chọn còn thiếu dữ liệu; cần cập nhật nguồn.',
+  ASSET_DATA_STALE: 'Observation đủ điều kiện của tài sản đã chọn đã quá 7 ngày.',
+  HISTORY_INSUFFICIENT: 'Lịch sử của tài sản đã chọn chưa đủ để tính toán.',
+  MODEL_COVERAGE_MISSING: 'Model đã duyệt chưa phủ đủ các cổ phiếu đã chọn.',
+  MODEL_EPOCH_MISMATCH: 'Model chưa khớp kỳ fit hiện tại.',
+  NO_VALID_ML_VIEWS: 'Chưa có view ML hợp lệ cho lựa chọn này.',
+
+  VFF_STALE: 'NAV VFF đủ điều kiện đã quá 7 ngày; cần dữ liệu khả dụng mới.',
+  GOLD_STALE: 'Giá GOLD đủ điều kiện đã quá 7 ngày; cần dữ liệu khả dụng mới.',
+  MODEL_REVIEW_PENDING: 'Model cho kỳ fit hiện tại đang chờ phê duyệt.',
+  MODEL_UNAVAILABLE: 'Chưa có mô hình đã duyệt phù hợp với dữ liệu hiện tại.',
+  INPUT_EXPIRED: 'Dữ liệu đã hết hạn. Cần làm mới trước khi tính đề xuất.',
+  INPUT_UNAVAILABLE: 'Dữ liệu hoặc mô hình chưa sẵn sàng để tính đề xuất.',
+  INPUT_INVALID: 'Dữ liệu hoặc mô hình chưa qua kiểm tra tính toàn vẹn.',
+  SELECTION_MISMATCH: 'Selection K5 và model chưa khớp kỳ phục vụ; cần publication tương thích.',
+};

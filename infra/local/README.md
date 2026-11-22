@@ -1,5 +1,12 @@
 # Local software stack
 
+Developer policy now controls provider access. The Chat UI has no provider
+checkbox or data popover. CHAT_LLM_ENABLED=1 enables outbound Chat calls when
+provider/key/budget are configured. CHAT_QUERY_EMBEDDINGS_ENABLED defaults to 0.
+Historical consent fields remain readable and cannot grant provider access.
+See the current developer policy in docs/software/KNOWLEDGE_RAG.md. Earlier
+consent notes below describe the historical behavior.
+
 Chat LLM is optional: apply `compose.chat-llm.yaml` with the base stack and the
 tracing overlay already in use. Only `chat-worker` reads the ignored
 `.generated/chat-openai.env` secret file. Conversations default to no outbound
@@ -20,7 +27,7 @@ From the repository root, use the setup entry point for either a new or existing
 local stack:
 
 ```sh
-python3 scripts/setup_software.py up --enable-test-client
+python3 scripts/setup_software.py up
 ```
 
 It prepares the isolated software environment, generates local config, builds
@@ -37,20 +44,14 @@ into logs, screenshots or commits. The bootstrap preserves existing secrets.
 `secrets.json` is the source of truth for generated credentials; `.env` is derived
 from it. Keep both with the corresponding Docker volumes.
 
-`--enable-test-client` is optional and creates the client on the first realm
-import, or through the additive upgrade below, to use real-JWT integration tests.
-It creates the confidential
-`portfolio-test` client with a password grant only in the disposable local realm.
-Its secret is `OIDC_TEST_CLIENT_SECRET` in the ignored `.env`. The normal
-`portfolio-web` client always disables password and implicit grants and requires
-S256 PKCE for the authorization code flow. Existing realms are never overwritten
-by a later import. On an existing stack, run the upgrade command below after
-enabling the flag; bootstrap alone changes only generated configuration.
+The demo runs as Compose project `portfolio-auth-demo`. If the old project
+`portfolio-software` still holds the localhost ports, stop its containers and
+keep its volumes. Register at `/register` and sign in separately at `/login`.
+Auth has no published host port.
 
 | Component | Local address |
 | --- | --- |
 | Browser BFF | <http://localhost:3000> |
-| Keycloak | <http://localhost:8080> |
 | Portfolio API | <http://localhost:8001> |
 | Quant API | <http://localhost:8002> |
 | Market Data API / Swagger | <http://localhost:8003> / <http://localhost:8003/docs> |
@@ -61,28 +62,20 @@ enabling the flag; bootstrap alone changes only generated configuration.
 | Redis | `localhost:6380` |
 | Jaeger UI (optional tracing overlay) | <http://localhost:16686> |
 
-The Keycloak admin username is `local-admin`; RabbitMQ and PostgreSQL bootstrap
-admin usernames are `local_admin`. Admin passwords are in the ignored `.env`.
-Application containers receive only their own runtime database credentials.
-Each database has a separate non-login owner, a migrator allowed to assume that
-owner, and a runtime role with DML and sequence use only. `PUBLIC` database and
-schema privileges are revoked. There are no cross-database application grants.
-Keycloak's one-shot `identity-migrate` service imports the realm and migrates its
-schema; normal Keycloak startup validates it with a restricted runtime role.
-Alembic migrations for Portfolio, Quant, Market, ML and Chat run in separate init containers.
+RabbitMQ and PostgreSQL use the bootstrap admin `local_admin`. Passwords are in
+the ignored `.env`. Each DB has a non-login owner, migrator and runtime role.
+`auth-migrate` applies Alembic migrations to `auth_db` and seeds demo accounts.
+Keep the private `.generated/auth-signing-key.b64` with the demo configuration.
+
 Market owns `market_db`, its revisions, jobs and immutable snapshots. ML Platform
 owns `ml_db`, training jobs, candidate registry and immutable review decisions.
 `ml-migrate`, `ml-api` and `ml-worker` have separate migration/runtime duties.
 Chat owns `chat_db`: `chat-migrate` uses its migrator, while `chat-api` and
 `chat-worker` receive only Chat runtime credentials. Its durable leased SQL queue
 is independent of the existing Portfolio allocation outbox/RabbitMQ flow.
-Chat API and worker use `chat-service` client credentials with only
-`chat:delegate market:chat:read` and Portfolio/Market audiences; no human role is
-assigned. Portfolio alone receives `OIDC_ACCOUNT_READER_SECRET` from the generated
-`PORTFOLIO_ACCOUNT_READER_SECRET`. The corresponding `portfolio-account-reader`
-service account has only the Keycloak `realm-management` role `view-users`, for
-fresh enabled-account and effective realm-role checks at tool invocation. It has
-no user mutation or realm administration role.
+Chat uses a dedicated credential for Portfolio delegation, Market reads and
+Knowledge retrieval. Portfolio uses a separate read-only Auth credential to
+check whether the account is still active when a delegated tool runs.
 
 RabbitMQ's `portfolio` vhost has predeclared direct exchanges
 `portfolio.commands`, `portfolio.events`, `market.commands` and `portfolio.dead`.
@@ -110,19 +103,16 @@ unchanged. Both adapters reread catalogs for each request, so a catalog refresh
 needs no process restart. Market jobs record the accepted dataset hash and reject
 changed registrations rather than silently ingesting different input.
 
-The test and normal BFF clients support the configured Portfolio, Market, Quant
-ML and Chat audiences/scopes. The BFF requests `market:read market:write quant:publish
-ml:read ml:train ml:review chat:read chat:write` alongside Portfolio scopes. Each service still checks
-its required role and scope: an investor cannot refresh data, train, approve or
-publish merely because a scope is present. Reauthenticate after an additive
-realm upgrade to receive the current claims.
+Auth derives human scopes from the account role and assigns service tokens
+only the audiences and scopes configured for each caller. Backends check those
+claims and enforce record ownership.
 
 ## Optional local tracing
 
 Enable the OpenTelemetry/Jaeger overlay explicitly:
 
 ```sh
-python3 scripts/setup_software.py up --enable-test-client --tracing
+python3 scripts/setup_software.py up --tracing
 python3 scripts/setup_software.py check --tracing
 python3 scripts/setup_software.py verify --live --tracing
 ```
@@ -141,79 +131,20 @@ See [the tracing guide](../../docs/software/TRACING.md) for manual startup,
 dispatcher-restart smoke, job trace vs HTTP poll trace, JSON console logs and the
 limits of local collection. Only new instrumented jobs have a real timeline.
 
-## Upgrade an existing local stack
+## Refresh or verify the local demo
 
-Keep the existing ignored `.generated` directory and its matching volumes.
-Bootstrap appends missing Market/ML/Chat service and account-reader credentials and never
-replaces an existing password/session key. A missing previously required credential
-still fails and asks you to restore the matching `secrets.json`. Do not delete
-volumes or rotate a config file to get past this failure.
-
-From the repository root, with the software virtual environment installed:
+Bootstrap preserves generated credentials and the Auth signing key.
+The upgrade step reconciles DB and broker grants without resetting volumes.
 
 ```sh
-python3 infra/local/bootstrap.py --enable-test-client
-docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml config --quiet
-docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d postgres rabbitmq redis keycloak --wait
-.venv-software/bin/python infra/local/upgrade.py
-docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml build
-docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --wait
-```
-
-`upgrade.py` uses fixed localhost endpoints and the named local Compose project.
-It applies conditional PostgreSQL role/database creation and privileges to an
-already initialized volume, imports only Market broker accounts/topology and
-extends the dead-letter policy, then adds missing Market/ML/Quant/Chat scopes,
-audiences and service clients to the imported Keycloak realm. When `--enable-test-client` is recorded in settings, it
-creates a missing local test client or adds its required scopes/audiences. It preserves
-existing realm users, passwords, BFF configuration and existing client secrets.
-The account-reader service role mapping is added idempotently; existing human role
-mappings remain unchanged.
-The process can be repeated; a component failure stops with a redacted error and
-can be retried after the dependencies recover. It never clears database records,
-queues, sessions or volumes. It needs `httpx` from the software environment.
-
-PostgreSQL's entrypoint init scripts and Keycloak's first import do not rerun on
-existing storage. This command is required before starting the new Market
-migration/API/workers on a stack created before this milestone. It is a local
-upgrade utility, and must never be pointed at staging or production. For the
-external-dependency deployment template, see [staging](../staging/README.md).
-
-Generated configuration is excluded from Docker build contexts. Bootstrap files below
-the mode-0700 `.generated` directory are readable through their specific read-only
-container mounts. No generated passwords or tokens should be printed by test
-scripts. `docker compose config` without `--quiet` expands secrets; avoid logging
-that output.
-
-To stop containers while retaining accounts, sessions, queues and database data:
-
-```sh
-docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml down
-```
-
-With the software test virtual environment installed and the stack healthy,
-check live database isolation, broker ACLs, normal-web password-grant denial and
-the enabled test client's Market/Chat audiences/scopes/operator role, Chat machine
-scopes/audiences, and the account reader's read-only user/role access:
-
-```sh
+python3 scripts/setup_software.py up --refresh-demo
 .venv-software/bin/python infra/local/verify_boundaries.py
+.venv-software/bin/python scripts/smoke_software.py
 ```
 
-This check creates and removes temporary tables, never consumes business messages,
-and does not print credentials or tokens. In a restricted agent sandbox, it needs
-permission to connect to these localhost ports.
-
-The named volumes belong to project `portfolio-software`. Deleting them resets
-stored application data; changing generated passwords alone does not rotate
-credentials already installed in PostgreSQL, RabbitMQ or Keycloak.
-
-Pinned upstream sources: [Keycloak containers and realm import](https://www.keycloak.org/server/containers),
-[Keycloak JPA migration options](https://www.keycloak.org/server/all-provider-config),
-[RabbitMQ definitions](https://www.rabbitmq.com/docs/definitions),
-[RabbitMQ quorum queues](https://www.rabbitmq.com/docs/quorum-queues),
-[PostgreSQL Docker image](https://hub.docker.com/_/postgres),
-[Redis 8.2 releases](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.2-release-notes/).
+The checks cover DB and broker permissions, user roles, service token boundaries
+and the account-status endpoint. Smoke scripts obtain tokens through Compose exec.
+Use `docker compose down` without `-v` to stop the demo and retain its volumes.
 
 ## Durable operator publication
 
@@ -372,3 +303,14 @@ days. If a schedule ages beyond that window, the timer disables it without
 moving its start or creating another job; the API/UI marks the history expired.
 Manual refresh rejects an expired window before enqueueing. Operators can still
 disable it, or update its start/create a new schedule; old snapshots stay intact.
+
+## Knowledge owner cluster
+
+Normal bootstrap/setup now provisions `knowledge-postgres`, `knowledge-migrate`,
+`knowledge-api` (:8006) and `knowledge-worker`. This adds only `knowledge-data`;
+existing PostgreSQL images/volumes stay intact. The DB port is internal, roles are
+separate, and privileged initialization installs pinned pgvector v0.8.1. Run
+`infra/local/verify_knowledge.py` in addition to the existing boundary gate.
+See [Knowledge setup/lifecycle](../../docs/software/KNOWLEDGE_RAG.md). The optional
+`compose.knowledge-paid.yaml` is disabled by default and requires a new explicit
+budget; old Chat keys/consent/quota are not permission to apply it.

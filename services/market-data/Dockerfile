@@ -5,7 +5,7 @@ COPY packages/contracts /app/packages/contracts
 COPY packages/service-auth /app/packages/service-auth
 COPY packages/service-observability /app/packages/service-observability
 COPY services/market-data /app/services/market-data
-RUN python -m pip install -c /app/services/market-data/requirements.lock /app/packages/contracts /app/packages/service-auth /app/packages/service-observability /app/services/market-data \
+RUN --mount=type=cache,target=/root/.cache/pip env -u PIP_NO_CACHE_DIR python -m pip install --extra-index-url https://vnstocks.com/api/packages -c /app/services/market-data/requirements.lock /app/packages/contracts /app/packages/service-auth /app/packages/service-observability '/app/services/market-data[metadata]' \
     && useradd --system --uid 10001 --create-home service
 USER service
 EXPOSE 8000

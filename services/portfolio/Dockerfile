@@ -5,7 +5,7 @@ COPY packages/contracts /app/packages/contracts
 COPY packages/service-auth /app/packages/service-auth
 COPY packages/service-observability /app/packages/service-observability
 COPY services/portfolio /app/services/portfolio
-RUN python -m pip install -c /app/services/portfolio/requirements.lock /app/packages/contracts /app/packages/service-auth /app/packages/service-observability /app/services/portfolio \
+RUN --mount=type=cache,target=/root/.cache/pip env -u PIP_NO_CACHE_DIR python -m pip install -c /app/services/portfolio/requirements.lock /app/packages/contracts /app/packages/service-auth /app/packages/service-observability /app/services/portfolio \
     && useradd --system --uid 10001 --create-home service
 USER service
 EXPOSE 8000

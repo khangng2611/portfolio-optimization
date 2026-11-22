@@ -2,7 +2,7 @@
 
 Creates one real-data risk-onboarded portfolio, one conversation and two turns.
 Never accepts a recommendation. No SQL, mock transports or provider substitution.
-Requires the existing disposable Keycloak portfolio-test client and Chat worker.
+Requires the disposable local Auth service and Chat worker.
 Run --verify-receipt after externally restarting the actual application processes.
 For --provider-outage configure the real worker's provider outage externally first;
 this script only checks TEMPLATE evidence, and never changes worker configuration.
@@ -24,13 +24,13 @@ from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
+from local_auth import login
+
 GENERATED = Path(__file__).resolve().parents[1] / "infra/local/.generated"
 CHAT = "http://localhost:8005"
 PORTFOLIO = "http://localhost:8001"
 MARKET = "http://localhost:8003"
 QUANT = "http://localhost:8002"
-IDENTITY = "http://localhost:8080/realms/portfolio/protocol/openid-connect/token"
-SCOPES = "openid chat:read chat:write portfolio:read portfolio:write market:read"
 STOPPED = {
     "SUCCEEDED",
     "WAITING_INPUT",
@@ -56,6 +56,13 @@ def canonical_hash(value):
             value, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode()
     ).hexdigest()
+
+
+def conversation_receipt_hash(value, receipt):
+    # Schema 1 predates consent_version; verify its original fields without rewriting evidence.
+    if not receipt.get("conversation_fields") and value.get("consent_version", 1) == 1:
+        value = {k: v for k, v in value.items() if k != "consent_version"}
+    return canonical_hash(value)
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -107,58 +114,6 @@ def get(base, path, token=None):
         f"API read failed ({status}); check local dependencies and scopes.",
     )
     return value
-
-
-def credentials():
-    accounts = json.loads((GENERATED / "accounts.json").read_text())
-    settings = {}
-    for name in ("smoke-settings.json", "settings.json"):
-        path = GENERATED / name
-        if path.exists():
-            settings.update(json.loads(path.read_text()))
-    env = GENERATED / ".env"
-    if env.exists():
-        settings.update(
-            dict(
-                line.split("=", 1)
-                for line in env.read_text().splitlines()
-                if line and not line.startswith("#") and "=" in line
-            )
-        )
-    secret = settings.get("OIDC_TEST_CLIENT_SECRET") or settings.get(
-        "TEST_CLIENT_SECRET"
-    )
-    require(
-        isinstance(secret, str) and secret,
-        "Existing local test-client secret unavailable.",
-    )
-    return accounts, secret
-
-
-def login(username, accounts, secret):
-    account = next((u for u in accounts["users"] if u["username"] == username), None)
-    require(account is not None, "Required local test account unavailable.")
-    status, data = request(
-        "POST",
-        IDENTITY,
-        form={
-            "grant_type": "password",
-            "client_id": "portfolio-test",
-            "client_secret": secret,
-            "username": username,
-            "password": account["password"],
-            "scope": SCOPES,
-        },
-    )
-    require(
-        status == 200 and data.get("access_token"),
-        f"Local Keycloak test login failed ({status}); check existing client/scopes.",
-    )
-    require(
-        set(SCOPES.split()) <= set(data.get("scope", "").split()),
-        "Keycloak did not grant all required Chat/Portfolio/Market scopes.",
-    )
-    return data["access_token"]
 
 
 def select_real_universe(catalog):
@@ -534,7 +489,7 @@ def verify_receipt(receipt, alice, bob, provider_outage=False):
     )
     conv = get(CHAT, f"/api/v1/conversations/{cid}", alice)
     require(
-        canonical_hash(conv) == receipt["conversation_hash"],
+        conversation_receipt_hash(conv, receipt) == receipt["conversation_hash"],
         "Saved conversation changed.",
     )
     rows = messages(cid, alice)
@@ -736,6 +691,7 @@ def run(alice, bob, *, timeout, provider_outage):
         "conversation_hash": canonical_hash(
             get(CHAT, f"/api/v1/conversations/{cid}", alice)
         ),
+        "conversation_fields": sorted(get(CHAT, f"/api/v1/conversations/{cid}", alice)),
         "recommendation_id": rid,
         "allocation_job_id": allocation_job_id,
         "result_message_id": result["id"],
@@ -785,8 +741,7 @@ def main():
     )
     args = parser.parse_args()
     require(1 <= args.timeout <= 600, "Timeout must be between 1 and 600 seconds.")
-    accounts, secret = credentials()
-    alice, bob = login("alice", accounts, secret), login("bob", accounts, secret)
+    alice, bob = login("alice"), login("bob")
     path = GENERATED / "chat-api-receipt.json"
     if args.verify_receipt:
         verify_receipt(json.loads(path.read_text()), alice, bob, args.provider_outage)

@@ -71,3 +71,13 @@ services:
     environment:
       <<: *tracing-environment
       OTEL_SERVICE_NAME: chat-worker
+
+  knowledge-api:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: knowledge-api
+
+  knowledge-worker:
+    environment:
+      <<: *tracing-environment
+      OTEL_SERVICE_NAME: knowledge-worker

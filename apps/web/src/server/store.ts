@@ -3,7 +3,7 @@ import { createClient } from 'redis';
 export interface Backend {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, seconds: number, nx?: boolean): Promise<boolean>;
-  take(key: string): Promise<string | null>;
+  increment(key: string, seconds: number): Promise<number>;
   del(key: string): Promise<void>;
   unlock(key: string, owner: string): Promise<void>;
   guardedSet(key: string, value: string, seconds: number, lock: string, owner: string): Promise<boolean>;
@@ -26,7 +26,7 @@ export class EncryptedStore {
     return JSON.parse(Buffer.concat([cipher.update(data.subarray(28)), cipher.final()]).toString('utf8')) as T;
   }
   async get<T>(key: string) { return this.open<T>(key, await this.backend.get(key)); }
-  async take<T>(key: string) { return this.open<T>(key, await this.backend.take(key)); }
+  async increment(key: string, seconds: number) { return this.backend.increment(key, seconds); }
   async put(key: string, value: unknown, seconds: number) { await this.backend.set(key, this.seal(key, value), seconds); }
   async del(key: string) { await this.backend.del(key); }
   async lock(id: string, owner: string) { return this.backend.set(`lock:${id}`, owner, 15, true); }
@@ -50,7 +50,10 @@ export async function connectStore(url: string, key: Buffer) {
   const backend: Backend = {
     get: key => redis.get(key),
     set: async (key, value, seconds, nx = false) => (await redis.set(key, value, { EX: seconds, ...(nx ? { NX: true } : {}) })) === 'OK',
-    take: key => redis.getDel(key),
+    increment: async (key, seconds) => Number(await redis.eval(
+      "local n = redis.call('INCR',KEYS[1]); if n == 1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
+      { keys: [key], arguments: [String(seconds)] }
+    )),
     del: async key => { await redis.del(key); },
     unlock: async (key, owner) => { await redis.eval("if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end", { keys: [key], arguments: [owner] }); },
     guardedSet: async (key, value, seconds, lock, owner) => (await redis.eval("if redis.call('GET',KEYS[2]) == ARGV[1] and redis.call('EXISTS',KEYS[1]) == 1 then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 else return 0 end", { keys: [key, lock], arguments: [owner, value, String(seconds)] })) === 1,

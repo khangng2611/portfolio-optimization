@@ -12,7 +12,7 @@ from sqlalchemy import select, func, update, text
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from portfolio_contracts import aware, canonical_hash
 from service_auth import TokenVerifier, AuthError
-from quant_service.ml import read_artifact, ModelManifest
+from quant_service.ml import parse_manifest, read_artifact, validate_native_files
 from .contracts import TrainingRequest, ReviewRequest
 from .models import Model, Review, TrainingJob
 from .queue import TrainingQueue, IdempotencyConflict
@@ -57,8 +57,16 @@ def model_json(session, model):
     metadata = {
         k: v
         for k, v in model.manifest.items()
-        if k not in {"model", "status", "approved_at", "approved_by"}
+        if k not in {"model", "assets", "status", "approved_at", "approved_by"}
     }
+    if model.manifest.get("schema_version") == 4:
+        metadata["modelled_asset_ids"] = model.manifest["asset_ids"]
+    if model.manifest.get("schema_version") == 5:
+        metadata["ensemble_count"] = len(model.manifest["covered_asset_ids"])
+        metadata["native_member_count"] = sum(
+            len(asset["boosters"]) for asset in model.manifest["assets"].values()
+        )
+        metadata["target_native_member_count"] = 150
     reviews = session.scalars(
         select(Review)
         .where(Review.model_id == model.id)
@@ -372,13 +380,9 @@ def create_app(*, sessions, verifier, directory):
             if row.status != "APPROVED" or row.approved_ref is None:
                 raise HTTPException(409, "Approved model artifact unavailable")
             try:
-                approved = ModelManifest.model_validate_json(
-                    read_artifact(directory, row.approved_ref)
-                )
-                root = Path(directory) / Path(row.approved_ref["file"]).parent
-                read_artifact(
-                    root, approved.model, suffixes=(".ubj",), max_bytes=20_000_000
-                )
+                approved = parse_manifest(read_artifact(directory, row.approved_ref))
+                root = (Path(directory) / row.approved_ref["file"]).resolve().parent
+                validate_native_files(root, approved)
                 if approved.status != "APPROVED" or approved.model_id != row.id:
                     raise ValueError()
             except Exception:

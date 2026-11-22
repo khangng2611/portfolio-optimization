@@ -141,6 +141,8 @@ celerybeat.pid
 .envrc
 .venv
 .venv-software/
+vnstock-migration/
+.superpowers/
 env/
 venv/
 ENV/
@@ -234,3 +236,9 @@ csonet-paper/
 .DS_Store
 .env.*
 !.env.example
+
+# Opt-in Knowledge worker provider key (never an API/build input)
+/infra/local/knowledge-openai.env
+
+# Standalone research repository with its own history and releases
+/paper5_research/

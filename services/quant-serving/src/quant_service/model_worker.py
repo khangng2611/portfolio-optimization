@@ -17,7 +17,7 @@ from pydantic import Field, FiniteFloat, model_validator
 import xgboost as xgb
 
 from portfolio_contracts import StrictModel, canonical_hash, utcnow
-from .ml import ModelManifest, read_artifact
+from .ml import ModelManifest, parse_manifest, read_artifact, validate_native_files
 
 
 class TrainingData(StrictModel):
@@ -187,16 +187,16 @@ def train_candidate(directory, raw):
     )
 
 
-def approve_candidate(directory, reference, *, reviewer):
+def approve_candidate(directory, reference, *, reviewer, registry_review=False):
     if not reviewer.strip():
         raise ValueError("Explicit reviewer identity required")
-    manifest = ModelManifest.model_validate_json(read_artifact(directory, reference))
+    manifest = parse_manifest(read_artifact(directory, reference))
     if manifest.status != "CANDIDATE":
         raise ValueError("Only a candidate can be approved")
-    read_artifact(
-        directory, manifest.model, suffixes=(".json", ".ubj"), max_bytes=20_000_000
-    )
-    approved = ModelManifest.model_validate(
+    if manifest.schema_version in (3, 4, 5) and not registry_review:
+        raise ValueError("Phase 1 approval requires a recorded ML registry review")
+    validate_native_files(directory, manifest, suffixes=(".json", ".ubj"))
+    approved = type(manifest).model_validate(
         manifest.model_dump()
         | {
             "status": "APPROVED",

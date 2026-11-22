@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "checks": 4897,
+  "unit_tests": 18,
+  "independent_saved_units_max_abs_NAV_error": 1.0969003483296547e-13,
+  "byte_identical_csvs": 12,
+  "baseline_input_hashes_unchanged": true,
+  "frozen_run_artifacts_intact": true,
+  "C1": "COMPLETED",
+  "C2": "NOT_RUN_SOURCE_GATE_NOT_MET",
+  "C3_C6": "DESIGN_ONLY_NOT_EXECUTED"
+}

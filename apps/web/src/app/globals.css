@@ -316,3 +316,7 @@ tfoot th, tfoot td { font-weight: 600; }
 .risk-wizard[data-testid="risk-reassessment"] > .panel { margin-bottom: 24px; }
 
 .refresh-result > .market-link { display: flex; width: fit-content; margin-top: 8px; }
+
+.auth-page { width: min(100% - 32px, 440px); margin: clamp(24px, 8vh, 80px) auto; }
+.auth-form { display: grid; gap: 16px; margin-top: 24px; }
+.auth-form :is(h1, p) { margin: 0; }

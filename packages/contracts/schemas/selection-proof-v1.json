@@ -1,0 +1,103 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "input_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Hash",
+      "type": "string"
+    },
+    "candidate_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Candidate Hash",
+      "type": "string"
+    },
+    "snapshot_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Snapshot Hash",
+      "type": "string"
+    },
+    "panel_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Panel Hash",
+      "type": "string"
+    },
+    "selection_policy_id": {
+      "const": "user-k5-v1",
+      "default": "user-k5-v1",
+      "title": "Selection Policy Id",
+      "type": "string"
+    },
+    "applied_selection": {
+      "enum": [
+        "equity-k5-v1",
+        "all-candidates-v1"
+      ],
+      "title": "Applied Selection",
+      "type": "string"
+    },
+    "decision_session": {
+      "format": "date",
+      "title": "Decision Session",
+      "type": "string"
+    },
+    "selection_price_end_date": {
+      "format": "date",
+      "title": "Selection Price End Date",
+      "type": "string"
+    },
+    "active_asset_ids": {
+      "items": {
+        "pattern": "^[A-Z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 2,
+      "title": "Active Asset Ids",
+      "type": "array"
+    },
+    "selected_equity_ids": {
+      "items": {
+        "pattern": "^[A-Z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Selected Equity Ids",
+      "type": "array"
+    },
+    "rejected_equity_ids": {
+      "items": {
+        "pattern": "^[A-Z0-9_-]{1,64}$",
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Rejected Equity Ids",
+      "type": "array"
+    },
+    "selection_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Selection Hash",
+      "type": "string"
+    },
+    "effective_constraints_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effective Constraints Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "input_hash",
+    "candidate_hash",
+    "snapshot_hash",
+    "panel_hash",
+    "applied_selection",
+    "decision_session",
+    "selection_price_end_date",
+    "active_asset_ids",
+    "selected_equity_ids",
+    "rejected_equity_ids",
+    "selection_hash",
+    "effective_constraints_hash"
+  ],
+  "title": "SelectionProof",
+  "type": "object"
+}

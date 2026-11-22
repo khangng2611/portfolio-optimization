@@ -282,3 +282,56 @@ def test_missing_model_resolver_fails_closed_without_enqueuing(api):
     assert response.status_code == 503
     with sessions() as session:
         assert session.scalar(select(func.count()).select_from(PublicationJob)) == 0
+
+
+@pytest.mark.parametrize(
+    "folder_kind",
+    [
+        "phase1",
+        "legacy",
+        "other-phase1",
+        "full",
+        "other-full",
+        "invalid-job",
+        "too-deep",
+    ],
+)
+def test_model_resolver_accepts_only_its_phase1_model_directory(
+    monkeypatch, folder_kind
+):
+    import httpx
+
+    from quant_service.publication_api import (
+        CredentialModelResolver,
+        ModelResolutionUnavailable,
+    )
+
+    model_id = str(uuid4())
+    other_id = str(uuid4())
+    folder = {
+        "phase1": f"phase1-{model_id}",
+        "legacy": other_id,
+        "other-phase1": f"phase1-{other_id}",
+        "full": f"{other_id}/phase1-{model_id}",
+        "other-full": f"{other_id}/phase1-{other_id}",
+        "invalid-job": f"invalid/phase1-{model_id}",
+        "too-deep": f"{other_id}/phase1-{model_id}/extra",
+    }[folder_kind]
+    ref = {"file": f"ml-models/{folder}/approved.json", "sha256": "a" * 64}
+
+    def respond(request):
+        if request.method == "POST":
+            return httpx.Response(200, json={"access_token": "test"})
+        assert request.url.path == f"/internal/v1/ml/models/{model_id}/manifest"
+        return httpx.Response(200, json={"model_id": model_id, "manifest": ref})
+
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    monkeypatch.setattr(httpx, "Client", lambda **_: client)
+    monkeypatch.setenv("OIDC_TOKEN_URL", "http://auth.test/internal/v1/token")
+    monkeypatch.setenv("ML_READER_CLIENT_SECRET", "test")
+    monkeypatch.setenv("ML_API_URL", "http://ml.test")
+    if folder_kind in {"other-phase1", "other-full", "invalid-job", "too-deep"}:
+        with pytest.raises(ModelResolutionUnavailable):
+            CredentialModelResolver().resolve(model_id)
+    else:
+        assert CredentialModelResolver().resolve(model_id) == ref

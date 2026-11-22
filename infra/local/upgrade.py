@@ -2,7 +2,7 @@
 """Add owner services to a healthy disposable local stack without resetting it.
 
 Run bootstrap.py first, then this script from the software virtual environment.
-Only local endpoints and the fixed portfolio-software Compose project are used.
+Only local endpoints and the fixed portfolio-auth-demo Compose project are used.
 """
 
 from __future__ import annotations
@@ -15,12 +15,11 @@ import subprocess
 import httpx
 
 try:
-    from .bootstrap import make_rabbit_definitions, make_realm
+    from .bootstrap import make_rabbit_definitions
 except ImportError:
-    from bootstrap import make_rabbit_definitions, make_realm
+    from bootstrap import make_rabbit_definitions
 
 ROOT = Path(__file__).resolve().parent
-REALM = "/admin/realms/portfolio"
 
 
 def market_broker_definitions(values: dict[str, str]) -> dict:
@@ -42,156 +41,6 @@ def market_broker_definitions(values: dict[str, str]) -> dict:
     ]
     # The existing named policy is extended to Market without changing old queues.
     return definitions
-
-
-def reconcile_identity(
-    client: httpx.Client, values: dict[str, str], test_client: bool
-) -> None:
-    desired = make_realm(values, [], test_client)
-
-    def get(path: str, **kwargs):
-        response = client.get(REALM + path, **kwargs)
-        response.raise_for_status()
-        return response.json()
-
-    def post(path: str, representation: dict):
-        response = client.post(REALM + path, json=representation)
-        response.raise_for_status()
-
-    scopes = {scope["name"]: scope for scope in get("/client-scopes")}
-    for scope in desired["clientScopes"]:
-        if (
-            scope["name"]
-            in (
-                "basic",
-                "market:read",
-                "market:write",
-                "market:snapshot:read",
-                "quant:publish",
-                "ml:read",
-                "ml:train",
-                "ml:review",
-                "ml:model:read",
-                "chat:read",
-                "chat:write",
-                "chat:delegate",
-                "market:chat:read",
-            )
-            and (
-                scope["name"] != "market:snapshot:read"
-                or values.get("MARKET_READER_CLIENT_SECRET")
-            )
-            and scope["name"] not in scopes
-        ):
-            post("/client-scopes", scope)
-    scopes = {scope["name"]: scope for scope in get("/client-scopes")}
-    for wanted in desired["clients"]:
-        name = wanted["clientId"]
-        if name not in (
-            "market-api",
-            "portfolio-test",
-            "portfolio-web",
-            "portfolio-service",
-            "quant-publisher",
-            "ml-api",
-            "ml-worker",
-            "quant-ml-reader",
-            "chat-api",
-            "chat-service",
-            "portfolio-account-reader",
-        ):
-            continue
-        existing = get("/clients", params={"clientId": name})
-        if not existing:
-            post("/clients", wanted)
-            existing = get("/clients", params={"clientId": name})
-        if len(existing) != 1:
-            raise RuntimeError("Expected one local identity client")
-        if name in ("market-api", "ml-api", "chat-api"):
-            continue
-        identity = existing[0]["id"]
-        defaults = get(f"/clients/{identity}/default-client-scopes")
-        attached = {scope["name"] for scope in defaults}
-        required_scopes = (
-            ("basic", "market:read", "market:write", "chat:read", "chat:write")
-            if name == "portfolio-test"
-            else ("basic", "market:snapshot:read")
-            if name in ("quant-publisher", "ml-worker")
-            else ("basic", "ml:model:read")
-            if name == "quant-ml-reader"
-            else ("basic", "chat:read", "chat:write")
-            if name == "portfolio-web"
-            else tuple(wanted["defaultClientScopes"])
-            if name in ("chat-service", "portfolio-account-reader")
-            else ("basic",)
-        )
-        for scope_name in required_scopes:
-            if scope_name not in attached:
-                response = client.put(
-                    f"{REALM}/clients/{identity}/default-client-scopes/{scopes[scope_name]['id']}"
-                )
-                response.raise_for_status()
-        if name == "portfolio-web":
-            attached_optional = {
-                scope["name"]
-                for scope in get(f"/clients/{identity}/optional-client-scopes")
-            }
-            for scope_name in (
-                "market:read",
-                "market:write",
-                "quant:publish",
-                "ml:read",
-                "ml:train",
-                "ml:review",
-            ):
-                if scope_name not in attached_optional:
-                    response = client.put(
-                        f"{REALM}/clients/{identity}/optional-client-scopes/{scopes[scope_name]['id']}"
-                    )
-                    response.raise_for_status()
-        if name not in (
-            "portfolio-test",
-            "quant-publisher",
-            "portfolio-web",
-            "ml-worker",
-            "quant-ml-reader",
-            "chat-service",
-            "portfolio-account-reader",
-        ):
-            continue
-        mappers = get(f"/clients/{identity}/protocol-mappers/models")
-        for mapper in wanted["protocolMappers"]:
-            audience = mapper.get("config", {}).get("included.client.audience")
-            exists = any(
-                m.get("config", {}).get("included.client.audience") == audience
-                if audience
-                else m.get("name") == mapper["name"]
-                for m in mappers
-            )
-            if not exists:
-                post(f"/clients/{identity}/protocol-mappers/models", mapper)
-        if name == "portfolio-account-reader":
-            reconcile_account_reader_role(client, identity)
-
-
-def reconcile_account_reader_role(client: httpx.Client, identity: str) -> None:
-    """Grant the owner account checker only Keycloak's read-only user role."""
-
-    def get(path: str, **kwargs):
-        response = client.get(REALM + path, **kwargs)
-        response.raise_for_status()
-        return response.json()
-
-    management = get("/clients", params={"clientId": "realm-management"})
-    if len(management) != 1:
-        raise RuntimeError("Expected the local realm-management client")
-    management_id = management[0]["id"]
-    account = get(f"/clients/{identity}/service-account-user")
-    role = get(f"/clients/{management_id}/roles/view-users")
-    path = f"/users/{account['id']}/role-mappings/clients/{management_id}"
-    if not any(assigned["id"] == role["id"] for assigned in get(path)):
-        response = client.post(REALM + path, json=[role])
-        response.raise_for_status()
 
 
 def upgrade_databases() -> None:
@@ -223,6 +72,36 @@ def upgrade_databases() -> None:
         raise RuntimeError("Local database provisioning failed; no volumes were reset")
 
 
+def upgrade_knowledge_database():
+    command = [
+        "docker",
+        "compose",
+        "--env-file",
+        str(ROOT / ".generated/.env"),
+        "-f",
+        str(ROOT / "compose.yaml"),
+        "exec",
+        "-T",
+        "knowledge-postgres",
+        "psql",
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        "knowledge_admin",
+        "-d",
+        "postgres",
+    ]
+    with (ROOT / ".generated/knowledge-postgres/10-databases.sql").open() as source:
+        result = subprocess.run(
+            command, stdin=source, capture_output=True, timeout=60, check=False
+        )
+    if result.returncode:
+        raise RuntimeError(
+            "Knowledge database provisioning failed; existing volumes preserved"
+        )
+
+
 def upgrade_broker(values: dict[str, str]) -> None:
     with httpx.Client(
         base_url="http://127.0.0.1:15673",
@@ -235,35 +114,15 @@ def upgrade_broker(values: dict[str, str]) -> None:
         response.raise_for_status()
 
 
-def upgrade_identity(values: dict[str, str], test_client: bool) -> None:
-    with httpx.Client(base_url="http://localhost:8080", timeout=15) as client:
-        response = client.post(
-            "/realms/master/protocol/openid-connect/token",
-            data={
-                "grant_type": "password",
-                "client_id": "admin-cli",
-                "username": "local-admin",
-                "password": values["KEYCLOAK_ADMIN_PASSWORD"],
-            },
-        )
-        response.raise_for_status()
-        client.headers["Authorization"] = "Bearer " + response.json()["access_token"]
-        reconcile_identity(client, values, test_client)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
     try:
         values = json.loads((ROOT / ".generated/secrets.json").read_text())
-        settings = json.loads((ROOT / ".generated/settings.json").read_text())
         for name, operation in (
             ("database", upgrade_databases),
+            ("knowledge database", upgrade_knowledge_database),
             ("broker", lambda: upgrade_broker(values)),
-            (
-                "identity",
-                lambda: upgrade_identity(values, bool(settings["test_client"])),
-            ),
         ):
             try:
                 operation()

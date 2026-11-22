@@ -1,5 +1,6 @@
+import { submitLogin } from './login-form';
 import { test, expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -11,7 +12,7 @@ const screenshots = resolve(root, 'output/playwright/sanitized');
 const origin = 'http://localhost:3000';
 const persistence = process.env.BROWSER_VERIFY_RECEIPT === '1';
 type RecordValue = Record<string, any>;
-type Receipt = { portfolio_id: string; proposal_id: string; target_id: string; allocation_hash: string; portfolio_name: string };
+type Receipt = { portfolio_id: string; proposal_id: string; target_id: string; allocation_hash: string; portfolio_name: string; username: string };
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 function phase(info: TestInfo, name: string) {
@@ -30,27 +31,32 @@ async function get(context: BrowserContext, path: string): Promise<RecordValue> 
   expect(response.status(), 'Owner-scoped BFF read').toBe(200);
   return response.json();
 }
-async function authenticate(page: Page, destination = '/') {
+async function credentials(username: string) {
   const accounts = JSON.parse(await readFile(resolve(generated, 'accounts.json'), 'utf8'));
-  const account = accounts.users.find((item: { username: string }) => item.username === 'alice');
-  if (!account?.password) throw new Error('Disposable investor unavailable');
+  const account = accounts.users.find((item: { username: string }) => item.username === username);
+  if (account?.password) return { username, password: String(account.password) };
+  const seed = accounts.users.find((item: { username: string }) => item.username === 'alice')?.password;
+  if (!seed || !/^demo-(?:six-)?[a-f0-9]{16}$/.test(username)) throw new Error('Disposable investor unavailable');
+  // The receipt stores only the username. Keep the derived test credential in memory.
+  const derived = createHmac('sha256', seed).update(username).digest('base64url');
+  return { username, password: username.startsWith('demo-six-') ? derived.slice(0, 5) + '!' : derived };
+}
+async function authenticate(page: Page, username: string, destination = '/') {
   await page.goto(destination);
-  await page.getByRole('link', { name: 'Đăng nhập qua Identity', exact: true }).click();
-  await page.waitForURL(url => url.origin === 'http://localhost:8080');
-  // Inspect in memory only: the authorization URL carries one-time state.
-  const authorization = new URL(page.url());
-  expect(authorization.searchParams.get('client_id')).toBe('portfolio-web');
-  expect(authorization.searchParams.get('response_type')).toBe('code');
-  expect(authorization.searchParams.get('code_challenge_method')).toBe('S256');
-  expect(Boolean(authorization.searchParams.get('code_challenge'))).toBe(true);
-  await page.locator('#username').fill(account.username);
-  await page.locator('#password').fill(account.password);
-  await Promise.all([
-    page.waitForURL(url => url.origin === origin && url.pathname === '/'),
-    page.locator('#kc-login').click(),
-  ]);
-  await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+  await submitLogin(page, await credentials(username));
   expect((await get(page.context(), '/auth/session')).authenticated).toBe(true);
+}
+async function fillRegistration(page: Page, account: { username: string; password: string }) {
+  await page.goto('/register');
+  await page.getByLabel('Tên hiển thị').fill('Nhà đầu tư demo');
+  await page.getByLabel('Tên đăng nhập', { exact: true }).fill(account.username);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill(account.password);
+}
+async function submitRegistration(page: Page, expected: number) {
+  const response = page.waitForResponse(r => new URL(r.url()).pathname === '/auth/register');
+  await page.getByRole('button', { name: 'Đăng ký', exact: true }).click();
+  expect((await response).status()).toBe(expected);
 }
 async function screenshot(page: Page, name: string) {
   // Only known post-login product content, never identity pages/navigation/user details.
@@ -103,16 +109,50 @@ test.beforeEach(() => {
   if (process.env.E2E_DISPOSABLE_STACK !== '1') throw new Error('Set E2E_DISPOSABLE_STACK=1 for this explicit localhost-only gate');
 });
 
-test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page, browser }, info) => {
+test('real login lifecycle, conflict, expiry and reauthentication', async ({ page, browser }, info) => {
   test.skip(persistence, 'Only receipt verification runs after process restart');
   phase(info, 'register-demo');
   fixture('ready');
   try {
-    phase(info, 'oidc-pkce');
-    await authenticate(page);
+    const account = await credentials('demo-six-' + randomUUID().replaceAll('-', '').slice(0, 16));
+    phase(info, 'auth-short-password');
+    await fillRegistration(page, { ...account, password: '🔒'.repeat(4) + '!' });
+    const password = page.getByLabel('Mật khẩu', { exact: true });
+    await page.getByRole('button', { name: 'Đăng ký', exact: true }).click();
+    await expect(page.locator('form').getByRole('alert')).toHaveText('Mật khẩu cần ít nhất 6 ký tự.', { timeout: 5000 });
+    await expect(password).toHaveAttribute('aria-invalid', 'true');
+    await expect(password).toBeFocused();
+
+    phase(info, 'auth-password-missing-punctuation');
+    await password.fill('abcdef');
+    await page.getByRole('button', { name: 'Đăng ký', exact: true }).click();
+    await expect(page.locator('form').getByRole('alert')).toContainText('ít nhất một ký tự đặc biệt');
+    await expect(password).toHaveAttribute('aria-invalid', 'true');
+    await expect(password).toBeFocused();
+
+    phase(info, 'auth-register');
+    await password.fill(account.password);
+    await submitRegistration(page, 201);
+    await expect(page).toHaveURL(origin + '/login');
+    await expect(page.getByLabel('Tên đăng nhập', { exact: true })).toHaveValue(account.username);
+    expect((await page.context().request.get('/auth/session')).status()).toBe(401);
+
+    phase(info, 'auth-reject-invalid');
+    await fillRegistration(page, { ...account, username: account.username.toUpperCase() });
+    await submitRegistration(page, 409);
+    await expect(page.locator('form').getByRole('alert')).toContainText('đã được sử dụng');
+    await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Đăng nhập', exact: true })).toBeVisible();
+    await page.getByLabel('Tên đăng nhập', { exact: true }).fill(account.username);
+    await page.getByLabel('Mật khẩu', { exact: true }).fill('wrong-demo-password');
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+    await expect(page.locator('form').getByRole('alert')).toContainText('không hợp lệ');
+
+    phase(info, 'auth-login');
+    await submitLogin(page, account);
+    await expect(page).toHaveURL(origin + '/#create');
     phase(info, 'create');
     const name = `Browser DEMO ${Date.now()}`;
-    await page.goto('/#create');
     await page.getByLabel(/^Tên danh mục/).fill(name);
     await page.getByLabel(/^Vốn kế hoạch \(VND\)/).fill('100000000');
     await page.getByLabel('Thời gian đầu tư (tháng)').fill('36');
@@ -128,6 +168,7 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     expect(createdHTTP.status()).toBe(201);
     const portfolio = await createdHTTP.json();
     const pid = portfolio.id;
+    expect(portfolio.risk_profile.answers.questionnaire_version).toBe('risk-v1');
     await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
 
     phase(info, 'broker-proposal-accept');
@@ -142,7 +183,7 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     await expect(page.getByTestId('accept-proposal')).toBeDisabled();
     const dashboard = await get(page.context(), `/api/v1/portfolios/${pid}/dashboard`);
     const receipt: Receipt = { portfolio_id: pid, proposal_id: first.id, target_id: target.id,
-      allocation_hash: digest(dashboard.accepted_target.allocation), portfolio_name: name };
+      allocation_hash: digest(dashboard.accepted_target.allocation), portfolio_name: name, username: account.username };
     await writeFile(receiptFile, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
     await verifyReceipt(page, receipt);
 
@@ -150,7 +191,7 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     const anonymous = await browser.newContext({ baseURL: origin });
     try {
       const deepPage = await anonymous.newPage();
-      await authenticate(deepPage, `/#proposal?portfolio=${pid}&proposal=${first.id}`);
+      await authenticate(deepPage, account.username, `/#proposal?portfolio=${pid}&proposal=${first.id}`);
       await expect(deepPage).toHaveURL(`${origin}/#proposal?portfolio=${pid}&proposal=${first.id}`);
       await expect(deepPage.getByTestId('accept-proposal')).toBeDisabled();
       expect((await get(anonymous, `/api/v1/portfolios/${pid}/dashboard`)).accepted_target.id).toBe(target.id);
@@ -223,14 +264,35 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
     await page.getByTestId('edit-portfolio-submit').click();
     expect((await unauthorized).status()).toBe(401);
     await expect(page.getByTestId('session-expired-notice')).toBeVisible();
-    // Keycloak's real SSO cookie reauthenticates; no product mutation is replayed.
-    const callback = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/callback');
     await page.getByRole('link', { name: 'Đăng nhập lại', exact: true }).click();
-    expect((await callback).status()).toBe(303);
+    await submitLogin(page, account);
     await expect(page).toHaveURL(new RegExp(`#edit\\?portfolio=${pid}$`));
     await expect(page.getByTestId('portfolio-name-input')).toHaveValue(updatedName);
     expect((await get(page.context(), `/api/v1/portfolios/${pid}`)).name).toBe(updatedName);
     await verifyReceipt(page, receipt);
+
+    phase(info, 'auth-owner-isolation');
+    const session = await get(page.context(), '/auth/session');
+    const chat = await page.context().request.post('/api/v1/conversations', {
+      data: { title: 'Browser auth isolation' },
+      headers: { Origin: origin, 'X-CSRF-Token': session.csrfToken },
+    });
+    expect(chat.status()).toBe(201);
+    const conversation = await chat.json();
+    expect((await page.context().request.get('/api/v1/ml/models')).status()).toBe(403);
+    const otherOwner = await browser.newContext({ baseURL: origin });
+    try {
+      await authenticate(await otherOwner.newPage(), 'bob');
+      expect((await otherOwner.request.get('/api/v1/portfolios/' + pid)).status()).toBe(404);
+      expect((await otherOwner.request.get('/api/v1/conversations/' + conversation.id)).status()).toBe(404);
+    } finally { await otherOwner.close(); }
+
+    phase(info, 'auth-logout');
+    await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Đăng nhập', exact: true })).toBeVisible();
+    expect((await page.context().request.get('/auth/session')).status()).toBe(401);
+    await authenticate(page, account.username);
+    await expect(page.getByRole('link', { name: 'Chọn danh mục ' + updatedName, exact: true })).toBeVisible();
     phase(info, 'complete');
   } finally {
     fixture('ready');
@@ -239,9 +301,9 @@ test('real PKCE lifecycle, conflict, expiry and reauthentication', async ({ page
 
 test('same persisted target receipt after service process restart', async ({ page }, info) => {
   test.skip(!persistence, 'Run separately after actual Compose process restart');
-  phase(info, 'oidc-after-restart');
-  await authenticate(page);
+  phase(info, 'auth-after-restart');
   const receipt: Receipt = JSON.parse(await readFile(receiptFile, 'utf8'));
+  await authenticate(page, receipt.username);
   phase(info, 'same-receipt-after-restart');
   await verifyReceipt(page, receipt);
   await screenshot(page, 'history-after-restart');

@@ -60,6 +60,8 @@ def validate_request(value):
         result[name] = value.get(name, default)
         if type(result[name]) is not int or not low <= result[name] <= high:
             raise ValueError("Invalid publication bounds")
+    if result["universe_id"] == "VN_USER_SELECTION" and result["max_age_days"] != 7:
+        raise ValueError("Selection freshness must remain 7 days")
     if result["min_returns"] > result["lookback"]:
         raise ValueError("Minimum returns exceeds lookback")
     return result

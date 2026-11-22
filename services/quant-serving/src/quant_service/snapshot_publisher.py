@@ -12,7 +12,9 @@ from uuid import UUID, uuid4
 import httpx
 
 from portfolio_contracts import canonical_hash, utcnow
-from .ml import ArtifactRef, ModelManifest, infer, read_artifact
+from . import phase1
+from .ml import ArtifactRef, infer, parse_manifest, read_artifact, validate_native_files
+from .full import MixedPanel, FullDataUnavailable, UNIVERSE as FULL_UNIVERSE
 from .model_worker import train_candidate
 from .snapshot_inputs import SnapshotPanel
 
@@ -32,7 +34,7 @@ class MarketReader:
                 headers={"Authorization": "Bearer " + self.token},
             )
             response.raise_for_status()
-            if len(response.content) > 32_000_000:
+            if len(response.content) > (96_000_000 if suffix else 8_000_000):
                 raise ValueError("Market snapshot response too large")
             values.append(response.json())
         if values[0]["id"] != identity or values[0]["content_hash"] != expected_hash:
@@ -153,7 +155,26 @@ def publish_snapshot(
         if recovered:
             return recovered
     now = now or utcnow()
-    panel = SnapshotPanel(
+    if snapshot.get("schema_version") == 3 or universe_id == "VN_USER_SELECTION":
+        from .selection_catalog import publish_selection_resource
+
+        return publish_selection_resource(
+            directory,
+            snapshot,
+            observations,
+            expected_hash=expected_hash,
+            universe_id=universe_id,
+            model=model,
+            now=now,
+            max_age_days=max_age_days,
+            renew=renew,
+            publication_intent=publication_intent,
+            intent_hash=intent_hash,
+        )
+    full = snapshot.get("schema_version") == 2
+    if full != (universe_id == FULL_UNIVERSE):
+        raise ValueError("Mixed Phase 1 snapshot requires VN_PHASE1_FULL universe")
+    panel = (MixedPanel if full else SnapshotPanel)(
         snapshot,
         observations,
         expected_hash=expected_hash,
@@ -164,6 +185,33 @@ def publish_snapshot(
     )
     numerical, features, provenance = panel.inputs()
     model = ArtifactRef.model_validate(model).model_dump() if model else None
+    if model:
+        manifest = parse_manifest(read_artifact(directory, model))
+        if manifest.schema_version not in (2, 3, 4) or manifest.demo:
+            raise ValueError(
+                "Real snapshot serving requires a provenance-complete model"
+            )
+        if full != (manifest.schema_version == 4):
+            raise ValueError("Full snapshot and model family mismatch")
+        if full:
+            native_directory = (
+                (Path(directory).resolve() / model["file"]).resolve().parent
+            )
+            validate_native_files(native_directory, manifest, load=True)
+        if manifest.schema_version == 3:
+            if snapshot.get("quality_status") != "PASS":
+                raise ValueError("Phase 1 requires a Market quality-passed snapshot")
+            features = phase1.feature_batch(panel)
+            provenance["feature_schema_hash"] = canonical_hash(
+                {
+                    "schema": phase1.FEATURE_SCHEMA,
+                    "names": phase1.FEATURES,
+                    "history_start": phase1.START.isoformat(),
+                    "observation_lag": 1,
+                    "price_convention": phase1.PRICE_CONVENTION,
+                    "feature_price_unit": "thousand_VND/share",
+                }
+            )
     request_key = canonical_hash(
         {
             "snapshot_hash": expected_hash,
@@ -191,7 +239,7 @@ def publish_snapshot(
         "universe_id": universe_id,
         "snapshot_id": snapshot["id"],
         "model_bundle_id": model["sha256"] if model else None,
-        "as_of_date": panel.dates[-1].isoformat(),
+        "as_of_date": provenance.get("data_as_of", panel.dates[-1].isoformat()),
         "decision_at": now.isoformat(),
         "valid_until": valid_until.isoformat(),
         "demo": False,
@@ -205,14 +253,35 @@ def publish_snapshot(
         value["publication_intent"] = publication_intent
         value["publication_intent_hash"] = intent_hash
     if model:
-        manifest = ModelManifest.model_validate_json(read_artifact(directory, model))
-        if manifest.schema_version != 2 or manifest.demo:
-            raise ValueError(
-                "Real snapshot serving requires a provenance-complete v2 model"
-            )
         value["ml_inference"] = features | {"manifest": model}
-        infer(directory, value)
-        value["strategies"].append("BL_ML")
+        try:
+            infer(directory, value)
+        except FullDataUnavailable as exc:
+            value["blocking_reason"] = {
+                "code": exc.code,
+                "message": str(exc),
+                "details": exc.details,
+            }
+        else:
+            value["strategies"].append("BL_ML")
+    elif full:
+        try:
+            panel.check_freshness()
+        except FullDataUnavailable as exc:
+            value["blocking_reason"] = {
+                "code": exc.code,
+                "message": str(exc),
+                "details": exc.details,
+            }
+    return _commit_publication(
+        directory, value, request_key, now, renew, publication_intent, intent_hash
+    )
+
+
+def _commit_publication(
+    directory, value, request_key, now, renew, publication_intent, intent_hash
+):
+    universe_id = value["universe_id"]
     root = Path(directory).resolve()
     root.mkdir(parents=True, exist_ok=True)
     with (root / ".catalog.lock").open("a") as lock:

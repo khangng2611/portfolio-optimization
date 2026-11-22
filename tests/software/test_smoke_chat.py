@@ -8,8 +8,9 @@ import pytest
 
 
 @pytest.fixture
-def smoke():
+def smoke(monkeypatch):
     path = Path(__file__).resolve().parents[2] / "scripts/smoke_chat.py"
+    monkeypatch.syspath_prepend(str(path.parent))
     assert path.exists(), "The live Chat smoke harness is not implemented"
     spec = importlib.util.spec_from_file_location("smoke_chat", path)
     module = importlib.util.module_from_spec(spec)
@@ -111,3 +112,12 @@ def test_receipt_writes_valid_json_with_private_file_mode(smoke, tmp_path):
     assert json.loads(path.read_text()) == receipt
     assert path.stat().st_mode & 0o777 == 0o600
     assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_legacy_receipt_preserves_original_conversation_contract(smoke):
+    conversation_receipt_hash, canonical_hash = smoke.conversation_receipt_hash, smoke.canonical_hash
+    original={'id':'c','title':'t','portfolio_id':None,'active_job_id':None,'llm_consent':False,'created_at':'2026-01-01'}
+    assert conversation_receipt_hash(original | {'consent_version':1}, {})==canonical_hash(original)
+    assert conversation_receipt_hash(original | {'consent_version':2}, {})!=canonical_hash(original)
+    current=original | {'consent_version':2}
+    assert conversation_receipt_hash(current,{'conversation_fields':sorted(current)})==canonical_hash(current)

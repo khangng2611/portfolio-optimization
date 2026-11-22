@@ -113,13 +113,7 @@ def main():
     )
     if args.publish_demo:
         publish_demo()
-    accounts = json.loads((GENERATED / "accounts.json").read_text())
-    settings = dict(
-        line.split("=", 1)
-        for line in (GENERATED / ".env").read_text().splitlines()
-        if line and not line.startswith("#")
-    )
-    alice = login("alice", accounts, settings)
+    alice = login("alice")
     receipt_file = GENERATED / "ml-serving-receipt.json"
     if args.verify_receipt:
         receipt = json.loads(receipt_file.read_text())

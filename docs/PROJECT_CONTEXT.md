@@ -65,8 +65,8 @@ Không dùng kết quả bước trước để chứng minh trực tiếp cho c
 
 | Module | Trách nhiệm |
 |---|---|
-| `crawl/stock.py` | `vnstock.ui.Market/Reference`, OHLCV stock và VNINDEX, nguồn `kbs`, split/save CSV; entry point hiện xử lý một batch stock |
-| `crawl/fund.py` | NAV quỹ qua vnstock, chia 1000 và làm tròn 2 chữ số, split CSV, batch/retry |
+| `crawl/stock.py` | Vnstock 6 `Market/Reference`, nguồn FHSC, stock/ETF/VNINDEX và VN30 constituents; bắt buộc output run riêng, giữ schema CSV |
+| `crawl/fund.py` | Vnstock 6 FHSC `ticker` và `time/nav`; kiểm danh tính quỹ, NAV đồng → nghìn đồng làm tròn 2 số; chỉ ghi run riêng |
 | `crawl/gold.py` | PNJ API, chỉ location TPHCM, PNJ/SJC buy/sell, ffill và cập nhật merge giữ dữ liệu cũ khi API thiếu |
 | `utils/data_loader.py` | Asset JSON, paths, chọn phase, concat train/test khi full+split, business-day alignment/ffill/dropna |
 | `utils/indicators.py` | EMA/SMA, momentum, RSI, MACD, ATR, Bollinger; scalar/series có quy ước warm-up khác nhau |

@@ -2,6 +2,9 @@
 
 ## 1. Cài đặt môi trường
 
+Nếu đã có `venv` nghiên cứu và dữ liệu hiện tại, bỏ qua bước cài lại này.
+Migration Vnstock dùng môi trường riêng ở mục 2; không cài đè dependency vào `venv` cũ.
+
 ```bash
 # Clone repository
 # git clone <REPO_URL>
@@ -18,10 +21,46 @@ pip install -r requirements.txt
 
 ## 2. Thu thập dữ liệu (nếu cần cập nhật)
 
+Các crawler stock/fund hiện dùng Vnstock 6 và nguồn FHSC. Giữ nguyên `venv`
+nghiên cứu hiện có để chạy backtest trên dữ liệu đã lưu; không cài đè môi trường đó.
+Tạo môi trường ingestion riêng:
+
 ```bash
-python crawl/stock.py
-python crawl/fund.py
+python3.12 -m venv ~/.venv_6x
+~/.venv_6x/bin/python -m pip install -r requirements-vnstock6.txt
+```
+
+Migration hiện mới được kiểm thử offline. Các lệnh lấy dữ liệu bên dưới cần
+key FHSC đã lưu bởi bạn (`vnstock keys set fhsc` trong môi trường mới).
+Không gửi key qua chat hoặc commit vào Git. Keyring trên máy không tự truyền vào Docker.
+
+```bash
+# Chỉ chạy sau khi sẵn sàng kiểm thử API thật; mỗi output phải là run mới.
+~/.venv_6x/bin/python crawl/stock.py --symbols FPT VCB E1VFVN30 --index VNINDEX \
+  --start 2020-01-01 --end 2026-04-29 --output-root vnstock-migration/gen6/stocks-20260429
+~/.venv_6x/bin/python crawl/fund.py --symbols VFF DCDS \
+  --start 2020-01-01 --end 2026-04-29 --output-root vnstock-migration/gen6/funds-20260429
+
+# Crawler vàng độc lập, không thuộc migration Vnstock.
 python crawl/gold.py
+```
+
+Stock/index CSV giữ `date,open,high,low,close,volume,symbol`; quỹ giữ
+`date,price,symbol` với giá nghìn đồng/CCQ. NAV chưa làm tròn và provenance
+được giữ riêng trong run. Không tự đưa dữ liệu mới vào `datasets/` hoặc sửa
+`assets*.json`: dữ liệu FHSC cần được đối chiếu trước khi dùng cho nghiên cứu.
+Các snapshot `trusted_baseline/` và `legacy_version/` tiếp tục giữ nguyên đời 4
+để lưu bằng chứng, không dùng làm lệnh tải dữ liệu hiện hành.
+
+Kiểm thử ingestion offline (cài pytest vào môi trường ingestion riêng):
+hai test tích hợp consumer dùng `.venv-software` hiện có; nếu chưa cài môi trường
+serving, chỉ hai test đó được bỏ qua.
+
+```bash
+~/.venv_6x/bin/python -m pip install pytest==8.4.2
+~/.venv_6x/bin/python -m pytest tests/software/test_vnstock_crawl_io.py \
+  tests/software/test_vnstock_stock.py tests/software/test_vnstock_fund.py \
+  tests/software/test_fetch_serving_prices.py -q
 ```
 
 Với giá vàng, có thể crawl cập nhật một khoảng thời gian bất kỳ (không phụ thuộc

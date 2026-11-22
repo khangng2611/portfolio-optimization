@@ -141,6 +141,8 @@ celerybeat.pid
 .envrc
 .venv
 .venv-software/
+vnstock-migration/
+.superpowers/
 env/
 venv/
 ENV/

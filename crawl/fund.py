@@ -1,197 +1,182 @@
-# CODE: Retrieve historical NAV using vnstock v4.0+ Unified UI (FMarket integration)
-# - Read fund symbols from fund_list.txt
-# - Process only 5 funds per run (configurable via START_INDEX)
-# - For each fund, fetch NAV history using Market().fund(sym).nav()
-# - Build a DataFrame with columns: date, price (nav_per_unit / 1000), symbol
-# - SAVE EACH FUND TO A SEPARATE CSV FILE (filename: <fund_name>.csv)
+"""Fetch identity-checked FHSC fund NAV into a new migration run."""
 
-import sys
-import pandas as pd
-from vnstock.ui import Market, Reference
-from datetime import datetime
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import importlib.metadata
+import json
 from pathlib import Path
-import time  # Delay to avoid rate limits when needed
+import sys
+import time
 
-# ====== CONFIGURATION ======
-START_INDEX = 60  # Starting index in the list
-BATCH_SIZE = 10  # Number of funds to process per run
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import TRAIN_START_DATE, SPLIT_DATE
+from crawl.vnstock_io import SOURCE, check_identity, daily_dates, date_window, fund_id, numeric_values, prepare_output
 
-# Crawl uses "today" as end date (not the fixed backtest date)
-TEST_END_DATE = datetime.now().strftime("%Y-%m-%d")
-ROOT_DIR = Path(__file__).resolve().parents[1]
-DATASETS_DIR = ROOT_DIR / "datasets"
-LIST_FILE = DATASETS_DIR / "fund_list.txt"
-BOND_LIST_FILE = DATASETS_DIR / "bond_list.txt"
-OUTPUT_DIR = DATASETS_DIR / "funds"
-# ========================
-
-# Unified UI singletons (fund data is served by FMarket provider)
-_ref = Reference()
-_mkt = Market()
+START_INDEX = 0
+BATCH_SIZE = 10
+DATASETS_DIR = None
+LIST_FILE = None
+BOND_LIST_FILE = None
+OUTPUT_DIR = None
+start_date = TRAIN_START_DATE
+end_date = None
+_catalog = None
+_provenance = []
+# Pinned 6.0.1 contract: market.fund.history reads fhsc value_unit='dong', no v5 scale.
+NAV_UNIT = 'VND/fund_unit'
 
 
 def retrieve_fund_list():
-    df_all = _ref.fund.list()  # Provider: FMarket
-    short_names = df_all["short_name"].tolist()
-    DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(LIST_FILE, "w") as f:
-        for name in short_names:
-            f.write(name + "\n")
-    print(f"Saved {len(short_names)} fund short_names to fund_list.txt")
+    global _catalog
+    from vnstock import Reference
+
+    frame = Reference(SOURCE).fund.list()
+    if frame.empty or not {'ticker', 'fund_type', 'organ_name'} <= set(frame.columns):
+        raise ValueError('INVALID_FUND_CATALOG')
+    if frame.attrs.get('source') != SOURCE or frame.attrs.get('profile') != 'v5':
+        raise ValueError('UNEXPECTED_FUND_CATALOG_SOURCE_OR_PROFILE')
+    symbols = [fund_id(value) for value in frame['ticker']]
+    if len(set(symbols)) != len(symbols):
+        raise ValueError('AMBIGUOUS_FUND_CATALOG')
+    with LIST_FILE.open('x', encoding='utf-8') as stream:
+        stream.write('\n'.join(symbols) + '\n')
+    _catalog = frame.copy()
+    return symbols
 
 
 def retrieve_bond_list():
-    df_all_funds = _ref.fund.list()
-    df_bond = df_all_funds[
-        df_all_funds["fund_type"].str.contains(
-            "Trái phiếu|Bond|Fixed Income", case=False, na=False
-        )
-    ]
-    short_names = df_bond["short_name"].tolist()
-    DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(BOND_LIST_FILE, "w") as f:
-        for name in short_names:
-            f.write(name + "\n")
-    print(f"Saved {len(short_names)} bond short_names to bond_list.txt")
+    if _catalog is None:
+        retrieve_fund_list()
+    types = _catalog['fund_type']
+    if not types.isin(['bond_fund', 'equity_fund', 'balanced_fund']).all():
+        raise ValueError('UNKNOWN_FUND_TYPE')
+    symbols = _catalog.loc[types == 'bond_fund', 'ticker'].tolist()
+    with BOND_LIST_FILE.open('x', encoding='utf-8') as stream:
+        stream.write('\n'.join(symbols) + '\n')
+    return symbols
 
 
 def get_nav_and_return(symbol):
-    max_retries = 3
-    attempt = 0
+    fund_id(symbol)
+    if OUTPUT_DIR is None or _catalog is None:
+        raise ValueError('OUTPUT_NOT_CONFIGURED_USE_CLI')
+    if importlib.metadata.version('vnstock') != '6.0.1':
+        raise ValueError('UNVERIFIED_NAV_UNIT_CONTRACT_VERSION')
+    from vnstock import Market, Reference
 
-    while attempt < max_retries:
+    identity = _catalog[_catalog['ticker'] == symbol]
+    profile = Reference(SOURCE).fund(symbol).profile()
+    if len(identity) != 1 or len(profile) != 1 or 'ticker' not in profile:
+        raise ValueError('FUND_IDENTITY_MISMATCH')
+    kind, issuer = identity.iloc[0]['fund_type'], identity.iloc[0]['organ_name']
+    if (not isinstance(kind, str) or kind not in {'bond_fund', 'equity_fund', 'balanced_fund'}
+            or not isinstance(issuer, str) or not issuer.strip()):
+        raise ValueError('INCOMPLETE_FUND_IDENTITY')
+    check_identity(profile, symbol)
+    if profile.attrs.get('source') != SOURCE or profile.attrs.get('profile') != 'v5':
+        raise ValueError('UNEXPECTED_FUND_PROFILE_SOURCE_OR_PROFILE')
+    if symbol == 'VFF' and (
+        identity.iloc[0]['fund_type'] != 'bond_fund'
+        or 'VINACAPITAL' not in str(identity.iloc[0]['organ_name']).upper().replace(' ', '')
+    ):
+        raise ValueError('VFF_IDENTITY_MISMATCH')
+    for attempt in range(3):
         try:
-            # v4.0+ Unified UI: Market().fund(sym).nav()
-            # Returns DataFrame with columns: [date, nav_per_unit]
-            nav_df = _mkt.fund(symbol).nav()
-
-            # Validate required columns
-            if "nav_per_unit" not in nav_df.columns or "date" not in nav_df.columns:
-                print(f"Fund {symbol} is missing nav_per_unit or date columns.")
-                return pd.DataFrame()
-
-            # Prepare DataFrame
-            df = nav_df[["date", "nav_per_unit"]].copy()
-            df = df.sort_values("date")  # Ensure chronological order
-            df["symbol"] = symbol
-            df["price"] = (df["nav_per_unit"] / 1000).round(
-                2
-            )  # Divide by 1000 and round to 2 decimals
-
-            # Keep only the 3 required columns
-            df_final = df[["date", "price", "symbol"]]
-
-            print(f"Processed fund {symbol} ({len(df_final)} rows)")
-
-            return df_final
-
-        except Exception as e:
-            error_message = str(e)
-            if "RateLimitExceeded" in error_message:
-                attempt += 1
-                print(
-                    f"RateLimitExceeded while fetching fund {symbol}. Waiting 60 seconds before retry ({attempt}/{max_retries})..."
-                )
-                time.sleep(60)
-                continue
-
-            print(f"Error while fetching NAV for fund {symbol}: {e}")
-            return pd.DataFrame()
-
-    print(f"Exceeded maximum retries for fund {symbol} due to RateLimitExceeded.")
-    return pd.DataFrame()
+            raw = Market(SOURCE).fund(symbol).history(start=start_date, end=end_date, compat='v5')
+            break
+        except Exception as exc:
+            if attempt == 2 or getattr(exc, 'kind', None) not in {'rate_limit', 'network'} or not getattr(exc, 'retryable', False):
+                raise
+            time.sleep(2 ** attempt)
+    if raw.empty or not {'time', 'nav'} <= set(raw.columns):
+        raise ValueError('INVALID_FUND_NAV_COLUMNS')
+    if (raw.attrs.get('source') != SOURCE or raw.attrs.get('nav_unit', NAV_UNIT) != NAV_UNIT
+            or raw.attrs.get('profile') != 'v5'):
+        raise ValueError('UNEXPECTED_FUND_SOURCE_OR_UNIT')
+    if raw.attrs.get('truncated'):
+        raise ValueError('INCOMPLETE_FUND_HISTORY')
+    check_identity(raw, symbol)
+    frame = pd.DataFrame({'date': daily_dates(raw['time']), 'price': numeric_values(raw['nav'])})
+    if frame['price'].isna().any() or not frame['price'].map(lambda x: 0 < x < float('inf')).all():
+        raise ValueError('INVALID_FUND_NAV')
+    if frame['date'].duplicated().any() or not frame['date'].between(start_date, end_date).all():
+        raise ValueError('INVALID_FUND_DAYS')
+    _provenance.append({
+        'symbol': symbol, 'profile_ticker': profile.iloc[0]['ticker'],
+        'route': 'market.fund.history', 'source': raw.attrs.get('source', SOURCE),
+        'profile': raw.attrs.get('profile', 'v5'), 'schema_changes': raw.attrs.get('schema_changes', []),
+        'nav_unit': NAV_UNIT, 'row_count': len(frame),
+        'first_date': frame['date'].min(), 'last_date': frame['date'].max(),
+    })
+    target = OUTPUT_DIR / 'raw'
+    target.mkdir(parents=True, exist_ok=True)
+    raw[['time', 'nav']].to_csv(target / f'{symbol}.csv', index=False, mode='x')
+    frame['price'] = (frame['price'] / 1000).round(2)
+    frame['symbol'] = symbol
+    return frame.sort_values('date').reset_index(drop=True)
 
 
 def split_train_test(df):
-    df = df.copy()
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df = (
-        df.dropna(subset=["date"])
-        .drop_duplicates(subset=["date"], keep="last")
-        .sort_values("date")
-    )
-
-    train_start = pd.Timestamp(TRAIN_START_DATE)
-    split_date = pd.Timestamp(SPLIT_DATE)
-    test_end = pd.Timestamp(TEST_END_DATE)
-
-    full_df = df[(df["date"] >= train_start) & (df["date"] <= test_end)].copy()
-    train_df = full_df[full_df["date"] <= split_date].copy()
-    test_df = full_df[full_df["date"] >= split_date].copy()
-
-    for frame in (full_df, train_df, test_df):
-        frame["date"] = frame["date"].dt.strftime("%Y-%m-%d")
-
-    return full_df, train_df, test_df
+    frame = df.copy()
+    frame['date'] = daily_dates(frame['date'])
+    if frame['date'].duplicated().any():
+        raise ValueError('DUPLICATE_DAILY_DATE')
+    full = frame[frame['date'].between(start_date, end_date)].sort_values('date').copy()
+    return full, full[full['date'] <= SPLIT_DATE].copy(), full[full['date'] >= SPLIT_DATE].copy()
 
 
-def crawl_fund_nav_history():
-    # Step 1: Read fund symbols from file
-    with open(LIST_FILE, "r") as f:
-        all_fund_names = [line.strip() for line in f if line.strip()]
-
-    print(f"Total funds in list file: {len(all_fund_names)}")
-
-    # Step 2: Select a <BATCH_SIZE> batch based on START_INDEX
-    fund_names_batch = all_fund_names[START_INDEX : START_INDEX + BATCH_SIZE]
-
-    if not fund_names_batch:
-        print(
-            f"No funds left to process (START_INDEX={START_INDEX} exceeds the list length)."
-        )
-        return
-
-    print(
-        f"Processing funds from index {START_INDEX} to {START_INDEX + len(fund_names_batch) - 1}:"
-    )
-    print(f"Fund batch: {fund_names_batch}")
-    # Step 3: Iterate through each fund and save each to a separate file
-    processed_count = 0
-
-    for fund_name in fund_names_batch:
-        # Get NAV history and returns for one fund
-        df_quy = get_nav_and_return(fund_name)
-
-        if not df_quy.empty:
-            # Output filename for each fund
-            full_df, train_df, test_df = split_train_test(df_quy)
-            if full_df.empty:
-                print(
-                    f"No data in configured range ({TRAIN_START_DATE} -> {TEST_END_DATE}) for {fund_name}."
-                )
-                continue
-
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            (OUTPUT_DIR / "train").mkdir(parents=True, exist_ok=True)
-            (OUTPUT_DIR / "test").mkdir(parents=True, exist_ok=True)
-            full_path = OUTPUT_DIR  / "full" / f"{fund_name}.csv"
-            train_path = OUTPUT_DIR / "train" / f"{fund_name}_train.csv"
-            test_path = OUTPUT_DIR / "test" / f"{fund_name}_test.csv"
-
-            full_df.to_csv(full_path, index=False, encoding="utf-8-sig")
-            train_df.to_csv(train_path, index=False, encoding="utf-8-sig")
-            test_df.to_csv(test_path, index=False, encoding="utf-8-sig")
-
-            print(
-                f"Saved {fund_name} -> full:{len(full_df)} train:{len(train_df)} test:{len(test_df)}"
-            )
-            processed_count += 1
-
-        # Delay to avoid Fmarket rate limits
-        time.sleep(1.5)  # 1.5 seconds between requests
-
-    # Step 4: Summary report
-    print(f"\nDone! Successfully processed and saved {processed_count} funds.")
-    print(f"All files were saved in directory: {OUTPUT_DIR}")
-    next_index = START_INDEX + BATCH_SIZE
-    if next_index < len(all_fund_names):
-        print(f"For the next run, set START_INDEX = {next_index}")
+def crawl_fund_nav_history(symbols=None):
+    selected = symbols if symbols is not None else _catalog['ticker'].tolist()[START_INDEX:START_INDEX + BATCH_SIZE]
+    for symbol in selected:
+        frame = get_nav_and_return(symbol)
+        for part, values in zip(['full', 'train', 'test'], split_train_test(frame)):
+            target = OUTPUT_DIR / part
+            target.mkdir(parents=True, exist_ok=True)
+            suffix = '' if part == 'full' else f'_{part}'
+            values.to_csv(target / f'{symbol}{suffix}.csv', index=False, encoding='utf-8-sig', mode='x')
+        time.sleep(1.5)
 
 
-if __name__ == "__main__":
-    # retrieve_bond_list()
-    crawl_fund_nav_history()
+def main(argv=None):
+    global DATASETS_DIR, LIST_FILE, BOND_LIST_FILE, OUTPUT_DIR, start_date, end_date, _catalog, _provenance
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output-root', required=True)
+    parser.add_argument('--start', required=True)
+    parser.add_argument('--end', required=True)
+    parser.add_argument('--symbols', nargs='+')
+    args = parser.parse_args(argv)
+    start_date, end_date = date_window(args.start, args.end)
+    for symbol in args.symbols or []:
+        fund_id(symbol)
+    if importlib.metadata.version('vnstock') != '6.0.1':
+        raise ValueError('UNVERIFIED_NAV_UNIT_CONTRACT_VERSION')
+    DATASETS_DIR = prepare_output(args.output_root)
+    LIST_FILE = DATASETS_DIR / 'fund_list.txt'
+    BOND_LIST_FILE = DATASETS_DIR / 'bond_list.txt'
+    OUTPUT_DIR = DATASETS_DIR / 'funds'
+    _catalog = None
+    _provenance = []
+    retrieve_fund_list()
+    crawl_fund_nav_history(args.symbols)
+    files = [{'file': str(path.relative_to(DATASETS_DIR)),
+              'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+             for path in sorted(DATASETS_DIR.rglob('*.csv'))]
+    (DATASETS_DIR / 'manifest.json').write_text(json.dumps({
+        'library': 'vnstock', 'library_version': importlib.metadata.version('vnstock'),
+        'requested_provider': SOURCE, 'profile': 'v5', 'start': start_date, 'end': end_date,
+        'retrieved_at': datetime.now(timezone.utc).isoformat(), 'calls': _provenance,
+        'nav_unit': NAV_UNIT, 'output_unit': 'thousand_VND/fund_unit', 'files': files,
+        'identity': _catalog[_catalog['ticker'].isin(args.symbols or _catalog['ticker'])].to_dict('records'),
+        'documentation': 'https://vnstocks.com/docs/vnstock/v6/thi-truong-market',
+    }, indent=2, default=str) + '\n')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as exc:
+        print(f'FAILED: {type(exc).__name__}', file=sys.stderr)
+        raise SystemExit(1) from None

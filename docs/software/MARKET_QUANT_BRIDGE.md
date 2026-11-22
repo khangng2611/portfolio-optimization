@@ -56,11 +56,34 @@ phiên mới nếu cần, không ghi đè pins cũ. Mặc định expiry sớm h
 freshness của nguồn. Quant mount artifact directory read-only. Historical pins
 vẫn được giữ; universe mới nhất hết hạn sẽ unavailable, không tự chọn bản cũ.
 
-## Chạy lại local
+## Migration ingestion sang Vnstock 6 — 21/11/2026
 
-Cần stack healthy, migration mới và identity upgrade; xem
+Mã fetch hiện dùng `vnstock==6.0.1`, `vnstock-oapi==0.1.2`, nguồn `fhsc`;
+đã kiểm thử bằng fixture offline, chưa gọi FHSC thật. Dữ liệu/KBS, model,
+snapshot và receipt lịch sử mô tả phía trên được giữ nguyên.
+
+```sh
+~/.venv_6x/bin/python -m pip install -r requirements-vnstock6.txt
+# Chỉ chạy sau khi key FHSC đã sẵn sàng; chưa chạy trong migration offline.
+~/.venv_6x/bin/python scripts/fetch_serving_prices.py --symbols FPT VCB HPG --start 2026-01-01 --end 2026-10-24 --output vnstock-migration/gen6/market-quant-20261024
+```
+
+Pack ghi hash CSV đã chuẩn hóa bởi Vnstock, nguồn/profile, schema changes,
+khoảng ngày thực nhận và đơn vị `thousand_VND/share`. Đây không phải raw
+response của Open API. Basis mặc định `unverified` trừ khi metadata của
+provider xác nhận cả bốn cột OHLC là `adjusted`; không sửa manifest để ép qua
+gate. Consumer hiện hữu vẫn từ chối pack chưa xác minh basis. Cần kiểm chứng
+quyền truy cập, coverage lịch sử và điều chỉnh giá trước khi sử dụng thật.
+
+Lệnh smoke bên dưới ghi database, train/approve model và publish bundle;
+không dùng nó để kiểm thử migration trên stack đang chứa dữ liệu nghiên cứu.
+
+## Lệnh pilot lịch sử (Vnstock 4, lưu để truy vết)
+
+Cần stack healthy, migration mới và identity upgrade tại thời điểm pilot; xem
 [setup guide](SETUP_AND_API_TESTING.md). Fetch dùng môi trường research đã có
-vnstock; serving vẫn tách dependencies. Không ghi đè dữ liệu nghiên cứu.
+vnstock 4 lúc chạy pilot; lệnh fetch đó đã được thay bằng hướng dẫn thế hệ 6 ở trên.
+Không chạy lại fetch đời 4. Serving vẫn tách dependencies.
 
 ```sh
 venv/bin/python scripts/fetch_serving_prices.py --symbols FPT VCB HPG --start 2026-01-01 --end 2026-10-24 --output /tmp/market-quant-real-20261024

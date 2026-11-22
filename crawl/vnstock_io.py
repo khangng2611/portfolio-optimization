@@ -10,6 +10,7 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'fhsc'
+OHLC_COLUMNS = ['open', 'high', 'low', 'close']
 
 
 def prepare_output(output: str | Path) -> Path:
@@ -67,9 +68,15 @@ def check_identity(frame: pd.DataFrame, symbol: str) -> None:
             raise ValueError('SOURCE_SYMBOL_MISMATCH')
 
 
+def invalid_ohlc_range(frame: pd.DataFrame) -> pd.Series:
+    return (frame['high'] < frame[['open', 'low', 'close']].max(axis=1)) | (
+        frame['low'] > frame[['open', 'high', 'close']].min(axis=1)
+    )
+
+
 def daily_bars(frame: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     start, end = date_window(start, end)
-    columns = ['time', 'open', 'high', 'low', 'close', 'volume']
+    columns = ['time', *OHLC_COLUMNS, 'volume']
     if frame.empty or not set(columns) <= set(frame.columns):
         raise ValueError('INVALID_OHLCV_COLUMNS')
     if frame.attrs.get('last_bar_partial') or frame.attrs.get('truncated'):
@@ -80,13 +87,11 @@ def daily_bars(frame: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     result['time'] = daily_dates(result['time'])
     if result['time'].duplicated().any() or not result['time'].between(start, end).all():
         raise ValueError('INVALID_OHLCV_DAYS')
-    for column in ['open', 'high', 'low', 'close']:
+    for column in OHLC_COLUMNS:
         result[column] = numeric_values(result[column])
         if not result[column].map(lambda value: isfinite(value) and value > 0).all():
             raise ValueError('INVALID_OHLCV_PRICE')
-    if (result['high'] < result[['open', 'low', 'close']].max(axis=1)).any() or (
-        result['low'] > result[['open', 'high', 'close']].min(axis=1)
-    ).any():
+    if invalid_ohlc_range(result).any():
         raise ValueError('INVALID_OHLCV_RANGE')
     volume = numeric_values(result['volume'])
     if not volume.dropna().map(lambda value: isfinite(value) and value >= 0 and value % 1 == 0).all():

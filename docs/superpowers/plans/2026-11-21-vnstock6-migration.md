@@ -208,6 +208,31 @@ vnstock keys check fhsc
 
 **Trạng thái khi lập kế hoạch:** Chưa triển khai migration, chưa cài môi trường mới, chưa đọc hoặc kiểm thử key, chưa tạo manifest bảo vệ toàn bộ dữ liệu. Inventory và tài liệu API đã được đọc để lập kế hoạch; các checkbox là việc cần thực hiện sau này.
 
+## Bổ sung ngày 22/11/2026 — Bốn nến VNINDEX có biên độ không hợp lệ
+
+Phản hồi gốc từ FHSC có giá đóng cửa nằm ngoài khoảng `low`–`high` ở bốn phiên bên dưới. OHLC thay thế lấy từ nến ngày DNSE Entrade X và khớp khi tổng hợp nến một phút của DNSE. Giá đóng cửa khớp FHSC trong cả bốn phiên. Crawler giữ khối lượng FHSC vì khối lượng giữa hai nguồn khác nhau. [Phản hồi nến ngày DNSE dùng để đối chiếu](https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=1613408400&to=1715187600&symbol=VNINDEX&resolution=1D)
+
+| Phiên | Trường thay đổi | FHSC → DNSE (điểm) |
+| --- | --- | --- |
+| 2021-02-17 | `high` | 1.151,54 → 1.155,78 |
+| 2021-12-10 | `open`, `low` | 1.469,83 → 1.470,55 và 1.469,68 → 1.461,78 |
+| 2023-05-15 | `low` | 1.067,15 → 1.065,71 |
+| 2024-05-06 | `high` | 1.226,89 → 1.241,58 |
+
+Crawler áp dụng bộ OHLC DNSE đã đối chiếu chỉ khi mã là `VNINDEX`, nến bị lỗi và cả ngày giao dịch lẫn bốn giá trị OHLC gốc khớp hồ sơ đã duyệt. Toàn bộ bảng sau đó đi qua validator hiện hành trước khi chia train và test. Trong `manifest.json`, `calls[].replacements` ghi ngày, hai bộ OHLC và nguồn của khối lượng. `calls[].replacement_evidence` ghi URL, thời điểm lấy dữ liệu và SHA-256 của phản hồi DNSE đã lưu.
+
+Nếu còn nến không hợp lệ sau đối chiếu, crawler đánh dấu manifest `failed`, lưu các nến FHSC có biên độ lỗi trong `diagnostics/VNINDEX-ohlc-rejected.json` và trả mã thoát lỗi trước khi xuất CSV VNINDEX.
+
+Chạy lại cùng cửa sổ truy vấn với môi trường Vnstock 6 đã cấu hình FHSC. Chọn một đường dẫn đầu ra mới cho mỗi lần chạy.
+
+```bash
+~/.venv_6x/bin/python crawl/stock.py --index VNINDEX \
+  --start 2020-01-01 --end 2026-11-21 \
+  --output-root vnstock-migration/gen6/vnindex-reconciled-$(date +%Y%m%d-%H%M%S)
+```
+
+Lần chạy xác minh ngày 22/11/2026 xuất 1.718 phiên từ 02/01/2020 đến 20/11/2026. Đối chiếu với lần tải FHSC trước đó cho thấy chỉ bốn nến trên đổi OHLC, còn ngày giao dịch, giá đóng cửa và khối lượng khớp ở mọi phiên. SHA-256 của 1.176 tệp nghiên cứu và tham chiếu đều khớp. Kết quả chạy và phản hồi nguồn được lưu cục bộ trong `vnstock-migration/gen6/`.
+
 ## Cập nhật thực thi offline — 21/11/2026
 
 Người dùng đã chọn FHSC và cho phép triển khai code/test offline, dừng trước API thật.

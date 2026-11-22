@@ -77,6 +77,86 @@ def test_stock_etf_and_index_export_contract_without_touching_research(stock_set
     assert json.loads((output / 'manifest.json').read_text())['requested_provider'] == 'fhsc'
 
 
+VNINDEX_FHSC_ROWS = [
+    ('2021-02-17T00:00:00Z', 1127.46, 1151.54, 1127.46, 1155.78, 459215000),
+    ('2021-12-10T00:00:00Z', 1469.83, 1475.85, 1469.68, 1463.54, 780120100),
+    ('2023-05-15T00:00:00Z', 1074.82, 1076.32, 1067.15, 1065.71, 791524900),
+    ('2024-05-06T00:00:00Z', 1226.89, 1226.89, 1224.22, 1241.58, 666198300),
+]
+VNINDEX_DNSE_OHLC = [
+    [1127.46, 1155.78, 1127.46, 1155.78],
+    [1470.55, 1475.85, 1461.78, 1463.54],
+    [1074.82, 1076.32, 1065.71, 1065.71],
+    [1226.89, 1241.58, 1224.22, 1241.58],
+]
+
+
+def historical_stock_args(output, monkeypatch, rows, *, symbol='VNINDEX'):
+    frame = pd.DataFrame(rows, columns=['time', 'open', 'high', 'low', 'close', 'volume'])
+    frame.attrs.update(source='fhsc', profile='v5')
+    monkeypatch.setattr(sys.modules['vnstock'].Market, 'ohlcv', lambda *_a, **_kw: frame)
+    asset_option = '--index' if symbol == 'VNINDEX' else '--symbols'
+    return ['--output-root', str(output), '--start', '2020-01-01', '--end', '2026-11-21', asset_option, symbol]
+
+
+def test_vnindex_reconciles_four_reviewed_bars_and_records_sources(stock_setup, monkeypatch):
+    stock, output, _ = stock_setup
+    clean_bar = ('2021-02-18T00:00:00Z', 1157.10, 1174.38, 1148.66, 1174.38, 585040700)
+    args = historical_stock_args(output, monkeypatch, [*VNINDEX_FHSC_ROWS, clean_bar])
+    stock.main(args)
+
+    full = pd.read_csv(output / 'indices/full/VNINDEX.csv').set_index('date')
+    manifest = json.loads((output / 'manifest.json').read_text())
+    replacements = manifest['calls'][0]['replacements']
+    assert [entry['date'] for entry in replacements] == [row[0][:10] for row in VNINDEX_FHSC_ROWS]
+    for original, expected, entry in zip(VNINDEX_FHSC_ROWS, VNINDEX_DNSE_OHLC, replacements, strict=True):
+        day = original[0][:10]
+        assert full.loc[day, ['open', 'high', 'low', 'close']].tolist() == expected
+        assert full.loc[day, 'volume'] == original[5]
+        assert entry['source'] == 'dnse' and entry['volume_source'] == 'fhsc'
+        assert list(entry['original_ohlc'].values()) == list(original[1:5])
+        assert list(entry['replacement_ohlc'].values()) == expected
+    assert full.loc['2021-02-18', ['open', 'high', 'low', 'close', 'volume']].tolist() == list(clean_bar[1:])
+    assert manifest['status'] == 'complete'
+
+
+@pytest.mark.parametrize('unexpected', [
+    ('2021-02-19T00:00:00Z', 1127.46, 1151.54, 1127.46, 1155.78, 459215000),
+    ('2021-02-17T00:00:00Z', 1127.46, 1151.54, 1127.46, 1155.79, 459215000),
+])
+def test_vnindex_fails_closed_for_unreviewed_bars(stock_setup, monkeypatch, unexpected):
+    stock, output, _ = stock_setup
+    with pytest.raises(ValueError, match='^INVALID_OHLCV_RANGE$'):
+        stock.main(historical_stock_args(output, monkeypatch, [unexpected, VNINDEX_FHSC_ROWS[-1]]))
+
+    manifest = json.loads((output / 'manifest.json').read_text())
+    assert manifest['status'] == 'failed' and manifest['files'] == []
+    call = manifest['calls'][0]
+    assert call['status'] == 'failed' and call['error'] == 'INVALID_OHLCV_RANGE'
+    rejected = json.loads((output / call['diagnostic']).read_text())
+    assert rejected['source'] == 'fhsc'
+    assert [bar['date'] for bar in rejected['bars']] == [unexpected[0][:10], '2024-05-06']
+    assert rejected['bars'][0]['close'] == unexpected[4]
+
+
+def test_vnindex_leaves_valid_fhsc_bar_on_reviewed_day(stock_setup, monkeypatch):
+    stock, output, _ = stock_setup
+    improved = ('2024-05-06T00:00:00Z', 1227.25, 1241.58, 1224.22, 1241.58, 666198300)
+    stock.main(historical_stock_args(output, monkeypatch, [improved, VNINDEX_FHSC_ROWS[0]]))
+    full = pd.read_csv(output / 'indices/full/VNINDEX.csv').set_index('date')
+    replacements = json.loads((output / 'manifest.json').read_text())['calls'][0]['replacements']
+    assert full.loc['2024-05-06', 'open'] == 1227.25
+    assert [entry['date'] for entry in replacements] == ['2021-02-17']
+
+
+@pytest.mark.parametrize('symbol', ['FPT', 'E1VFVN30'])
+def test_vnindex_replacements_do_not_apply_to_other_assets(stock_setup, monkeypatch, symbol):
+    stock, output, _ = stock_setup
+    with pytest.raises(ValueError, match='^INVALID_OHLCV_RANGE$'):
+        stock.main(historical_stock_args(output, monkeypatch, VNINDEX_FHSC_ROWS, symbol=symbol))
+    assert list(output.rglob('*.csv')) == []
+
+
 def test_vn30_constituents_only_write_into_new_run(stock_setup):
     stock, output, _ = stock_setup
     assert hasattr(stock, 'main'), 'Crawler has no safe CLI'

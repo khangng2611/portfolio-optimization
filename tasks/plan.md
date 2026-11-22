@@ -1,5 +1,7 @@
 # Kế hoạch tích hợp K5 động, GOLD và VFF vào stack local
 
+**Kế hoạch sản phẩm ngày 22/11/2026:** investor nhận một đề xuất HYBRID có tỷ lệ phối theo trạng thái thị trường và hồ sơ. EW/MVO nằm trong mục so sánh thu gọn, chỉ để đọc. Xem [thiết kế và kế hoạch triển khai](../docs/superpowers/plans/2026-11-22-system-allocation-hybrid.md). Các mốc tích hợp dữ liệu bên dưới là nền tảng và lịch sử của kế hoạch mới.
+
 **Kế hoạch active từ 12/11/2026:** triển khai danh mục user chọn candidate
 assets theo tài liệu mới được dẫn ngay dưới. Phần full baseline cũ bên dưới
 được giữ làm lịch sử, không phải chỉ dẫn để chạy lại toàn bộ đợt cũ.

@@ -1,5 +1,16 @@
 # Công việc tích hợp Phase 1 đầy đủ
 
+## Kế hoạch sản phẩm 22/11/2026 — một đề xuất của hệ thống
+
+Các bước chi tiết và tiêu chí bật nằm trong [kế hoạch HYBRID](../docs/superpowers/plans/2026-11-22-system-allocation-hybrid.md).
+
+- [x] Khóa công thức, fixture và chạy đối chiếu Phase 1 trên lịch sử đã ghim.
+- [x] Tính hai nhánh trong một job Quant, ghim policy và kiểm tra công thức ở Portfolio.
+- [x] Chuyển Web và Chat sang một luồng tạo đề xuất và lý do readiness chung.
+- [x] Hiển thị EW/MVO làm đối chứng chỉ đọc, giữ lịch sử và dữ liệu cũ.
+- [x] Kiểm chứng broker/browser trước và sau đổi hồ sơ và qua recreate các service ứng dụng.
+- [ ] Mở luồng HYBRID thường trực sau khi bảng hệ số đạt cổng định lượng trên tập đánh giá độc lập. Pilot 22/11 giữ `paused` vì Tăng trưởng vượt ngưỡng biến động.
+
 **Checklist active từ 12/11/2026:** Task0–16 trong mục "Kế hoạch tiếp nối"
 ở cuối tệp, theo [plan mới](../docs/superpowers/plans/2026-11-12-user-selected-assets.md).
 Các checkbox đợt full baseline bên dưới được giữ nguyên để ghi nhận những

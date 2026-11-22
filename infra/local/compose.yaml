@@ -1,6 +1,7 @@
 name: portfolio-auth-demo
 
 x-portfolio-environment: &portfolio-environment
+  SYSTEM_HYBRID_ENABLED: ${SYSTEM_HYBRID_ENABLED:-paused}
   USER_SELECTED_ASSETS_ENABLED: ${USER_SELECTED_ASSETS_ENABLED:-false}
   DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
   OIDC_ISSUER: http://auth-api:8000
@@ -39,6 +40,7 @@ x-ml-environment: &ml-environment
   ML_ARTIFACT_DIRECTORY: /ml-models
 
 x-chat-environment: &chat-environment
+  SYSTEM_HYBRID_ENABLED: ${SYSTEM_HYBRID_ENABLED:-paused}
   DATABASE_URL: postgresql+psycopg://chat_runtime:${CHAT_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/chat_db
   OIDC_ISSUER: http://auth-api:8000
   OIDC_JWKS_URL: http://auth-api:8000/.well-known/jwks.json
@@ -299,6 +301,17 @@ services:
       market-api: {condition: service_healthy}
       auth-api: {condition: service_healthy}
     restart: unless-stopped
+
+  market-metadata-sync:
+    profiles: ["metadata"]
+    image: portfolio-software-market:local
+    command: ["python", "-m", "market_service.asset_metadata"]
+    environment:
+      <<: *market-environment
+      FHSC_API_KEY: ${FHSC_API_KEY:-}
+    depends_on:
+      market-migrate: {condition: service_completed_successfully}
+    restart: "no"
 
   market-api:
     image: portfolio-software-market:local

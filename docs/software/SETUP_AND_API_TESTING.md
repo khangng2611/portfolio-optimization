@@ -1,5 +1,10 @@
 # Setup và kiểm thử API phần mềm
 
+Giải thích phân bổ có evidence (22/11/2026): xem
+[API, migration, eval và same-receipt verification](ALLOCATION_EXPLANATION.md).
+Endpoint evidence là read-only, tách khỏi canonical recommendation/hash; paid
+acceptance phải qua dry-run, không dùng API key/config cũ thay cho budget approval.
+
 Để xem timeline của request qua BFF, RabbitMQ và workers, xem
 [hướng dẫn OpenTelemetry + Jaeger](TRACING.md). Có thể bật cùng quá trình setup:
 `python3 scripts/setup_software.py up --tracing`.

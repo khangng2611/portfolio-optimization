@@ -4,6 +4,68 @@ Cập nhật cấu hình dev 18/11/2026 theo yêu cầu mới nhất. Budget hi�
 quota 100 lượt/approval và 100 lượt/ngày UTC. Giữ approval ID và usage đã ghi nhận,
 không reset bộ đếm. Các mức 0,50 USD và quota thấp hơn bên dưới là lịch sử kiểm thử.
 
+## OpenAI explanation acceptance — 22/11/2026, cap 1 USD
+
+Người dùng xác nhận giữ cap1USD; runtime1.00/quotas100/approval/counters giữ nguyên,
+embeddings tắt và không đổi Auto Recharge. Offline26passed; native BL_ML model v5
+cũ qua explicit confirmation và 2conversations TEST. Recommendation23df1353;
+evidenceCOMPLETE, không accept target hoặc thay numerical algorithm/model.
+
+OpenAI gpt-6-luna thật11calls: 8plans được validator chấp nhận,3fallback an toàn;
+paid acceptance **PARTIAL, chưa PASS**. Hai follow-up không gửi ID giữ đúng
+recommendation, đúng GVR và báo ACB thiếu view. Facts/evidence/claims11/11khớp;
+23citation occurrences/3claims khớp corpus knowledge-vi-v1/manifest/hash/pinnedGit.
+Citations phương pháp/policy tách khỏi nguồn số liệu canonical run.
+
+Actual tokens21.650input/1.234output; adapter estimate0,003323250USD, reservations
+0,0187USD. Chưa đối soát invoice/cache breakdown; không gọi estimate là số tiền
+bill thực tế. Paid browser/hybrid/full24-case paid eval NOT RUN. Nội dung còn
+lặp/dài; overview có2invalidplans, RSI có1plan thiếu limitation; không đổi prompt
+hoặc code trong lượt kiểm thử. Restart Chat API/worker rồi verify đúng hai paid
+receipts và hai template receipts cũ đạt, không phát sinh provider calls bởi verify.
+Chi tiết/output/checklist tại
+[ALLOCATION_EXPLANATION.md](ALLOCATION_EXPLANATION.md), ignored report
+`output/allocation-explanation/openai-20261122/quality-report.json`.
+
+## Allocation explanation evidence — 22/11/2026
+
+Đã thêm sidecar Quant → Portfolio, migration nullable c9222026e001, owner/delegated
+read API `/recommendations/{id}/evidence`, finite Chat claims và bốn nhóm UI V2.7.
+Canonical numerical JSON/hash, algorithms, confirmation/accept và receipts cũ
+được giữ độc lập. Legacy thiếu raw views/features trả PARTIAL/NOT_RETAINED,
+không infer lại; invalid evidence trả UNAVAILABLE mà không bỏ numerical result.
+Chi tiết source/commands/gates tại [ALLOCATION_EXPLANATION.md](ALLOCATION_EXPLANATION.md).
+
+Backend thật MVO DEMO đã có receipt76081cdc; Chat template có receiptfc4d87d6,
+explicit confirmation +5follow-ups,0provider calls, worker dev đã khôi phục.
+Đây là synthetic numerical inputs qua services/DB/broker thật, không phải
+native BL_ML acceptance. Sau đó kiểm đúng scoped readiness thấy BL_ML READY:
+đã chạy native v5 cũ, recommendationd022809e-8c99-466b-9f9b-94a15b9e7284,
+evidenceCOMPLETE,5MLviews dương/0âm và features5equities,0provider calls.
+Giữ model70716105/epoch16/11 và point_in_time_certified=false. Không train/
+refresh/publish mới; kết luận blocker universe-level ban đầu không áp dụng
+cho portfolio-scoped readiness.
+
+Offline explanation24/24ca synthetic; topic/phrase assertions21/21 so với3/21
+renderer cũ, không coi là human/LLM quality score. Lexical heldoutHit@5 vẫn14/16
+(87,5%), dev8/8; không gọi embedding/LLM trong eval này. Hybrid NOT RUN.
+Paid dry-run bị chặn vì runtime1USD không khớp trần0,50USD đã duyệt trong chat
+hiện có; không coi dòng cấu hình dev trên là quyền tăng chi tiêu trong task này.
+Không có paid calls mới, không đổi Auto Recharge hoặc counters.
+
+Web168tests, TypeScript/Ruff và production builds đạt. Browser thật sau restart
+ở1440/390/375CSSpx đạt, xem đủ4nhóm/5nativeviews/features/2citations, không
+overflow/runtime errors; Enter/disclosures và draft-only suggestion hoạt động.
+Restart9services đã đổi rồi verify chính native d022, Chat MVO fc4d, backend MVO
+7608 và original v5 f1a6 receipts đạt; hashes/messages/usage không đổi. Preservation
+các row/artifacts/accounts/volumes/catalog history và154tin nhắn cũ đạt; dev
+config nguyên vẹn. Full Python/core đạt960passed,10skipped,1warning; sau đó
+nhóm regression future-tail evidence đạt17passed (overlap, không cộng tổng).
+Report tại `output/allocation-explanation/verification.json`. Real EW receipt
+riêng chưa chạy; unit EW/no-ML đạt. Checklist đề nghị ở runbook, chưa sửa Sheet.
+Không kiểm screen reader/thiết bị vật lý hoặc gọi paid OpenAI/hybrid.
+Không commit/push/merge hoặc sửa Google Sheet.
+
 ## Giải thích đề xuất nối tiếp — 18/11/2026
 
 Đã tái hiện hai câu trong ảnh rơi về input_required/help khi quota nhóm hiện tại

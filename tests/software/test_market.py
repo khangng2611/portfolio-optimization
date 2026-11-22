@@ -66,6 +66,29 @@ def headers(who="operator", key=None):
     return value
 
 
+def test_market_assets_reads_database_metadata_and_preserves_unknown_assets(market):
+    from market_service.models import Asset
+
+    client, sessions, _, _ = market
+    with sessions() as session:
+        session.add(Asset(id="FPT", kind="stock", unit="VND/share", display_name="Database issuer name", description="Database business profile.", metadata_source="vnstock:fhsc:company.info", metadata_source_symbol="FPT", metadata_fetched_at=utcnow()))
+        session.add(Asset(id="UNKNOWN", kind="stock", unit="VND/share"))
+        session.commit()
+    response = client.get("/api/v1/market/assets", headers=headers("investor"))
+    assert response.status_code == 200
+    assets = {asset["asset_id"]: asset for asset in response.json()}
+    assert assets["FPT"]["display_name"] == "Database issuer name"
+    assert assets["FPT"]["description"] == "Database business profile."
+    assert assets["FPT"]["metadata_source"] == "vnstock:fhsc:company.info"
+    assert assets["FPT"]["metadata_fetched_at"]
+    assert assets["UNKNOWN"]["display_name"] == "UNKNOWN"
+    assert assets["UNKNOWN"]["description"] is None
+    with sessions.begin() as session:
+        session.get(Asset, 'FPT').description = 'Updated database profile'
+    updated = client.get('/api/v1/market/assets', headers=headers('investor')).json()
+    assert next(asset for asset in updated if asset['asset_id'] == 'FPT')['description'] == 'Updated database profile'
+
+
 def test_dataset_metadata_is_valid_after_local_midnight(market, monkeypatch):
     from datetime import date, datetime, timezone
     from market_service import providers

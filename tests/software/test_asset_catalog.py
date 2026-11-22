@@ -22,3 +22,17 @@ def test_catalog_survives_missing_expired_and_stale_bundles():
         assert all(a["data_status"] == "UNKNOWN" for a in result["assets"])
         assert all(a["available_at"] is None for a in result["assets"])
         assert result["catalog_version"] == "supported-assets-v1"
+
+
+def test_model_catalog_contains_only_structural_identity_not_issuer_metadata():
+    assets = {asset["asset_id"]: asset for asset in asset_catalog()["assets"]}
+    assert len(assets) == 32
+    assert all(asset['display_name'] == asset_id and asset['description'] is None for asset_id, asset in assets.items())
+
+
+def test_older_catalog_items_can_omit_description():
+    from portfolio_contracts.selection import AssetCatalogItem
+
+    item = supported_assets()[0].copy()
+    item.pop("description", None)
+    assert AssetCatalogItem(**item).description is None

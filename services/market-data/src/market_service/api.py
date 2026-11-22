@@ -509,7 +509,14 @@ def create_app(*, sessions, verifier, provider):
     def assets(identity=Depends(principal)):
         with sessions() as session:
             return [
-                {"asset_id": row.id, "kind": row.kind, "unit": row.unit}
+                {
+                    "asset_id": row.id, "kind": row.kind, "unit": row.unit,
+                    "display_name": row.display_name or row.id,
+                    "description": row.description,
+                    "metadata_source": row.metadata_source,
+                    "metadata_source_symbol": row.metadata_source_symbol,
+                    "metadata_fetched_at": row.metadata_fetched_at,
+                }
                 for row in session.scalars(select(Asset).order_by(Asset.id).limit(1000))
             ]
 

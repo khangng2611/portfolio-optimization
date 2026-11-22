@@ -6,11 +6,11 @@ import time
 from uuid import uuid4
 import httpx
 from sqlalchemy import delete
-from portfolio_contracts import aware, canonical_hash, utcnow
+from portfolio_contracts import aware, canonical_hash, system_hybrid_enabled, system_hybrid_managed, utcnow
 from .models import ToolCall, Event
 from .provider import Provider, render
 from .queue import Queue
-from .tools import ToolError
+from .tools import ALLOCATION_INPUT_ERRORS, ToolError
 from .llm import Dialogue
 from .knowledge import (
     Retrieval,
@@ -40,6 +40,24 @@ def is_knowledge_followup(text):
         r"(?:(?:vay|the|con)\s+)?(?:no|cai nay|cai do|phuong phap nay|phuong phap do|cach nay|cach do)\b",
         text,
     )
+
+
+def is_evidence_followup(text):
+    value = normalize_intent(text)
+    if BLOCKED_INTENT.search(value) or re.search(r"(?:tao|tinh|hay) (?:de xuat|phan bo)|lap phuong an|toi uu|chay (?:ew|mvo|bl)", value):
+        return False
+    linked = bool(re.search(r"de xuat|phan bo|ty trong|cua ro|anh huong|lien quan",value))
+    if "thi truong" in value and (not linked or re.search(r"hom nay|hien tai|moi nhat", value)):
+        return False
+    if "ho so" in value and not linked:
+        return False
+    if re.search(r"la gi|nghia la|khai niem",value) and not linked:
+        from portfolio_contracts.assets import EQUITY_IDS
+        if not any(re.search(r"\b"+a.lower()+r"\b",value) for a in EQUITY_IDS):
+            return False
+    if "rui ro" in value and "ho so" not in value:
+        return True
+    return bool(re.search(r"\b(?:views?|du bao|tin hieu|rsi|macd|momentum|dac trung|xu huong|bien dong|drawdown|k5)\b", value) or ("ho so" in value and re.search(r"anh huong|lien quan|phan bo|de xuat", value)))
 
 
 def intent_of(request):
@@ -106,7 +124,7 @@ class Worker:
         return 20 - (time.monotonic() - self.started) >= seconds + reserve
 
     def call(self, job, name, args):
-        if time.monotonic() - self.started > 20 or self.tool_count >= 6:
+        if time.monotonic() - self.started > 20 or self.tool_count >= 7:
             raise ToolError("TOOL_BUDGET_EXCEEDED", permanent=True)
         self.tool_count += 1
         try:
@@ -150,6 +168,7 @@ class Worker:
         if (
             self.dialogue.contextual
             and self.query_rewriter is None
+            and not (system_hybrid_managed() and structured.get("type") in {"help", "input_required"})
             and structured.get("type")
             in {"help", "input_required", "knowledge", "profile", "portfolio", "market"}
             and self.has_time(9, reserve=1)
@@ -185,6 +204,8 @@ class Worker:
         inputs = {"portfolio": p, "strategy": strategy}
         return self.reply(
             job,
+            "Vui lòng kiểm tra danh mục, hồ sơ rủi ro và ràng buộc trước khi tạo đề xuất."
+            if strategy == "HYBRID" else
             "Vui lòng kiểm tra danh mục, hồ sơ rủi ro, chiến lược và ràng buộc trước khi tạo đề xuất.",
             {
                 "type": "confirmation",
@@ -231,7 +252,8 @@ class Worker:
                 if status["status"] != "SUCCEEDED" or not status.get(
                     "recommendation_id"
                 ):
-                    raise ToolError("ALLOCATION_FAILED", permanent=True)
+                    code = (status.get("error") or {}).get("code")
+                    raise ToolError(code if code in ALLOCATION_INPUT_ERRORS else "ALLOCATION_FAILED", permanent=True)
                 facts = self.call(
                     job,
                     "get_recommendation",
@@ -245,7 +267,7 @@ class Worker:
                     "request_allocation",
                     {
                         "portfolio_id": pin["portfolio"]["id"],
-                        "strategy": pin["strategy"],
+                        **({"strategy": pin["strategy"]} if pin["strategy"] != "HYBRID" else {}),
                         "expected_version": pin["portfolio"]["version"],
                         "expected_policy_version": pin["portfolio"][
                             "policy_version_id"
@@ -269,6 +291,10 @@ class Worker:
                     now=self.clock(),
                 )
             deterministic = intent_of(r)
+            if (not r.get("intent") and not r.get("confirmation")
+                and is_evidence_followup(r["content"])
+                and (r.get("recommendation_id") or self.dialogue.recommendation_reference(job))):
+                deterministic = "explain"
             if deterministic == "explain" and not r.get("confirmation"):
                 r = r | {"intent": "explain"}
             topic = None
@@ -376,6 +402,8 @@ class Worker:
                     ),
                     requested=True,
                 )
+            if system_hybrid_managed() and not system_hybrid_enabled():
+                raise ToolError("INPUT_UNAVAILABLE", permanent=True)
             if not p.get("risk_profile") or not p["risk_profile"].get("version_id"):
                 return self.reply(
                     job,
@@ -388,7 +416,7 @@ class Worker:
                     status="WAITING_INPUT",
                     stage="COLLECT",
                 )
-            if not r.get("strategy") and not r.get("confirmed_input"):
+            if not system_hybrid_managed() and not r.get("strategy") and not r.get("confirmed_input"):
                 return self.reply(
                     job,
                     "Chọn chiến lược EW, MVO hoặc BL_ML; hệ thống không tự chuyển chiến lược khi có lỗi.",
@@ -397,8 +425,10 @@ class Worker:
                     stage="COLLECT",
                 )
             if not r.get("confirmation"):
-                return self.confirmation(job, p, r["strategy"])
+                return self.confirmation(job, p, "HYBRID" if system_hybrid_managed() else r["strategy"])
             pin = r["confirmed_input"]
+            if system_hybrid_managed() and pin["strategy"] != "HYBRID":
+                return self.confirmation(job, p, "HYBRID", "STALE_CONFIRMATION")
             if (
                 canonical_hash({"portfolio": p, "strategy": pin["strategy"]})
                 != r["confirmation"]["facts_hash"]
@@ -460,11 +490,31 @@ class Worker:
 
     def explain(self, job, facts, *, requested=False):
         digest = canonical_hash(facts)
+        evidence, claims, selected_claim_ids = None, None, None
+        from .explanation import build_claims, default_ids, render_claims, validate_plan
+
+        try:
+            candidate = self.call(job, "get_recommendation_evidence", {"resource_id": facts["id"]})
+            claims = build_claims(facts, candidate)
+            evidence = candidate
+        except (ValueError, KeyError, TypeError, AttributeError, ToolError, httpx.HTTPError):
+            # Older grants/services can still explain the canonical facts already read.
+            # Final owner authorization below remains mandatory.
+            pass
         knowledge = self.knowledge(
             job, select_claims=False, strategy=facts.get("strategy")
         )
         if not self.has_time(8):
             sections, metadata = None, {"reason": "TURN_BUDGET_EXHAUSTED"}
+        elif evidence is not None:
+            plan, metadata = self.dialogue.explain_claims(job, digest, evidence, claims)
+            sections = None
+            if plan:
+                try:
+                    selected_claim_ids = validate_plan(plan, facts, evidence, claims, job.request["content"])
+                    sections = selected_claim_ids
+                except ValueError:
+                    metadata = metadata | {"reason": "UNVERIFIED_OUTPUT"}
         elif self.dialogue.enabled:
             sections, metadata = self.dialogue.explain(
                 job, facts, digest, self.knowledge_data
@@ -473,7 +523,12 @@ class Worker:
             sections, metadata = self.provider.explain(facts, digest)
         else:
             sections, metadata = None, {"reason": "PROVIDER_BUDGET_EXHAUSTED"}
-        text = render(facts, sections)
+        if evidence is not None:
+            selected_claim_ids = selected_claim_ids or default_ids(claims, job.request["content"])
+            text = render_claims(claims, selected_claim_ids)
+            metadata = metadata | {"schema_version": "explanation-claims-v1", "prompt_version": "allocation-explanation-v1"}
+        else:
+            text = render(facts, sections)
         if metadata.get("knowledge_plan"):
             knowledge = render_evidence(
                 self.knowledge_data,
@@ -508,6 +563,9 @@ class Worker:
                     "recommendation_id": rid,
                     "facts": facts,
                     "facts_hash": digest,
+                    **({"explanation_evidence": evidence, "selected_claim_ids": selected_claim_ids,
+                        "explanation_claims": [c.model_dump(mode="json") for c in claims],
+                        "renderer_version": "allocation-explanation-v1"} if evidence is not None else {}),
                     "knowledge": knowledge,
                     "explanation_status": "VERIFIED" if sections else "TEMPLATE",
                     "explanation_requested": requested,

@@ -1,5 +1,12 @@
 # Chat LLM implementation — 05/11/2026
 
+Update22/11: allocation explanations now use frozen Quant/Portfolio evidence,
+finite claim IDs and deterministic rendering with focused Vietnamese follow-ups.
+See [ALLOCATION_EXPLANATION.md](ALLOCATION_EXPLANATION.md) for the additive API,
+migration, legacy compatibility, eval and verification gates. This extends the
+existing OpenAI adapter; it does not enable free prose, allocation/accept tools
+or new spending authority. Paid gate remains separate from template acceptance.
+
 User selected proposal B: LLM understands conversation, backend orchestrates. Execute
 in the current checkout, preserve the previous Chat MVP and unrelated work. Use
 writing-plans, inline execution and TDD. No commit/push or billing changes.

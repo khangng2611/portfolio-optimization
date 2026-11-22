@@ -6,7 +6,7 @@ from decimal import Decimal
 from uuid import UUID
 from sqlalchemy import select, update, func
 
-from portfolio_contracts import utcnow
+from portfolio_contracts import system_hybrid_managed, utcnow
 from .models import Conversation, Job, Message, ProviderInvocation
 from .openai_provider import OpenAIProvider, redact
 from .embeddings import Embeddings, approved_budget
@@ -240,7 +240,7 @@ class Dialogue:
             verified = strategy and re.search(
                 evidence[strategy], request["content"], re.IGNORECASE
             )
-            request["strategy"] = request.get("strategy") or (
+            request["strategy"] = None if system_hybrid_managed() else request.get("strategy") or (
                 strategy if verified else None
             )
             if plan["reference"] == "last_recommendation" and last_result:
@@ -283,6 +283,16 @@ class Dialogue:
             lambda: self.provider.explain(
                 facts, digest, question=job.request["content"]
             ),
+        )
+
+    def explain_claims(self, job, digest, evidence, claims):
+        if not self.enabled:
+            return None, {"reason": "NOT_CONFIGURED"}
+        context, _ = self.context(job)
+        return self.ledger.invoke(
+            job, "explanation", lambda: self.provider.explain_claims(
+                digest, evidence["evidence_hash"], claims, question=job.request["content"], history=(context or {}).get("history", [])
+            ), rag=True,
         )
 
     def select_knowledge(self, job, data):

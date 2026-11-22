@@ -82,6 +82,8 @@ class Tools:
             return {"job_id": self.allocations[job.id]}
         if tool == "get_allocation_job":
             return {"status": "SUCCEEDED", "recommendation_id": args["resource_id"]}
+        if tool == "get_recommendation_evidence":
+            return {}  # Legacy fixture has no retained Quant evidence.
         if tool == "get_recommendation":
             return {
                 "id": args["resource_id"],
@@ -223,6 +225,23 @@ def test_no_allocation_until_explicit_confirmation_and_canonical_result(chat):
         .headers["content-type"]
         .startswith("text/event-stream")
     )
+
+
+def test_chat_creates_system_confirmation_without_client_strategy(chat, monkeypatch):
+    monkeypatch.setenv('SYSTEM_HYBRID_ENABLED', 'true')
+    c, s, tools = chat
+    cid = conversation(c, tools.summary['id'])
+    assert send(c, cid, strategy='EW').status_code == 422
+    key = str(uuid4())
+    path = f'/api/v1/conversations/{cid}/messages'
+    received = c.post(path, headers=headers(key=key), json={
+        'client_message_id': key, 'intent': 'allocation', 'content': 'Tạo đề xuất',
+    })
+    assert received.status_code == 202
+    assert run(s, tools)
+    card = c.get(path, headers=headers()).json()[-1]['structured']
+    assert card['type'] == 'confirmation' and card['input']['strategy'] == 'HYBRID'
+    assert not tools.allocations
 
 
 def test_stale_confirmation_and_missing_input_do_not_mutate(chat):

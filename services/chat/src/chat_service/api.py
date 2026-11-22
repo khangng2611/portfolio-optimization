@@ -14,7 +14,7 @@ from pydantic import Field
 from sqlalchemy import select, func, text, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from portfolio_contracts import StrictModel, aware, canonical_hash, utcnow
+from portfolio_contracts import StrictModel, aware, canonical_hash, system_hybrid_managed, utcnow
 from service_auth import AuthError
 from service_observability import install_http_tracing
 from .models import Conversation, Event, Job, Message, ProviderInvocation
@@ -312,6 +312,8 @@ def create_app(*, sessions, verifier, tools, stream_seconds=85):
                 if old.body_hash != digest:
                     raise HTTPException(409, "IDEMPOTENCY_CONFLICT")
                 return accepted(s.scalar(select(Job).where(Job.message_id == old.id)))
+            if system_hybrid_managed() and "strategy" in body.model_fields_set:
+                raise HTTPException(422, "STRATEGY_MANAGED_BY_SYSTEM")
             active = s.get(Job, c.active_job_id) if c.active_job_id else None
             if active and active.status not in TERMINAL:
                 raise HTTPException(409, "TURN_IN_PROGRESS")

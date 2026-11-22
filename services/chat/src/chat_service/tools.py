@@ -6,6 +6,15 @@ import time
 import httpx
 
 
+ALLOCATION_INPUT_ERRORS = frozenset({
+    "INPUT_EXPIRED", "VFF_STALE", "GOLD_STALE", "ASSET_DATA_STALE", "INPUT_INVALID",
+    "INPUT_UNAVAILABLE", "ASSET_DATA_MISSING", "HISTORY_INSUFFICIENT",
+    "ASSET_SELECTION_REQUIRED", "RISK_PROFILE_REQUIRED", "INSUFFICIENT_ASSETS",
+    "DEFENSIVE_ASSET_REQUIRED", "CONSTRAINTS_INFEASIBLE", "NO_VALID_ML_VIEWS",
+    "MODEL_UNAVAILABLE", "MODEL_REVIEW_PENDING", "MODEL_COVERAGE_MISSING", "MODEL_EPOCH_MISMATCH",
+})
+
+
 class ToolError(Exception):
     def __init__(self, code, *, permanent=False):
         self.code, self.permanent = code, permanent
@@ -61,12 +70,7 @@ class Tools:
                 and detail.get("message") == "Dữ liệu đầu vào đã hết hạn."
             ):
                 code = "INPUT_EXPIRED"
-            if isinstance(code, str) and code in {
-                "INPUT_EXPIRED",
-                "VFF_STALE",
-                "GOLD_STALE",
-                "ASSET_DATA_STALE",
-            }:
+            if isinstance(code, str) and code in ALLOCATION_INPUT_ERRORS:
                 raise ToolError(code, permanent=True)
         if r.status_code in (409, 412, 422):
             raise ToolError("STALE_OR_INVALID_INPUT", permanent=True)
@@ -91,6 +95,7 @@ class Tools:
             "get_portfolio_summary",
             "get_recommendation",
             "get_allocation_job",
+            "get_recommendation_evidence",
         ]
         if allow_mutation:
             permitted.append("request_allocation")

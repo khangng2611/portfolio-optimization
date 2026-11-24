@@ -1,5 +1,7 @@
 # Kế hoạch tích hợp K5 động, GOLD và VFF vào stack local
 
+Bản ứng viên Chat ngày 23/11/2026 đã có phản hồi trạng thái, truy xuất và kiểm định tiếng Việt. Cổng phát hành còn mở vì độ đúng nguồn và căn cứ trên tập khóa chưa đạt. Các vòng tiếp theo đối chiếu riêng từng câu, đoạn được tìm, câu trả lời và lượt gọi OpenAI. [Bộ kiểm định tiến cứu cuối](../docs/software/RAG_QUALITY_V5_2026_11_23.md) · [Kiểm tra OpenAI thật](../docs/software/RAG_OPENAI_QUALITY_2026_11_23.md). Xem [rà soát, baseline và các bước cải thiện RAG](../docs/superpowers/plans/2026-11-23-rag-quality-and-status.md).
+
 **Kế hoạch sản phẩm ngày 22/11/2026:** investor nhận một đề xuất HYBRID có tỷ lệ phối theo trạng thái thị trường và hồ sơ. EW/MVO nằm trong mục so sánh thu gọn, chỉ để đọc. Xem [thiết kế và kế hoạch triển khai](../docs/superpowers/plans/2026-11-22-system-allocation-hybrid.md). Các mốc tích hợp dữ liệu bên dưới là nền tảng và lịch sử của kế hoạch mới.
 
 **Kế hoạch active từ 12/11/2026:** triển khai danh mục user chọn candidate

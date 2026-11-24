@@ -1,5 +1,13 @@
 # Công việc tích hợp Phase 1 đầy đủ
 
+- [ ] Triển khai và nghiệm thu [P0–P4 của kế hoạch cải thiện Chat và RAG tiếng Việt](../docs/superpowers/plans/2026-11-23-rag-quality-and-status.md) trên bộ kiểm định độc lập và Compose local. Đã chạy đối chứng và kiểm tra persistence. Còn cổng chất lượng trên tập khóa, rà soát nội dung độc lập và phê duyệt corpus. Xem [bảng điểm và mã ca trượt](../docs/software/RAG_QUALITY_EVAL_2026_11_23.md).
+
+- [x] Khóa các bộ tiếng Việt mới trước khi sửa, lưu điểm từng vòng và đối chiếu nguồn trích dẫn cuối. [V3](../docs/software/RAG_QUALITY_V3_2026_11_23.md) · [V4](../docs/software/RAG_QUALITY_V4_2026_11_23.md).
+- [x] Kiểm tra lựa chọn đoạn với OpenAI thật trên API local cô lập, ghi token, giữ chỗ chi phí và kiểm lại cùng receipt V4 sau restart. [Runbook OpenAI](../docs/software/RAG_OPENAI_QUALITY_2026_11_23.md).
+- [x] Chạy hai nhánh trả phí V5 trên cùng 18 câu, kiểm nguồn thật, token và receipt sau restart. [Chi phí và cách tái lập](../docs/software/RAG_OPENAI_QUALITY_2026_11_23.md).
+- [ ] Khắc phục chọn sai đoạn trong top 5 và phân biệt thời điểm của trạng thái, rồi đo trên câu hỏi mới.
+- [ ] Chốt chấm đôi các câu còn mơ hồ, duyệt nguồn công bố và quyết định phát hành corpus. [Bộ kiểm định cuối](../docs/software/RAG_QUALITY_V5_2026_11_23.md).
+
 ## Kế hoạch sản phẩm 22/11/2026 — một đề xuất của hệ thống
 
 Các bước chi tiết và tiêu chí bật nằm trong [kế hoạch HYBRID](../docs/superpowers/plans/2026-11-22-system-allocation-hybrid.md).

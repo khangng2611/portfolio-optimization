@@ -4,3 +4,13 @@ services:
     environment:
       APP_ORIGIN: ${DEMO_PUBLIC_ORIGIN:?Set the HTTPS Tailscale Funnel origin}
       # Internal Auth still uses HTTP; secure cookies follow the HTTPS APP_ORIGIN.
+  portfolio-api:
+    environment:
+      # The public smoke profile uses explicit DEMO strategies.
+      SYSTEM_HYBRID_ENABLED: "false"
+  chat-api:
+    environment:
+      SYSTEM_HYBRID_ENABLED: "false"
+  chat-worker:
+    environment:
+      SYSTEM_HYBRID_ENABLED: "false"

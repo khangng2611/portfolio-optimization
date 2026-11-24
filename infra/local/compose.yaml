@@ -1,6 +1,7 @@
 name: portfolio-auth-demo
 
 x-portfolio-environment: &portfolio-environment
+  HYBRID_LOCAL_RETROSPECTIVE_POLICY: ${HYBRID_LOCAL_RETROSPECTIVE_POLICY:-}
   SYSTEM_HYBRID_ENABLED: ${SYSTEM_HYBRID_ENABLED:-paused}
   USER_SELECTED_ASSETS_ENABLED: ${USER_SELECTED_ASSETS_ENABLED:-false}
   DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
@@ -476,6 +477,7 @@ services:
       QUANT_API_URL: http://quant-api:8000
       ML_API_URL: http://ml-api:8000
       CHAT_API_URL: http://chat-api:8000
+      KNOWLEDGE_API_URL: http://knowledge-api:8000
       ALLOW_INSECURE_HTTP: "true"
     ports: ["127.0.0.1:3000:3000"]
     depends_on:

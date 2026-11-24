@@ -1,8 +1,81 @@
 # Tiến độ software app
 
-Cập nhật cấu hình dev 18/11/2026 theo yêu cầu mới nhất. Budget hiện tại 1,00 USD,
+Cấu hình dev ngày 18/11/2026 dùng budget 1,00 USD,
 quota 100 lượt/approval và 100 lượt/ngày UTC. Giữ approval ID và usage đã ghi nhận,
 không reset bộ đếm. Các mức 0,50 USD và quota thấp hơn bên dưới là lịch sử kiểm thử.
+
+## Thời gian phân loại nguồn trên demo Docker local · 24/11/2026
+
+Với câu “Mục tiêu đang nói ở đây là gì vậy?”, ngưỡng 8 giây ghi nhận một timeout trong bảy lượt (bốn qua Chrome, ba qua API). Sau khi tăng riêng ngưỡng `source_route` lên tối đa 12 giây trong thời gian còn lại của lượt chat, cả năm lượt Chrome nhận được phân loại OpenAI. Ba lượt mất hơn 8 giây. Worker gửi xong yêu cầu sau 0,14–0,29 giây. OpenAI báo thời gian xử lý 6,29–8,60 giây. Trung vị từ lúc gửi đến khi Chrome hiện câu trả lời là 10,60 giây trước sửa và 8,96 giây sau sửa. Cả năm lượt sau đều hỏi người dùng chọn giữa mục tiêu đã lưu, đề xuất đang mở và định nghĩa phân bổ. Mười một lượt có usage ước tính tổng cộng 0,0004675 USD. Lượt timeout thiếu usage. [Bốn lượt Chrome trước sửa](../../output/source-latency/baseline.json) · [Ba lượt API trước sửa](../../output/source-latency/api_before.json) · [Năm lượt Chrome sau sửa](../../output/source-latency/after.json).
+
+## Demo Docker local và Chrome · 24/11/2026
+
+Đã triển khai Portfolio API, Chat worker và Web lên demo cổng 3100. Chrome đăng nhập bằng tài khoản QA rồi gửi năm lượt qua ô chat. Ba lượt hỏi trực tiếp, làm rõ và diễn đạt gián tiếp đều hiển thị đúng mục tiêu đã chấp nhận của danh mục kiểm thử (VIC 50%, VFF 30%, STB 20%) và đúng ID đề xuất. Câu hỏi định nghĩa trích đúng đoạn Investor.gov từ corpus `knowledge-vi-v1.1-20261124`. Lượt thứ ba timeout khi phân loại và hỏi lại đúng nguồn. Lượt gián tiếp sau restart nhận phân loại OpenAI thành công. Chi phí từ usage trả về là 0.00004275 USD; lượt timeout chưa có usage. Sau restart worker, đã mở lại đúng bốn lượt trước đó trong Chrome và đối chiếu ID job, ID tin nhắn, nội dung, nguồn và usage. [Ảnh phân bổ](../../output/chat-source-routing/demo/saved-target.png) · [Ảnh định nghĩa](../../output/chat-source-routing/demo/definition.png) · [Receipt Chrome](../../output/chat-source-routing/demo/browser-receipt.json) · [Đối chiếu restart](../../output/chat-source-routing/demo/after-restart.json).
+
+## QA chọn nguồn khi hỏi về phân bổ · 24/11/2026
+
+Trên cùng bộ tám câu tiếng Việt và cùng danh mục QA đã có mục tiêu, bản trước đạt 3/8 khi tắt provider. Bản sửa đạt 8/8 khi tắt provider, 8/8 khi quota bằng 0 và 8/8 khi bật OpenAI thật. Các lượt hỏi bản đã chấp nhận trả đúng bản ghi từ dashboard, gồm VIC 50%, VFF 30% và STB 20%. Câu hỏi định nghĩa sử dụng đoạn `asset-allocation-definition` của corpus `knowledge-vi-v1.1-20261124`. Ca phát triển riêng “Cơ cấu lần trước mình bấm đồng ý gồm gì?” được OpenAI phân loại vào mục tiêu đã lưu. Khi hết quota, Chat hỏi người dùng chọn nguồn. Ở lượt QA bật OpenAI cuối, đã đọc lại đúng chín tin nhắn với hash ban đầu sau restart worker.
+
+Hai đợt bật OpenAI có sáu lần gọi, năm lần có usage với tổng 2.174 token vào và 277 token ra. Ước tính 0,000410250 USD theo usage. Một lần phân loại timeout thiếu usage, ledger giữ chỗ 0,0017 USD. Kiểm tra bằng Auth hiện hành và các owner API thật. Tại thời điểm nghiệm thu QA, demo, browser và Keycloak riêng chưa chạy. Bộ tám câu là regression cho ranh giới nguồn. [Runbook](KNOWLEDGE_RAG.md) · [Baseline](../../output/chat-source-routing/before-retry.json) · [Hết quota](../../output/chat-source-routing/quota-retry.json) · [OpenAI](../../output/chat-source-routing/paid-confirm.json).
+
+## Định nghĩa phân bổ tài sản trên demo · 24/11/2026
+
+Corpus `knowledge-vi-v1.1-20261124` kế thừa 24 đoạn cũ và bổ sung định nghĩa từ Investor.gov. Chat hiển thị nguyên văn đoạn đã duyệt cho câu hỏi định nghĩa “Phân bổ tài sản là gì?”, kèm nguồn. Nếu corpus tại thời điểm hỏi thiếu định nghĩa, Chat báo thiếu nguồn. Ba lượt QA qua API, gồm tiếng Việt có dấu, không dấu và tên thuật ngữ tiếng Anh, có cùng câu trả lời và trích dẫn, không phát sinh lượt gọi provider. [Receipt QA](../../output/allocation-glossary/verify.json) · [Nguồn định nghĩa](https://www.investor.gov/introduction-investing/investing-basics/glossary/asset-allocation).
+
+
+## Nghiệm thu Chat theo ngữ cảnh và bộ V6 · 24/11/2026
+
+**Demo đã bật câu hỏi nối tiếp về đề xuất đã lưu.** Worker `portfolio-chat-worker:context1-final-20261124` và API `portfolio-chat-api:context1-20261124` dùng grant đọc trạng thái Portfolio. Trong Chrome, trên chính đề xuất đã chấp nhận ngày dữ liệu 23/11, “VFF chiếm bao nhiêu %?” trả 41,00%. “Sao lại cao vậy?” đọc hai nhánh 30,00% và 50,00%, phối theo 45% MVO và 55% BL_ML. “Thế còn POW?” trả 22,50%. Chỉ lượt thứ hai cần một lần phân loại OpenAI. Ba job giữ nguyên ID, nội dung, facts hash, evidence hash và thời điểm chấp nhận sau khi worker được tạo lại. Hỏi tiếp về số tiền trả 41.000.000 ₫ từ vốn đã ghim 100.000.000 ₫. Câu hỏi về tỷ trọng đang nắm giữ yêu cầu làm rõ nguồn, với số lần gọi provider bằng 0. [Đối chiếu sau restart](../../output/chat-three-stage/demo-stage1-final/after-restart.json) · [Hai lượt bổ sung](../../output/chat-three-stage/demo-stage1-final/amount-and-holdings.json).
+
+V5 offline có 39/40 câu đi đúng nhánh, so với 38/40 trước sửa. Cả 10/10 câu về thời điểm và 40/40 kiểm tra hành động đều đạt. Trên demo, ba lượt kiểm tra danh mục của tài khoản QA trả về `VFF_STALE`. Lượt hỏi lịch sử dùng đúng `checked_at` của lượt trước và lượt hỏi “Giờ được chưa?” đọc lại Portfolio với timestamp mới. QA đề xuất riêng qua API có bảy lượt offline và bảy lượt bật OpenAI, dùng lại đúng lịch sử sau restart ở cả hai lượt chạy. Demo và QA dùng dịch vụ Auth của stack hiện hành. [Kiểm tra trạng thái demo](../../output/chat-three-stage/real-demo-status.json) · [So sánh V5](../../output/chat-three-stage/release-v5.json) · [Receipt QA OpenAI](../../output/chat-three-stage/phase1-paid-bid.json).
+
+**Bộ chọn trích dẫn.** Trên 18 câu V5 chạy được qua API theo đồng hồ thật, offline đạt 11/18 kiểm tra tự động. Bộ chọn theo ý dùng OpenAI đạt 14/18 và từ chối đúng 4/4. Khi đọc lại nội dung và nguồn, reviewer AI chấm 12/18 trả lời đầy đủ theo rubric của đợt này. Các câu trả lời trùng với lượt OpenAI V5 trước đây, vốn được chấm 13/18. Ngưỡng yêu cầu cải thiện ngữ nghĩa chưa đạt. [Receipt V5](../../output/chat-three-stage/final-clauses-v5.json) · [Chấm từng câu](../../output/chat-three-stage/review-final-clauses-v5.json).
+
+**V6 trên owner API thật.** Cả ba nhánh dùng cùng corpus `knowledge-vi-v2-20261123`, cùng 40 câu và cùng bản Chat QA. Cột Hit@5 và trích dẫn tính trên cả luồng Chat, bao gồm lỗi định tuyến. Điểm đủ ý do reviewer AI độc lập chấm từ câu trả lời đã lưu và từng đoạn nguồn.
+
+| Nhánh | Hit@5 trên 36 | Trích dẫn đúng trên 36 | Đủ ý trên 36 | Nhóm phát biểu có căn cứ | p95 mỗi câu | Chi phí từ usage |
+| --- | --- | --- | --- | --- | --- | --- |
+| Lexical + chọn trích dẫn | 22 | 15 | 13 | 16/16 | 4,040 s | 0,003816375 USD |
+| Lexical + viết lại khi rỗng + chọn trích dẫn | 23 | 16 | 14 | 17/17 | 5,954 s | 0,004246625 USD có usage |
+| Hybrid + chọn trích dẫn | 32 | 24 | 21 | 25/25 | 4,664 s | 0,005362430 USD gồm lập chỉ mục |
+
+Bộ V6 offline có 16/40 lượt đạt kiểm tra tự động với provider tắt. Truy xuất lexical trực tiếp qua Knowledge HTTP có Hit@5 23/36. Trên tám câu khó qua Chat, ba nhánh trong bảng lần lượt có Hit@5 2/8, 3/8, 7/8 và trích dẫn đúng 1/8, 2/8, 6/8. Viết lại giúp thêm một câu lấy được và trích đúng nguồn. Hai hướng dùng provider vẫn chưa đạt ngưỡng 33/36 câu trả lời đủ ý. Cả ba nhánh từ chối đúng 4/4 câu hoàn toàn ngoài nguồn, nhưng **0/4 câu trộn ý có nguồn và thiếu nguồn** được trả lời đầy đủ. Giữ hai cờ RAG thử nghiệm và query embedding tắt trên demo. Ưu tiên tiếp theo là đánh giá khả năng lấy nguồn cho từng vế rồi giữ lại vế đã đủ bằng chứng khi vế khác thiếu nguồn. Dùng ca phát triển riêng và khóa bộ mới để nghiệm thu. [Đối chiếu cùng câu](../../output/chat-three-stage/review-comparison-v6.json) · [Ma trận receipt và usage](../../output/chat-three-stage/verified-release.json).
+
+**Kiểm thử và ngân sách.** Đã xác minh lại cùng 18 receipt V5 và 40 receipt ở từng nhánh V6 sau restart Chat API/worker QA. Hybrid có 30/30 đoạn được lập chỉ mục thật bằng OpenAI và 37 lần tạo embedding truy vấn. Đối chứng lexical dùng cùng PostgreSQL/corpus cho p95 HTTP sau khởi động 47,665 ms và 45,499 ms trên hai bản ranker có cùng mã truy xuất. Full suite bật probe PostgreSQL và Knowledge HTTP đạt **1.049 passed, 10 skipped**. Các ca bỏ qua thuộc ingest/research runtime, concurrency PostgreSQL Chat và hai probe Market. [Lệnh chạy](KNOWLEDGE_RAG.md) · [Log suite](../../output/chat-three-stage/final-software-postgres.log).
+
+Tính cả hai lượt đối chứng trước khi sửa phát hiện của reviewer, đợt này có 180 lần gọi model văn bản và 67 lần tạo embedding, 93.066 token vào và 17.471 token ra được ghi nhận. Ước tính **0,020034430 USD** từ usage nhận được. Có một lần phân loại intent timeout thiếu usage, đã giữ chỗ 0,0017 USD. Cộng các lượt trước cùng cap là **0,025836900 USD** có usage trên trần 10 USD. Hóa đơn nhà cung cấp và chấm thủ công bởi người dùng chưa đối soát. Migrations mới cho ba phần này: 0.
+
+## Hỏi nối tiếp về tài sản trong đề xuất đã lưu · 24/11/2026
+
+QA chạy hai câu VFF trong ảnh và một câu dùng “quỹ này” trên hai đề xuất cũ của Alice. VFF là 30,00% trong BL_ML và 50,00% trong HYBRID. Tắt provider đạt 6/6 lượt nối tiếp. OpenAI thật cũng đạt 6/6, đúng mã, ý hỏi, tỷ trọng, ID đề xuất và căn cứ từ Portfolio API. Hai lượt gắn đề xuất ban đầu cũng dùng OpenAI, tổng cộng 8 lần gọi, 1.760 input tokens và 176 output tokens. Ước tính từ usage là 0,000308 USD trên trần 10 USD. Chưa đối soát hóa đơn.
+
+Sau restart Chat API và worker QA ở lượt HYBRID, cùng lịch sử và usage giữ nguyên. Lượt QA đầu tiên chỉ kiểm backend. Lượt nghiệm thu trên demo được ghi bên dưới. [Runbook và lệnh tái lập](ALLOCATION_EXPLANATION.md) · [Receipt BL_ML](../../output/proposal-followup/openai.json) · [Receipt HYBRID và restart](../../output/proposal-followup/hybrid-openai.json).
+
+**Nghiệm thu Chrome trên demo, 24/11.** Chat worker đã nhận bản sửa trên image `portfolio-chat-worker:vff41-20261124`. Trong chính hội thoại và đề xuất HYBRID của ảnh, OpenAI nhận đúng ý hỏi lý do và tỷ trọng ở cả hai lượt. Backend lưu VFF ở vị trí 31, với tỷ trọng 0,41000000000291614. Nhánh MVO dành 30% cho VFF và nhánh BL_ML dành 50%. Phối 45% MVO với 55% BL_ML cho 41%. Cả hai tin nhắn có facts hash và evidence hash khớp Portfolio. Đã đọc lại đúng hai job và hai kết quả sau khi khôi phục cấu hình worker. Tổng usage là 438 input tokens và 44 output tokens, ước tính 0,00007675 USD trong cap 10 USD. Quota riêng hai lượt đã kết thúc. Quota thường của demo đã dùng 100/100 lượt, nên các câu có dấu hiệu tỷ trọng rõ tiếp tục dùng nhánh đọc dữ kiện trực tiếp. [Receipt](../../output/proposal-followup/demo41/receipt.json) · [Ảnh Chrome](../../output/proposal-followup/demo41/browser.jpg).
+
+## RAG tiếng Việt · đối chứng tiến cứu V5, 23/11/2026
+
+Đợt QA cô lập được phê duyệt trần 10 USD. Chat tìm tối đa 5 đoạn công khai đủ điều kiện và trả nguyên văn đoạn hỗ trợ đúng ý hỏi. Chế độ chọn bằng OpenAI yêu cầu cả ID và một trích đoạn nguyên văn. Bộ chọn kiểm lại phiên bản, hash, phạm vi và giới hạn của phát biểu. Lịch sử tham chiếu dừng khi đổi chủ hoặc danh mục. Phần giải thích mã tài sản dùng tỷ trọng của đúng đề xuất, nêu giới hạn khi thiếu bằng chứng về nguyên nhân. Các thay đổi dùng API và bảng hiện hữu.
+
+Trên bộ V5 khóa trước, cùng 40 ca cho cả hai phiên bản, worker chọn đúng nguồn 28→38/40 từ B2 tới V5. Hit@5 là 8→11/14, tin nhắn có claim đã khóa là 0→7/14. Người chấm bằng agent nhận thêm một cách trích đúng nghĩa, tổng cộng 8/14 câu kiến thức đúng và đủ, 46/49 nhóm phát biểu có căn cứ. Hai ca trạng thái chưa dùng đúng nguồn thời gian. Cổng phát hành còn mở. [Điểm từng nhóm và lệnh chạy](RAG_QUALITY_V5_2026_11_23.md) · [Đối chiếu nội dung](RAG_V5_GROUNDING_REVIEW.md) · [Chi phí theo lượt](RAG_OPENAI_QUALITY_2026_11_23.md).
+
+Chromium trên Web build `2a3b5e55db8a` gửi câu hỏi định nghĩa EW, câu nối tiếp về nhược điểm và câu ngoài corpus. Sau khi restart Chat API, Chat worker và Web của QA, cùng hội thoại giữ hash lịch sử `a83fcfc10b277c73c60404a9343ce2f2714a6ce618e10a19d24df4509c0a209c`. Receipt đề xuất cũ `23df1353-2021-4d8d-bc19-c232b1f70148` khớp facts, evidence, lịch sử và usage khi đọc lại qua demo. Trong một lượt trước sửa, Web có thể ngừng poll sau khi thấy job hoàn thành nhưng đã lấy trang tin nhắn quá sớm. Web hiện đọc trạng thái job trước trang lịch sử. [Browser test](../../apps/web/tests/browser/knowledge.e2e.ts).
+
+Bộ software toàn repo đạt 1.012 passed, 14 skipped. Suite có PostgreSQL thật bật riêng đạt 142 passed. Web đạt 186 tests, TypeScript và build production thành công. Trình duyệt xác thực qua OIDC `auth-api` của Compose hiện tại. Lần đầu ở V5, endpoint gửi câu hỏi trả HTTP 503 trong lúc hai stack QA khởi động. Lần chạy thành công dùng cùng bản build và backend thật.
+
+Trên cùng 18 câu kiến thức của V5 có thể chạy qua API theo đồng hồ thật, lexical đạt 11/18 kiểm tra tự động về trích dẫn và độ bao phủ. Với cùng lexical, OpenAI chọn đoạn đạt 14/18. Khi chỉ dùng embedding thật cho retrieval, hybrid đạt 12/18. Reviewer chấm trả lời đầy đủ lần lượt 12/18, 13/18 và 13/18. Cả ba nhánh từ chối đúng 4/4 câu thiếu căn cứ. Embedding đưa tỷ lệ đi đúng nhánh và tìm thấy đoạn đúng từ 10 lên 13/14, nhưng chỉ một câu trả lời đạt thêm. Đối chiếu cùng receipt sau restart đạt 18/18 ở hai nhánh trả phí V5. Tổng cả đợt V3–V5 là 32 lần gọi model văn bản và 47 lần tạo embedding, ước tính **0,005417720 USD** theo usage trả về, trần người dùng phê duyệt 10 USD. Chưa đối soát hóa đơn. [Phép đo và dry-run](RAG_OPENAI_QUALITY_2026_11_23.md).
+
+Kiểm tra truy cập công khai bằng HTTP GET không đăng nhập cho 15 URL nguồn khác nhau, sau khi bỏ fragment dòng. 8 URL trả HTTP 206, 7 URL trả HTTP 404. Các URL 404 ảnh hưởng 8/30 claim, gồm `ml-views-limit`, `freshness-history` và `model-approval-reviewer`. Nội dung và hash đoạn vẫn đối chiếu được trong ứng dụng. Operator cần công bố tài liệu ghim hoặc duyệt một phiên bản corpus có nguồn công khai tương đương trước phát hành. [Receipt kiểm liên kết](../../output/rag-quality-v5/public-link-status.json).
+
+## Chat trạng thái và RAG tiếng Việt · 23/11/2026
+
+Bản ứng viên xử lý trạng thái tạm dừng bằng phản hồi Chat có nguồn Portfolio, phạm vi và thời điểm kiểm tra. Câu hỏi nối tiếp có thể dùng kết quả trước hoặc đọc readiness hiện tại. Bản corpus Markdown mới chờ operator duyệt. Bộ v2 gồm 20 ca phát triển và 40 ca nghiệm thu đã khóa. Cổng phát hành còn mở. Sau nghiệm thu, Compose chạy lại đúng image và cấu hình trước thử nghiệm, với corpus `knowledge-vi-v1`. [Kết quả eval và lệnh tái lập](RAG_QUALITY_EVAL_2026_11_23.md) · [Chromium và receipt](RAG_STATUS_BROWSER_2026_11_23.md).
+
+## Giải thích ngắn mặc định — 22/11/2026
+
+Renderer v2 trả lời theo mã và chỉ số được hỏi. UI đưa câu trả lời lên trước phần căn cứ mở thêm, giữ số liệu đã ghim, corpus citations và các lượt cũ. Eval tiếng Việt 38/38, với 14 ca đo độ ngắn giảm từ 2.069 xuống 541 từ. Python/core 986 passed, 10 skipped. Web 169 passed, TypeScript và production build trực tiếp đạt.
+
+Sau khi Docker phục hồi, Chat API, Chat worker và Web chạy image cuối. OpenAI đạt 8/8 trên đề xuất đã lưu, gồm bảy câu nối tiếp. OpenAI ghi nhận 5.281 input và 862 output tokens, tương ứng ước tính 0,001091125 USD trong cap 1 USD. Cả 16 lượt trích dẫn khớp corpus. Browser thật đạt ở 1440, 390 và 375 CSS px. Bốn receipt khớp sau khi restart ba dịch vụ. Xem [runbook](ALLOCATION_EXPLANATION.md) và báo cáo `output/concise-explanation/verification.json`.
 
 ## OpenAI explanation acceptance — 22/11/2026, cap 1 USD
 

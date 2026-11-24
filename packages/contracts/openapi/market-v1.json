@@ -920,6 +920,16 @@
               ],
               "title": "Requested Date"
             }
+          },
+          {
+            "name": "description",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Description"
+            }
           }
         ],
         "responses": {

@@ -3330,6 +3330,11 @@
       },
       "ToolArguments": {
         "properties": {
+          "include_saved_target": {
+            "type": "boolean",
+            "title": "Include Saved Target",
+            "default": false
+          },
           "portfolio_id": {
             "anyOf": [
               {

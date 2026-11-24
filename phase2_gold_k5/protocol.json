@@ -1,0 +1,22 @@
+{
+  "study": "GOLD–K5, Phase 2",
+  "protocol_version": 1,
+  "timezone": "Asia/Ho_Chi_Minh",
+  "registration_date_local": "2026-11-24",
+  "historical_end": "2026-04-29",
+  "historical_evaluation_after": "2023-09-29",
+  "subperiods": [["2023-09-30","2024-12-31"],["2025-01-01","2026-04-29"]],
+  "interpretation": "All historical dates through registration are retrospective. The frozen matched Phase 1 dataset ends 2026-04-29. No existing observations count as prospective.",
+  "confirmatory_eligibility": "Record predictions before execution starting strictly after registration on the first eligible scheduled decision with validated, versioned inputs. First confirmatory assessment after 60 mature, paired, scheduled decisions across three consecutive 20-decision blocks. No tuning using that sample.",
+  "primary_comparison": "B2 plus direct GOLD-minus-K5 view with cost gate minus frozen B2 with identical gate, paired net Sharpe",
+  "primary_non_gold_bps_per_side": 10,
+  "cost_grid_bps": [0,10,25,50],
+  "gold_cost": "Buy at SJC-HCM ask and sell at its bid on execution close. Use matched source. Daily valuation and cost attribution use one common mark for all arms. No additional bps for gold.",
+  "gate": "At t, compare 5 times improvement in daily mean-variance utility at risk aversion 1.5 to expected one-trade cost using only eligible information. Respect budget, VFF exposure, eligible K5 and position constraints.",
+  "features": "Eligible GOLD, K5 or individual stock series; 5/20-session momentum and trailing 20-session volatility. Fix K5 at each observation's decision date; use that membership for its label.",
+  "label": "5-session simple return from execution close t+1 to t+6. K5 equal initial investment, no intervening rebalance. Only matured AND information-eligible labels at fit and calibration cutoff.",
+  "training": {"frequency":10,"anchor_index":145,"minimum_rows":100,"seeds":[17,41],"n_estimators":40,"max_depth":2,"learning_rate":0.05,"subsample":0.85,"n_jobs":1},
+  "views": "Separate absolute GOLD, derived spread (gold raw prediction minus mean five matched equity predictions) and direct spread. P order follows asset identities. Daily Q=raw prediction/5. Require at least 20 earlier matured decision errors, use confidence clip(var(actual)/(var(actual)+MSE),0.1,0.9). Frozen B2 views maintained; also test relative-only.",
+  "bootstrap": {"seed":20261014,"block":10,"replicates":1000,"interval":0.95},
+  "pilot_decision": "Requires confirmatory delta net Sharpe > 0, paired bootstrap lower bound > 0, positive delta in at least two blocks and positive pooled delta on removing any one of the three. Otherwise retain as research. Portfolio selection in production additionally requires parity on user-selected baskets and HYBRID."
+}

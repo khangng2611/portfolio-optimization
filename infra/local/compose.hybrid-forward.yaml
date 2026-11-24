@@ -1,0 +1,32 @@
+services:
+  hybrid-forward-capture:
+    image: portfolio-software-market:local
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    command:
+      - python
+      - -m
+      - market_service.hybrid_forward_capture
+      - --scheduled
+      - --directory
+      - /archive
+      - --gold-seed
+      - /archive/setup/gold-warmup.csv
+      - --protocol
+      - /archive/setup/protocol.md
+    volumes:
+      - ../../services/market-data/src/market_service/hybrid_forward_capture.py:/usr/local/lib/python3.12/site-packages/market_service/hybrid_forward_capture.py:ro
+      - ../../output/hybrid-mvo60-forward:/archive:rw
+    restart: unless-stopped
+
+  hybrid-forward-study:
+    build: {context: ../.., dockerfile: infra/local/hybrid-forward.Dockerfile}
+    image: portfolio-hybrid-forward-study:local
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    command: ["scheduled"]
+    network_mode: none
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ../../output/hybrid-mvo60-forward:/archive:ro
+      - ../../output/hybrid-mvo60-forward/study:/results:rw
+    restart: unless-stopped

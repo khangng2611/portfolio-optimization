@@ -1,0 +1,15 @@
+services:
+  hybrid-market-refresh:
+    extends: {file: compose.yaml, service: market-refresh}
+    command: [python, -m, market_service.hybrid_refresh]
+    healthcheck: {disable: true}
+  hybrid-snapshot-publication:
+    extends: {file: compose.yaml, service: quant-publication}
+    command: [python, -m, quant_service.hybrid_renewal]
+    environment:
+      ML_API_URL: http://ml-api:8000
+      ML_READER_CLIENT_SECRET: ${ML_READER_CLIENT_SECRET:?Run bootstrap.py}
+    volumes:
+      - ./.generated/datasets/refresh:/refresh:ro
+      - ./.generated/bundles:/bundles:ro
+    healthcheck: {disable: true}

@@ -141,7 +141,7 @@ test('real login lifecycle, conflict, expiry and reauthentication', async ({ pag
     await fillRegistration(page, { ...account, username: account.username.toUpperCase() });
     await submitRegistration(page, 409);
     await expect(page.locator('form').getByRole('alert')).toContainText('đã được sử dụng');
-    await page.getByRole('link', { name: 'Đăng nhập', exact: true }).click();
+    await page.getByRole('link', { name: 'Đã có tài khoản · Đăng nhập', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Đăng nhập', exact: true })).toBeVisible();
     await page.getByLabel('Tên đăng nhập', { exact: true }).fill(account.username);
     await page.getByLabel('Mật khẩu', { exact: true }).fill('wrong-demo-password');

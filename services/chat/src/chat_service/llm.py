@@ -84,8 +84,9 @@ class InvocationLedger:
                 and os.environ.get("CHAT_QUERY_EMBEDDINGS_ENABLED") != "1"
             ):
                 return None, {"reason": "EMBEDDINGS_DISABLED"}
-            budget = approved_budget() if rag or purpose == "query_embedding" else None
-            if (rag or purpose == "query_embedding") and not budget:
+            budget_required = rag or purpose == "query_embedding" or "KNOWLEDGE_PAID_APPROVAL" in os.environ
+            budget = approved_budget() if budget_required else None
+            if budget_required and not budget:
                 return None, {"reason": "BUDGET_NOT_APPROVED"}
             old = s.get(ProviderInvocation, (job.id, purpose))
             if old:
@@ -95,12 +96,7 @@ class InvocationLedger:
             reserved = Decimal("0")
             if budget:
                 try:
-                    text_limit = min(
-                        250,
-                        max(
-                            0, int(os.environ.get("CHAT_LLM_APPROVAL_CALL_LIMIT", "20"))
-                        ),
-                    )
+                    text_limit = max(0, int(os.environ.get("CHAT_LLM_APPROVAL_CALL_LIMIT", "20")))
                 except ValueError:
                     text_limit = 0
                 embedding = purpose == "query_embedding"

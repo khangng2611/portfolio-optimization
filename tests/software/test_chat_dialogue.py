@@ -158,6 +158,34 @@ def test_paid_plan_replay_uses_saved_output_and_global_budget_survives_restart(
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize("module", ["chat_service.embeddings", "knowledge_service.embeddings"])
+def test_ten_dollar_approval_is_supported(monkeypatch, module):
+    from importlib import import_module
+    from decimal import Decimal
+
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "vps-test-budget")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "10")
+    approved_budget = import_module(module).approved_budget
+    assert approved_budget() == ("vps-test-budget", Decimal("10"))
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "10.01")
+    assert approved_budget() is None
+
+
+def test_configured_approval_caps_legacy_explanations(chat, monkeypatch):
+    from chat_service.llm import InvocationLedger
+
+    c, s, t = chat
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "vps-test-budget")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "0.001")
+    cid = conversation(c, t.summary["id"])
+    send(c, cid)
+    job = Queue(s).claim()
+    _, meta = InvocationLedger(s).invoke(
+        job, "explanation", lambda: pytest.fail("Provider called beyond the approval cap")
+    )
+    assert meta["reason"] == "ACCEPTANCE_BUDGET_EXHAUSTED"
+
+
 def test_uncertain_paid_call_is_not_repeated_after_crash(chat):
     from chat_service.llm import InvocationLedger
 

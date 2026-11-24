@@ -88,7 +88,7 @@ def test_provider_schema_and_client_reject_out_of_scope_claims(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "offline-test-only")
     captured = []
 
-    async def response(payload):
+    async def response(payload, _timeout, _timing, _started):
         import json
 
         captured.append(payload)

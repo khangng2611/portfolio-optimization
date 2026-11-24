@@ -1658,6 +1658,7 @@
               "type": "string",
               "enum": [
                 "get_profile",
+                "get_allocation_status",
                 "get_portfolio_summary",
                 "request_allocation",
                 "get_recommendation",
@@ -1666,7 +1667,7 @@
               ]
             },
             "type": "array",
-            "maxItems": 6,
+            "maxItems": 7,
             "minItems": 1,
             "title": "Tools"
           }
@@ -1876,6 +1877,57 @@
         ],
         "title": "InputReadiness"
       },
+      "LegacyRiskAnswers": {
+        "properties": {
+          "horizon_months": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Horizon Months"
+          },
+          "liquidity_need": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Liquidity Need"
+          },
+          "loss_tolerance": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Loss Tolerance"
+          },
+          "questionnaire_version": {
+            "type": "string",
+            "const": "risk-v1",
+            "title": "Questionnaire Version"
+          },
+          "experience": {
+            "type": "string",
+            "enum": [
+              "beginner",
+              "experienced"
+            ],
+            "title": "Experience"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "horizon_months",
+          "liquidity_need",
+          "loss_tolerance",
+          "questionnaire_version",
+          "experience"
+        ],
+        "title": "LegacyRiskAnswers"
+      },
       "NewPortfolio": {
         "properties": {
           "asset_ids": {
@@ -2029,7 +2081,22 @@
             "default": "DEMO"
           },
           "answers": {
-            "$ref": "#/components/schemas/RiskAnswers"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LegacyRiskAnswers"
+              },
+              {
+                "$ref": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            ],
+            "title": "Answers",
+            "discriminator": {
+              "propertyName": "questionnaire_version",
+              "mapping": {
+                "risk-v1": "#/components/schemas/LegacyRiskAnswers",
+                "risk-v2": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            }
           }
         },
         "additionalProperties": false,
@@ -2381,6 +2448,73 @@
         "type": "object",
         "title": "PortfolioUpdate"
       },
+      "QuantifiedRiskAnswers": {
+        "properties": {
+          "horizon_months": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Horizon Months"
+          },
+          "liquidity_need": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Liquidity Need"
+          },
+          "loss_tolerance": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Loss Tolerance"
+          },
+          "questionnaire_version": {
+            "type": "string",
+            "const": "risk-v2",
+            "title": "Questionnaire Version"
+          },
+          "reserve_months": {
+            "type": "string",
+            "enum": [
+              "under_3",
+              "3_to_under_6",
+              "at_least_6"
+            ],
+            "title": "Reserve Months"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "beginner",
+                  "experienced"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "horizon_months",
+          "liquidity_need",
+          "loss_tolerance",
+          "questionnaire_version",
+          "reserve_months"
+        ],
+        "title": "QuantifiedRiskAnswers"
+      },
       "ReadyInput": {
         "properties": {
           "bundle_id": {
@@ -2647,57 +2781,6 @@
         ],
         "title": "RegimeInfo"
       },
-      "RiskAnswers": {
-        "properties": {
-          "questionnaire_version": {
-            "type": "string",
-            "const": "risk-v1",
-            "title": "Questionnaire Version"
-          },
-          "horizon_months": {
-            "type": "integer",
-            "maximum": 600.0,
-            "minimum": 1.0,
-            "title": "Horizon Months"
-          },
-          "liquidity_need": {
-            "type": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high"
-            ],
-            "title": "Liquidity Need"
-          },
-          "loss_tolerance": {
-            "type": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high"
-            ],
-            "title": "Loss Tolerance"
-          },
-          "experience": {
-            "type": "string",
-            "enum": [
-              "beginner",
-              "experienced"
-            ],
-            "title": "Experience"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "questionnaire_version",
-          "horizon_months",
-          "liquidity_need",
-          "loss_tolerance",
-          "experience"
-        ],
-        "title": "RiskAnswers"
-      },
       "RiskAssessmentHistoryEntry": {
         "properties": {
           "id": {
@@ -2728,7 +2811,22 @@
             "title": "Created At"
           },
           "answers": {
-            "$ref": "#/components/schemas/RiskAnswers"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LegacyRiskAnswers"
+              },
+              {
+                "$ref": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            ],
+            "title": "Answers",
+            "discriminator": {
+              "propertyName": "questionnaire_version",
+              "mapping": {
+                "risk-v1": "#/components/schemas/LegacyRiskAnswers",
+                "risk-v2": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            }
           },
           "constraints": {
             "$ref": "#/components/schemas/Constraints"
@@ -2799,7 +2897,22 @@
       "RiskAssessmentRequest": {
         "properties": {
           "answers": {
-            "$ref": "#/components/schemas/RiskAnswers"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LegacyRiskAnswers"
+              },
+              {
+                "$ref": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            ],
+            "title": "Answers",
+            "discriminator": {
+              "propertyName": "questionnaire_version",
+              "mapping": {
+                "risk-v1": "#/components/schemas/LegacyRiskAnswers",
+                "risk-v2": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            }
           }
         },
         "additionalProperties": false,
@@ -2839,7 +2952,22 @@
             "title": "Created At"
           },
           "answers": {
-            "$ref": "#/components/schemas/RiskAnswers"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LegacyRiskAnswers"
+              },
+              {
+                "$ref": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            ],
+            "title": "Answers",
+            "discriminator": {
+              "propertyName": "questionnaire_version",
+              "mapping": {
+                "risk-v1": "#/components/schemas/LegacyRiskAnswers",
+                "risk-v2": "#/components/schemas/QuantifiedRiskAnswers"
+              }
+            }
           },
           "constraints": {
             "$ref": "#/components/schemas/Constraints"
@@ -2984,6 +3112,7 @@
               "INPUT_INVALID",
               "INPUT_EXPIRED",
               "INPUT_UNAVAILABLE",
+              "SYSTEM_PAUSED",
               "MODEL_UNAVAILABLE"
             ],
             "title": "Reason Code",
@@ -3178,6 +3307,7 @@
               "INPUT_INVALID",
               "INPUT_EXPIRED",
               "INPUT_UNAVAILABLE",
+              "SYSTEM_PAUSED",
               "MODEL_UNAVAILABLE"
             ],
             "title": "Reason Code"
@@ -3200,6 +3330,11 @@
       },
       "ToolArguments": {
         "properties": {
+          "include_saved_target": {
+            "type": "boolean",
+            "title": "Include Saved Target",
+            "default": false
+          },
           "portfolio_id": {
             "anyOf": [
               {

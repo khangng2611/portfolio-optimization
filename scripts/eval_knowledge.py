@@ -152,18 +152,47 @@ def evaluate(mode="offline", split="all"):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--mode", choices=["offline", "lexical"], default="offline")
+    p.add_argument(
+        "--mode", choices=["offline", "lexical", "conversation"], default="offline"
+    )
+    p.add_argument("--version", choices=["v1", "v2", "v3", "v4", "v5", "v6"], default="v1")
+    p.add_argument("--run", type=int, default=1)
+    p.add_argument("--knowledge-url", default="http://localhost:8006")
     p.add_argument("--split", choices=["all", "dev", "heldout"], default="all")
     p.add_argument(
         "--output", type=Path, default=ROOT / "output/knowledge-rag/eval.json"
     )
+    p.add_argument(
+        "--review-output",
+        type=Path,
+        help="Separate private synthetic conversation packet",
+    )
     a = p.parse_args()
-    report = evaluate(a.mode, a.split)
+    if a.review_output and (
+        a.mode != "conversation" or a.review_output.resolve() == a.output.resolve()
+    ):
+        p.error("Review packets require conversation mode and a separate output file")
+    if a.version in ("v3", "v4", "v5", "v6") and a.split == "dev":
+        p.error("Prospective suites contain the heldout split only")
+    if a.version in ("v2", "v3", "v4", "v5", "v6"):
+        from eval_knowledge_status import evaluate_scenarios
+
+        report = evaluate_scenarios(
+            a.mode, a.split, a.knowledge_url, a.run, a.version, a.review_output
+        )
+    elif a.mode == "conversation":
+        p.error("conversation requires --version v2 through v6")
+    else:
+        report = evaluate(a.mode, a.split)
     a.output.parent.mkdir(parents=True, exist_ok=True)
     a.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(
         json.dumps(
-            {k: v for k, v in report.items() if k not in ("rows", "categories")},
+            {
+                k: v
+                for k, v in report.items()
+                if k not in ("rows", "categories", "by_source", "latency_by_source")
+            },
             ensure_ascii=False,
         )
     )

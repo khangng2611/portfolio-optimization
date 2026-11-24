@@ -1,0 +1,6 @@
+{"question":"Tại sao chọn VFF quá nhiều?","asset":"VFF","field":"reason"}
+{"question":"VFF chiếm bao nhiêu %?","asset":"VFF","field":"weight"}
+{"question":"Sao lại dành nhiều thế cho quỹ này?","previous_asset":"VFF","asset":"VFF","field":"reason"}
+{"question":"Sao lại cao vậy?","asset":"VFF","field":"reason","classifier":true}
+{"question":"Thế còn BID?","asset":"BID","field":"reason"}
+{"question":"Tương ứng bao nhiêu tiền?","asset":"BID","field":"amount"}

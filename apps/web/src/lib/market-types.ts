@@ -3,7 +3,7 @@ export type Ingestion = { job_id: string; dataset_id: string | null; status: str
 export type Quality = { job_id: string; status: string; row_count: number; calendar?: string; start_date?: string | null; end_date?: string | null; checked_at?: string; findings: { code: string; severity: string; message: string; action: string; row_number?: number }[] };
 export type Snapshot = { id: string; content_hash: string; asset_ids: string[]; start_date: string; end_date: string; as_of_date: string; data_origin: string; observation_count: number; quality_status?: string; created_at: string; calendar: string };
 export type Publication = { job_id: string; status: string; request: { universe_id: string; snapshot_id: string; snapshot_hash: string; max_age_days: number; approved_model_id?: string | null }; attempts: number; max_attempts: number; safe_error: string | null; result: { bundle_id: string; sha256: string } | null; created_at: string };
-export const marketTitles: Record<string, string> = { market: 'Dữ liệu sẵn sàng đến đâu?', 'market-ingestion': 'Đưa dữ liệu vào hệ thống', 'market-refresh': 'Cập nhật dữ liệu có kiểm soát', 'market-quality': 'Kiểm tra chất lượng dữ liệu', 'market-snapshots': 'Snapshots có thể truy xuất', 'market-publications': 'Phát hành dữ liệu cho đề xuất' };
+export const marketTitles: Record<string, string> = { market: 'Dữ liệu sẵn sàng đến đâu?', 'market-ingestion': 'Đưa dữ liệu vào hệ thống', 'market-refresh': 'Cập nhật dữ liệu có kiểm soát', 'market-revisions': 'Lịch sử sửa đổi giá', 'market-quality': 'Kiểm tra chất lượng dữ liệu', 'market-snapshots': 'Snapshots có thể truy xuất', 'market-publications': 'Phát hành dữ liệu cho đề xuất' };
 export const marketStatus = (value: string) => ({ PASS: 'Đạt kiểm tra', QUARANTINED: 'Đã cách ly', PENDING: 'Chờ kiểm tra', NOT_CHECKED: 'Chưa được kiểm tra', QUEUED: 'Đang xếp hàng', RUNNING: 'Đang xử lý', RETRY: 'Chờ thử lại', SUCCEEDED: 'Hoàn tất', FAILED: 'Thất bại' }[value] ?? value);
 export const originName = (value: string) => value === 'real' ? 'Giá thật' : value === 'synthetic' ? 'Dữ liệu minh họa' : 'Nguồn chưa xác minh';
 export const calendarName = (value?: string) => value === 'explicit-sessions' ? 'Đối chiếu các phiên được nguồn khai báo' : 'Chỉ các phiên đã quan sát; chưa xác nhận lịch sàn';
@@ -11,3 +11,5 @@ export const activeJob = (status: string) => ['QUEUED', 'RUNNING', 'RETRY'].incl
 
 // Snapshot wire dates use the backend UTC cutoff; display timestamps remain GMT+7.
 export const marketCutoffDate = (now = new Date()) => now.toISOString().slice(0, 10);
+const priceFormat = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 6 });
+export const marketPrice = (price: string | number) => priceFormat.format(Number(price));

@@ -5,26 +5,62 @@ import math
 from datetime import datetime
 from typing import Literal
 from pydantic import Field, model_validator
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from portfolio_contracts import StrictModel
 from .corpus import MODEL, INDEX, DIMENSIONS, normalize
 
-RETRIEVAL = "knowledge-retrieval-v2"
+RETRIEVAL = "knowledge-retrieval-v6"
 
 # Keys are phrases in the approved corpus. Aliases are used only when full-text
 # matching finds nothing, so conversational filler cannot swamp an exact match.
 TOPICS = {
-    "equal weight": ("ew", "chia deu ty trong", "ty trong bang nhau", "phan bo deu"),
+    "equal weight": ("ew", "chia deu", "ty trong bang nhau", "phan bo deu"),
     "mvo": ("trung binh phuong sai", "mean variance"),
+    "rui ro danh muc": ("bien dong danh muc", "rui ro tung tai san"),
     "covariance": ("hiep phuong sai", "ma tran dong bien"),
-    "da dang hoa": ("diversification", "phan tan rui ro"),
+    "da dang hoa": ("diversification", "phan tan rui ro", "da dang"),
     "black litterman": ("blacklitterman",),
-    "bl_ml": ("bl ml", "ml views", "views tu mo hinh"),
-    "ho so rui ro": ("khau vi rui ro", "risk profile", "risk policy"),
-    "tai san nam giu": ("phan bo muc tieu", "ty trong muc tieu", "target holdings"),
-    "freshness": ("do moi du lieu", "du lieu het han", "du lieu qua han"),
-    "phe duyet mo hinh": ("duyet mo hinh", "model approval"),
-    "turnover": ("phi giao dich", "chi phi giao dich", "vong quay danh muc"),
+    "bl_ml": (
+        "bl ml",
+        "ml views",
+        "views ml",
+        "views tu mo hinh",
+        "du bao cua mo hinh ml",
+    ),
+    "do tin cay": ("muc tin cay", "diem tin cay"),
+    "ho so rui ro": ("khau vi rui ro", "risk profile", "risk policy", "ho so cua minh", "ho so cua toi", "hoi ve rui ro"),
+    "tai san nam giu": (
+        "phan bo muc tieu",
+        "ty trong muc tieu",
+        "target",
+        "holdings",
+        "so huu co phieu",
+    ),
+    "chap nhan de xuat": ("dong y de xuat", "dong y voi de xuat", "lenh mua", "lenh ban", "luu muc tieu", "dat lenh", "khop lenh"),
+    "truot gia": ("chenh lech gia mua ban", "slippage", "ket qua sau chi phi"),
+    "freshness": (
+        "do moi du lieu",
+        "du lieu het han",
+        "du lieu qua han",
+        "dau vao het han",
+        "target da luu",
+        "tuoi du lieu",
+    ),
+    "vff nav": ("vff", "nav vff"),
+    "model reviewer": ("reviewer",),
+    "tam dung": ("tam ngung",),
+    "phe duyet mo hinh": (
+        "duyet mo hinh",
+        "model approval",
+        "model candidate",
+        "xet duyet",
+    ),
+    "turnover": (
+        "phi giao dich",
+        "chi phi giao dich",
+        "vong quay danh muc",
+        "tai can bang danh muc",
+    ),
     "backtest": ("kiem thu qua khu", "kiem dinh ngoai mau", "mo phong qua khu"),
 }
 
@@ -77,6 +113,10 @@ def lexical_query(query):
 
 def topic_query(query):
     padded = f" {query} "
+    if " ml " in padded and any(
+        phrase in padded for phrase in (" views ", " view ", " du bao ")
+    ):
+        padded += " bl_ml "
     return " OR ".join(
         f'"{topic}"'
         for topic, aliases in TOPICS.items()
@@ -84,11 +124,38 @@ def topic_query(query):
     )
 
 
+def ranking_terms(query):
+    # Used only to order rows which already matched a recognized topic.
+    noise = {
+        "la",
+        "gi",
+        "cua",
+        "co",
+        "khong",
+        "duoc",
+        "cho",
+        "toi",
+        "the",
+        "nao",
+        "nhu",
+        "vi",
+        "sao",
+        "nay",
+        "roi",
+        "voi",
+        "den",
+        "va",
+    }
+    words = dict.fromkeys(w for w in query.split() if w not in noise)
+    return " OR ".join(f'"{word}"' for word in list(words)[:24])
+
+
 def retrieve(s, query):
     params = {
         "corpus": query.corpus_id,
         "cutoff": query.as_of,
         "query": lexical_query(query.query),
+        "keywords": "",
     }
     # MATERIALIZED keeps the visibility/cutoff set explicit for both ranking branches.
     eligible = """WITH eligible AS MATERIALIZED (
@@ -103,11 +170,21 @@ def retrieve(s, query):
         eligible
         + """SELECT id FROM eligible
         WHERE to_tsvector('simple',search_text) @@ websearch_to_tsquery('simple',:query)
-        ORDER BY ts_rank_cd(to_tsvector('simple',search_text),websearch_to_tsquery('simple',:query)) DESC,id LIMIT 20"""
+        ORDER BY CASE WHEN :keywords <> '' THEN
+            ts_rank(to_tsvector('simple',search_text),websearch_to_tsquery('simple',:keywords)) ELSE 0 END DESC,
+            ts_rank_cd(to_tsvector('simple',search_text),websearch_to_tsquery('simple',:query)) DESC,claim_id,id LIMIT 20"""
     )
     lexical = s.execute(lexical_sql, params).scalars().all()
     if not lexical and (fallback := topic_query(params["query"])):
-        lexical = s.execute(lexical_sql, params | {"query": fallback}).scalars().all()
+        lexical = (
+            s.execute(
+                lexical_sql,
+                params
+                | {"query": fallback, "keywords": ranking_terms(params["query"])},
+            )
+            .scalars()
+            .all()
+        )
     vector = []
     if query.embedding is not None:
         vector = (
@@ -154,16 +231,16 @@ def retrieve(s, query):
         else "CORPUS_UNAVAILABLE",
         "passages": [],
     }
+    if not selected:
+        return result
+    chunks_sql = text(
+        eligible + "SELECT * FROM eligible WHERE id IN :chunks"
+    ).bindparams(bindparam("chunks", expanding=True))
+    rows = s.execute(chunks_sql, params | {"chunks": selected}).mappings()
+    by_id = {row["id"]: row for row in rows}
     used = 0
     for cid in selected:
-        row = (
-            s.execute(
-                text(eligible + "SELECT * FROM eligible WHERE id=:chunk"),
-                params | {"chunk": cid},
-            )
-            .mappings()
-            .one()
-        )
+        row = by_id[cid]
         passage = {
             k: row[k]
             for k in (

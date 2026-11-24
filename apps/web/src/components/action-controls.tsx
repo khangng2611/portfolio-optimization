@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ReactElement } from 'react';
 
 export type ActionIconName = 'refresh' | 'previous' | 'next' | 'logout' | 'options' | 'send' | 'search' | 'filter' | 'sort' | 'auto' | 'portfolio' | 'profile' | 'market' | 'allocation' | 'explain' | 'help';
 const paths: Record<ActionIconName, string> = {
@@ -17,6 +17,6 @@ const paths: Record<ActionIconName, string> = {
 export function ActionIcon({ name }: { name: ActionIconName }) {
  return <svg className="action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={paths[name]}/></svg>;
 }
-export function IconButton({ icon, label, className = '', type = 'button', ...props }: { icon: ActionIconName; label: string } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'>) {
- return <button {...props} type={type} aria-label={label} className={`quiet icon-button ${className}`}><ActionIcon name={icon}/><span className="control-tooltip" aria-hidden="true">{label}</span></button>;
+export function IconButton({ icon, label, className = '', type = 'button', ...props }: { icon: ActionIconName | ReactElement; label: string } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'>) {
+ return <button {...props} type={type} aria-label={label} className={`quiet icon-button ${className}`}>{typeof icon === 'string' ? <ActionIcon name={icon}/> : icon}<span className="control-tooltip" aria-hidden="true">{label}</span></button>;
 }

@@ -23,7 +23,7 @@ jobs:
       - run: python -m pip install -c services/quant-serving/requirements.lock -e packages/contracts -e packages/service-auth -e packages/service-observability -e packages/portfolio-core -e services/auth -e services/portfolio -e services/quant-serving -e services/market-data -e services/ml-platform -e services/chat -e services/knowledge pytest==8.4.2 ruff==0.13.2
       - run: python -m pytest tests/software packages/portfolio-core/tests -q
       - run: ruff check packages services tests/software infra scripts/export_software_contracts.py scripts/lock_software_dependencies.py scripts/smoke_software.py scripts/smoke_g2.py scripts/smoke_ml_serving.py scripts/smoke_market_quant.py scripts/fetch_serving_prices.py scripts/browser_fixture.py scripts/smoke_tracing.py scripts/setup_software.py scripts/market_operations_fixture.py scripts/smoke_chat.py scripts/smoke_chat_authorization.py
-      - run: python scripts/export_software_contracts.py && git diff --exit-code -- packages/contracts/openapi packages/contracts/events
+      - run: python scripts/export_software_contracts.py && git diff --exit-code -- packages/contracts/openapi packages/contracts/events packages/contracts/schemas
       - name: Validate local stack configuration
         run: python infra/local/bootstrap.py && docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml config --quiet
       - name: Validate opt-in tracing overlay without expanded credentials
@@ -92,6 +92,15 @@ jobs:
         env:
           E2E_DISPOSABLE_STACK: '1'
         run: npm run test:browser:persistence
+      - name: Enable asset selection on the disposable stack
+        env:
+          USER_SELECTED_ASSETS_ENABLED: 'true'
+        run: docker compose --env-file infra/local/.generated/.env -f infra/local/compose.yaml up -d --no-deps --wait --wait-timeout 120 portfolio-api quant-api
+      - name: Compare investor list and picker controls on desktop and mobile
+        working-directory: apps/web
+        env:
+          E2E_DISPOSABLE_STACK: '1'
+        run: npm run test:browser:portfolio-list -- --update-snapshots=none
       - name: Retain only sanitized browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,6 +112,19 @@ jobs:
             output/playwright/sanitized/comparison-desktop.png
             output/playwright/sanitized/comparison-mobile.png
             output/playwright/sanitized/history-after-restart.png
+            output/playwright/sanitized/portfolio-list.json
+            output/playwright/private-results/portfolio-list.e2e.ts-*/desktop-actual.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/desktop-diff.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/mobile-actual.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/mobile-diff.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/choose-desktop-actual.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/choose-desktop-diff.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/choose-mobile-actual.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/choose-mobile-diff.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/assets-desktop-actual.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/assets-desktop-diff.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/assets-mobile-actual.png
+            output/playwright/private-results/portfolio-list.e2e.ts-*/assets-mobile-diff.png
           if-no-files-found: ignore
           retention-days: 7
       - name: Container status

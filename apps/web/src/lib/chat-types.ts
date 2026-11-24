@@ -1,8 +1,9 @@
+import { readinessReason } from './workspace-state';
 import type { Dashboard, Portfolio, Recommendation } from './portfolio-types';
 
 export type ChatPortfolio = Omit<Portfolio, 'constraints' | 'risk_profile'> & {
   constraints: Portfolio['constraints'] & { defensive_asset_ids?: string[]; min_defensive_weight?: number; max_non_defensive_weight?: number };
-  risk_profile: { profile: string; version_id?: string; mapping_version?: string; answers?: Record<string, string | number> } | null;
+  risk_profile: Portfolio['risk_profile'];
 };
 export type ChatDashboard = Omit<Dashboard, 'portfolio'> & { portfolio: ChatPortfolio; holdings_status?: string };
 export type Conversation = { id: string; title: string; portfolio_id: string | null; active_job_id: string | null; created_at: string; llm_consent?: boolean; consent_version?: 1 | 2 };
@@ -13,17 +14,26 @@ export type ExplanationFeature = { name: string; value: number; unit: 'fraction'
 export type ExplanationView = { source_kind: 'ML' | 'POLICY' | 'USER'; status: 'APPLIED' | 'BELOW_THRESHOLD'; coefficients: Record<string, number>; raw_mean_return: number | null; horizon_sessions: number | null; applied_q_daily: number | null; confidence_applied: number | null; transform_version: string };
 export type RecommendationEvidence = { schema_version: 'recommendation-evidence-v1'; recommendation_id: string; run_id: string; facts_hash: string; evidence_hash: string; status: 'COMPLETE' | 'PARTIAL' | 'UNAVAILABLE'; limitations: string[]; quant: { asset_ids: string[]; active_asset_ids: string[]; history_end_date: string | null; features: Record<string, ExplanationFeature[]>; views: ExplanationView[]; regime: { regime: 'normal' | 'stress' | 'crisis'; scope: 'candidate-basket'; asset_ids: string[]; vol_ratio: number; drawdown: number; equity_momentum: number; observed_sessions: number } | null } | null };
 export type ConfirmationCard = { type: 'confirmation'; reason: string; confirmation_message_id: string; facts_hash: string; input: { portfolio: ChatPortfolio; strategy: string } };
-export type RecommendationCard = { type: 'recommendation'; recommendation_id: string; facts: Recommendation & Record<string, unknown>; facts_hash: string; explanation_status: string; explanation_requested?: boolean; provider: ProviderMetadata; schema_version: string; prompt_version: string; knowledge?: KnowledgeEvidence; explanation_evidence?: RecommendationEvidence };
+export type RecommendationCard = { type: 'recommendation'; recommendation_id: string; facts: Recommendation & Record<string, unknown>; facts_hash: string; explanation_status: string; explanation_requested?: boolean; renderer_version?: string; selected_claim_ids?: string[]; explanation_claims?: { id: string; text: string }[]; provider: ProviderMetadata; schema_version: string; prompt_version: string; knowledge?: KnowledgeEvidence; explanation_evidence?: RecommendationEvidence };
 export type FactCard = { type: 'portfolio' | 'profile' | 'market'; facts: Record<string, unknown>; facts_hash: string };
+export type AllocationStatusCard = {
+  type: 'allocation_status';
+  reason_code: string;
+  status: 'READY' | 'BLOCKED' | 'UNKNOWN';
+  scope: 'system' | 'portfolio';
+  portfolio_id: string | null;
+  checked_at: string | null;
+  details?: Record<string, unknown>;
+};
 export type InputCard = { type: 'input_required'; fields: string[]; portfolio_id?: string };
-export type ChatMessage = { id: string; conversation_id: string; role: string; content: string; client_message_id: string | null; created_at: string; structured: ((ConfirmationCard | RecommendationCard | FactCard | InputCard | { type: 'knowledge'; knowledge: KnowledgeEvidence } | { type: 'help' }) & { dialogue?: ProviderMetadata }) | null };
+export type ChatMessage = { id: string; conversation_id: string; role: string; content: string; client_message_id: string | null; created_at: string; structured: ((ConfirmationCard | RecommendationCard | FactCard | AllocationStatusCard | InputCard | { type: 'knowledge'; knowledge: KnowledgeEvidence } | { type: 'help' }) & { dialogue?: ProviderMetadata; response?: ProviderMetadata }) | null };
 export type ChatReceipt = { message_id: string; job_id: string; conversation_id: string; status_url: string; events_url: string };
 export type ChatJob = ChatReceipt & { status: string; stage: string; error: string | null; recommendation_id: string | null; result_message_id: string | null; last_event_id: number; attempts: number };
 export type SendMessage = { content: string; client_message_id: string; portfolio_id?: string; strategy?: 'EW' | 'MVO' | 'BL_ML'; intent?: 'allocation' | 'profile' | 'portfolio' | 'market' | 'explain' | 'help' | 'knowledge'; recommendation_id?: string; confirmation?: { message_id: string; facts_hash: string } };
 export type ChatEvent = { id: number | null; event: string; data: Record<string, unknown> };
 
 export const chatStopped = (status?: string) => !!status && ['SUCCEEDED', 'FAILED', 'WAITING_INPUT', 'AUTHORIZATION_REQUIRED', 'CANCELLED'].includes(status);
-export const chatStatus = (status?: string) => ({ QUEUED: 'Đã tiếp nhận', RUNNING: 'Đang xử lý', RETRY: 'Đang thử lại kết nối', WAITING_DEPENDENCY: 'Đang chờ kết quả định lượng', WAITING_INPUT: 'Cần bạn xác nhận thông tin', AUTHORIZATION_REQUIRED: 'Cần cấp lại quyền', SUCCEEDED: 'Đã hoàn tất', FAILED: 'Chưa thể hoàn tất', CANCELLED: 'Đã dừng' }[status ?? ''] ?? 'Đang kết nối');
+export const chatStatus = (status?: string, error?: string | null) => status === 'FAILED' && error === 'SYSTEM_PAUSED' ? readinessReason.SYSTEM_PAUSED : ({ QUEUED: 'Đã tiếp nhận', RUNNING: 'Đang xử lý', RETRY: 'Đang thử lại kết nối', WAITING_DEPENDENCY: 'Đang chờ kết quả định lượng', WAITING_INPUT: 'Cần bạn xác nhận thông tin', AUTHORIZATION_REQUIRED: 'Cần cấp lại quyền', SUCCEEDED: 'Đã hoàn tất', FAILED: 'Chưa thể hoàn tất', CANCELLED: 'Đã dừng' }[status ?? ''] ?? 'Đang kết nối');
 export const chatStage = (stage?: string) => ({ COLLECT: 'Kiểm tra thông tin danh mục', CONFIRMATION: 'Chờ xem lại và xác nhận', SUBMIT: 'Gửi yêu cầu đã xác nhận', TOOL_AUTHORIZED: 'Đã xác nhận đầu vào', WAIT_ALLOCATION: 'Đang tính phương án phân bổ', COMPLETE: 'Câu trả lời đã sẵn sàng' }[stage ?? ''] ?? 'Đang kiểm tra yêu cầu');
 export function chatError(status?: number): string {
   if (status === 401) return 'Phiên đã hết hạn. Đăng nhập lại rồi chủ động gửi hoặc xác nhận yêu cầu.';

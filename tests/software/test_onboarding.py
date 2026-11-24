@@ -211,3 +211,35 @@ def test_manual_constraint_edit_removes_risk_label_and_freezes_old_policy(stack)
             session.get(Job, jid).input["decision_context"]["policy_version_id"]
             == response.json()["policy_version_id"]
         )
+
+
+@pytest.mark.parametrize("changes,profile,score,deciding", [
+    ({"reserve_months": "under_3"}, "conservative", 0, ["reserve_months"]),
+    ({"reserve_months": "3_to_under_6"}, "balanced", 1, ["reserve_months"]),
+    ({"liquidity_need": "high"}, "conservative", 0, ["liquidity_need"]),
+    ({"horizon_months": 11}, "conservative", 0, ["horizon_months"]),
+    ({"horizon_months": 12}, "balanced", 1, ["horizon_months"]),
+    ({"horizon_months": 59, "loss_tolerance": "medium"}, "balanced", 1, ["horizon_months", "loss_tolerance"]),
+    ({"experience": "beginner"}, "growth", 2, ["horizon_months", "liquidity_need", "loss_tolerance", "reserve_months"]),
+])
+def test_quantified_profile_drivers(stack, changes, profile, score, deciding):
+    client, _ = stack
+    payload = {"questionnaire_version": "risk-v2", "horizon_months": 60, "liquidity_need": "low",
+               "loss_tolerance": "high", "reserve_months": "at_least_6"} | changes
+    response = client.post("/api/v1/onboarding/portfolios", headers=headers(),
+                           json={"name": "Test", "capital_vnd": "100000000", "answers": payload})
+    assert response.status_code == 201
+    p = response.json()
+    assert p["risk_profile"] == {"profile": profile, "score": score, "determining_factors": deciding,
+                                 "mapping_version": "risk-policy-v2", "answers": payload,
+                                 "version_id": p["risk_profile"]["version_id"]}
+    assert p["constraints"]["risk_aversion"] == (6, 3, 1.5)[score]
+
+
+def test_rejects_unconfirmed_or_cross_version_answers(stack):
+    client, _ = stack
+    assert onboard(client, questionnaire_version="risk-v2").status_code == 422
+    assert onboard(client, reserve_months="at_least_6").status_code == 422
+    for field in ["reserve_months", "liquidity_need", "loss_tolerance"]:
+        payload = {"questionnaire_version": "risk-v2", "reserve_months": "at_least_6", field: "unsure"}
+        assert onboard(client, **payload).status_code == 422

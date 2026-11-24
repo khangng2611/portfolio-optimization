@@ -84,7 +84,8 @@ async function verify(page: Page, saved: Value) {
   expect(digest(await get(context, path + '/messages?limit=100&offset=0'))).toBe(saved.messages_hash);
   await page.goto(`/#chat?conversation=${saved.conversation_id}&job=${saved.job_id}`);
   await expect(page.getByTestId('chat-result').last()).toBeVisible();
-  await expect(page.getByTestId('chat-result').last()).toContainText(facts.asset_ids[0]);
+  await page.locator('.chat-context-results').getByRole('button', { name: /Xem phân bổ/ }).first().click();
+  await expect(page.locator('.chat-detail-panel')).toContainText('Phân bổ chính');
   await page.reload();
   await expect(page.getByTestId('chat-result').last()).toBeVisible();
 }
@@ -117,6 +118,7 @@ test('real Chat LLM dialogue clarification grounded result and explicit accept',
   expect(onboarded.status()).toBe(201);
   const pid = (await onboarded.json()).id;
   await page.goto(`/#chat?portfolio=${pid}`);
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
   await page.getByTestId('chat-title').fill('LLM hỗ trợ làm rõ kế hoạch');
   const created = await uiPost(page, '/api/v1/conversations', () => page.getByTestId('chat-create').click(), 201);
   const cid = created.value.id, path = `/api/v1/conversations/${cid}`;
@@ -164,7 +166,8 @@ test('real Chat LLM dialogue clarification grounded result and explicit accept',
   await page.setViewportSize({ width: 1440, height: 1000 });
   phase(info, 'chat-llm-developer-policy');
   await expect(page.getByTestId('chat-llm-consent')).toHaveCount(0);
-  await page.getByTestId('chat-open-recommendation').last().click();
+  await page.locator('.chat-context-results').getByRole('button', { name: /Xem phân bổ/ }).first().click();
+  await page.locator('.chat-detail-panel').getByTestId('chat-open-recommendation').click();
   const accepted = await uiPost(page, `/api/v1/recommendations/${facts.id}/accept`, () => page.getByTestId('accept-proposal').click(), 200);
   rows = await get(page.context(), path + '/messages?limit=100&offset=0');
   const jobs = await Promise.all([first.receipt, second.receipt, confirmed, followup.receipt].map(intent => get(page.context(), intent.value.status_url)));
@@ -199,16 +202,14 @@ test('real Chat login confirmation allocation explanation accept and reconnect',
   const pid = (await onboarded.json()).id;
   await page.goto(`/#chat?portfolio=${pid}`);
   phase(info, 'chat-create-conversation');
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
   await page.getByTestId('chat-title').fill(`Kế hoạch Chat ${Date.now()}`);
-  await page.getByTestId('chat-portfolio').selectOption(pid);
   const created = await uiPost(page, '/api/v1/conversations', () => page.getByTestId('chat-create').click(), 201);
   const cid = created.value.id;
   await expect(page).toHaveURL(new RegExp(`conversation=${cid}`));
   const before = await get(page.context(), `/api/v1/portfolios/${pid}/recommendations`);
   const sendPath = `/api/v1/conversations/${cid}/messages`;
-  await page.getByLabel('Tùy chọn hội thoại', { exact: true }).click();
-  await page.getByTestId('chat-strategy-MVO').check();
-  await page.getByTestId('chat-input').fill('Tôi muốn tạo phân bổ danh mục theo hồ sơ đã xác nhận.');
+  await page.getByTestId('chat-input').fill('Tạo đề xuất phân bổ');
   let first: Awaited<ReturnType<typeof uiPost>>;
   worker('stop');
   try {
@@ -258,7 +259,8 @@ test('real Chat login confirmation allocation explanation accept and reconnect',
   await capture(page, 'chat-canonical-result-mobile');
   await page.setViewportSize({ width: 1440, height: 1000 });
   phase(info, 'chat-explicit-accept-ui');
-  await page.getByTestId('chat-open-recommendation').last().click();
+  await page.locator('.chat-context-results').getByRole('button', { name: /Xem phân bổ/ }).first().click();
+  await page.locator('.chat-detail-panel').getByTestId('chat-open-recommendation').click();
   await expect(page.getByTestId('accept-proposal')).toBeEnabled();
   const accepted = await uiPost(page, `/api/v1/recommendations/${rid}/accept`, () => page.getByTestId('accept-proposal').click(), 200);
   await expect(page.getByTestId('accept-proposal')).toHaveText('Đã lưu mục tiêu');
@@ -291,13 +293,11 @@ test('real Chat session expiry requires explicit reconfirmation before retry', a
   const baseline = JSON.parse(await readFile(resolve(generated, 'chat-browser-receipt.json'), 'utf8'));
   const pid = baseline.portfolio_id;
   await authenticate(page, `/#chat?portfolio=${pid}`);
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
   await page.getByTestId('chat-title').fill(`Kiểm tra phiên Chat ${Date.now()}`);
-  await page.getByTestId('chat-portfolio').selectOption(pid);
   const created = await uiPost(page, '/api/v1/conversations', () => page.getByTestId('chat-create').click(), 201);
   const cid = created.value.id, path = `/api/v1/conversations/${cid}/messages`;
-  await page.getByLabel('Tùy chọn hội thoại', { exact: true }).click();
-  await page.getByTestId('chat-strategy-MVO').check();
-  await page.getByTestId('chat-input').fill('Tôi muốn tạo phân bổ danh mục theo hồ sơ đã xác nhận.');
+  await page.getByTestId('chat-input').fill('Tạo đề xuất phân bổ');
   await uiPost(page, path, () => page.getByTestId('chat-send').click(), 202);
   await expect(page.getByTestId('chat-confirm').last()).toBeVisible();
   const history = await get(page.context(), path + '?limit=100&offset=0');
@@ -334,16 +334,16 @@ test('real Chat late refresh cannot hide a newer accepted turn', async ({ page }
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   const canonicalPath = `/api/v1/recommendations/${saved.recommendation_id}`;
-  const content = `Hướng dẫn sử dụng danh mục ${Date.now()}`;
-  if (await page.locator('.chat-advanced').getAttribute('open') === null) await page.getByLabel('Tùy chọn hội thoại', { exact: true }).click();
-  await page.getByRole('group', { name: 'Mục đích', exact: true }).getByRole('radio', { name: 'Trợ giúp', exact: true }).check();
+  const content = `Tóm tắt danh mục của tôi (${Date.now()})`;
   await page.getByTestId('chat-input').fill(content);
   // Delay the genuine network response; no interception, altered body or SQL.
   await cdp.send('Network.emulateNetworkConditionsByRule', { matchedNetworkConditions: [{ urlPattern: origin + canonicalPath, latency: 3000, downloadThroughput: -1, uploadThroughput: -1 }] });
   try {
     const slowRead = page.waitForRequest(r => new URL(r.url()).pathname === canonicalPath);
     const lateResponse = page.waitForResponse(r => new URL(r.url()).pathname === canonicalPath);
+    await page.locator('.chat-context-summary').click();
     await page.getByRole('button', { name: 'Tải lại trạng thái', exact: true }).click();
+    await page.locator('.chat-context-summary').click();
     await slowRead;
     phase(info, 'chat-race-new-turn');
     const sent = await uiPost(page, `/api/v1/conversations/${saved.conversation_id}/messages`, () => page.getByTestId('chat-send').click(), 202);
@@ -369,6 +369,7 @@ test('real Chat late conversation creation preserves subsequent navigation', asy
   await expect(existing).toBeVisible();
   const href = await existing.getAttribute('href');
   expect(href).toContain('conversation=');
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
   await page.getByTestId('chat-title').fill(`Hội thoại kết nối chậm ${Date.now()}`);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
@@ -386,4 +387,160 @@ test('real Chat late conversation creation preserves subsequent navigation', asy
     await cdp.send('Network.emulateNetworkConditionsByRule', { matchedNetworkConditions: [] });
     await cdp.detach();
   }
+});
+
+test('real Chat paused followups portfolio switch knowledge and pinned proposal', async ({ page, browser }, info) => {
+  const mode = process.env.RAG_STATUS_MODE;
+  test.skip(!['baseline', 'exercise', 'verify'].includes(mode ?? ''), 'Requires the RAG status acceptance run');
+  expect(process.env.PLAYWRIGHT_BASE_URL).toBe('http://127.0.0.1:3100');
+  const directory = process.env.RAG_STATUS_OUTPUT;
+  if (!directory) throw new Error('Set RAG_STATUS_OUTPUT to a fresh run directory');
+  const file = (name: string) => resolve(directory, name + '.json');
+  const store = (name: string, record: Value) => writeFile(file(name), JSON.stringify(record, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+  const load = async (name: string) => JSON.parse(await readFile(file(name), 'utf8'));
+  await mkdir(directory, { recursive: true });
+  const accounts = JSON.parse(await readFile(resolve(generated, 'accounts.json'), 'utf8'));
+  await page.goto('/login');
+  await submitLogin(page, accounts.users.find((a: Value) => a.username === 'alice'));
+  const context = page.context();
+  const ref = JSON.parse(await readFile(resolve(root, 'output/concise-explanation/paid-final-receipt.json'), 'utf8'));
+  const pid = ref.portfolio_id, rid = ref.recommendation_id;
+  const factsPath = '/api/v1/recommendations/' + rid;
+  const messages = (id: string) => get(context, '/api/v1/conversations/' + id + '/messages?limit=100&offset=0');
+  async function oldPins() {
+    const [facts, evidence, history] = await Promise.all([get(context, factsPath), get(context, factsPath + '/evidence'), messages(ref.conversation_id)]);
+    expect(facts).toMatchObject({ id: rid, portfolio_id: pid, weights: ref.facts.weights, input_hash: ref.facts.input_hash });
+    expect(evidence).toMatchObject({ recommendation_id: rid, facts_hash: ref.facts_hash, evidence_hash: ref.evidence_hash });
+    expect(history.some((m: Value) => m.structured?.facts_hash === ref.facts_hash)).toBe(true);
+    return { portfolio_id: pid, recommendation_id: rid, old_conversation_id: ref.conversation_id, input_hash: facts.input_hash, run_id: evidence.run_id, facts_hash: evidence.facts_hash, evidence_hash: evidence.evidence_hash, weights_hash: digest(facts.weights), old_messages_hash: digest(history) };
+  }
+  async function openProposal() {
+    await page.goto('/#proposal?portfolio=' + pid + '&proposal=' + rid);
+    await expect(page.locator('.proposal-review .allocation-primary')).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.proposal-review .allocation-primary')).toBeVisible();
+  }
+  if (mode === 'baseline') {
+    phase(info, 'status-freeze-old-proposal');
+    await openProposal();
+    await store('pinned-baseline', await oldPins());
+    return;
+  }
+  const pins = await load('pinned-baseline');
+  expect(await oldPins()).toEqual(pins);
+  if (mode === 'verify') {
+    phase(info, 'status-restart-persistence');
+    const saved = await load('browser-exercise');
+    await page.goto('/#chat?conversation=' + saved.conversation_id + '&portfolio=' + saved.switched_portfolio_id);
+    await expect(page.getByTestId('allocation-status')).toHaveCount(3);
+    await expect(page.getByRole('button', { name: 'Xem nguồn tham khảo' })).toBeVisible();
+    expect(digest(await messages(saved.conversation_id))).toBe(saved.messages_hash);
+    await page.goto('/#chat?conversation=' + ref.conversation_id + '&portfolio=' + pid);
+    await expect(page.getByTestId('chat-result').last()).toBeVisible();
+    await openProposal();
+    await store('browser-persistence', { ...pins, conversation_id: saved.conversation_id, messages_hash: saved.messages_hash });
+    return;
+  }
+
+  // This dedicated acceptance run uses a single local worker without paid calls.
+  const workers = spawnSync('docker', ['ps', '--filter', 'label=com.docker.compose.project=portfolio-auth-demo', '--filter', 'label=com.docker.compose.service=chat-worker', '--format', '{{.Names}}'], { encoding: 'utf8' });
+  expect(workers.status).toBe(0);
+  const names = workers.stdout.trim().split('\n');
+  expect(names).toHaveLength(1);
+  const offline = spawnSync('docker', ['exec', names[0], 'python', '-c', 'import os, sys; sys.exit(int(os.getenv("CHAT_LLM_ENABLED") == "1" or bool(os.getenv("CHAT_PROVIDER_URL"))))']);
+  expect(offline.status, 'Acceptance worker disables all provider transports').toBe(0);
+  expect((await get(context, '/api/v1/portfolios/' + pid + '/readiness')).reason_code).toBe('SYSTEM_PAUSED');
+
+  function sql(db: string, query: string) {
+    const run = spawnSync('docker', ['exec', 'portfolio-auth-demo-postgres-1', 'sh', '-c', 'exec psql -XAtq -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -c "$2"', 'sh', db, query], { encoding: 'utf8' });
+    expect(run.status).toBe(0);
+    return run.stdout.trim();
+  }
+  const counts = () => ({ allocation_jobs: Number(sql('portfolio_db', 'select count(*) from job')), proposals: Number(sql('portfolio_db', 'select count(*) from recommendation')), quant_runs: Number(sql('quant_db', 'select count(*) from numerical_run')) });
+  const before = counts();
+  phase(info, 'status-legacy-paused');
+  expect(ref.conversation_id).toMatch(/^[0-9a-f-]{36}$/);
+  const legacy = sql('chat_db', `select conversation_id || ',' || id from chat_job where owner_key=(select owner_key from conversation where id='${ref.conversation_id}') and status='FAILED' and error='SYSTEM_PAUSED' and result_message_id is null order by created_at desc limit 1`).split(',');
+  if (legacy.length === 2) {
+    await page.goto('/#chat?conversation=' + legacy[0] + '&job=' + legacy[1]);
+    const legacyStatus = page.getByTestId('chat-job');
+    await expect(legacyStatus).toHaveText('Tính năng tạo đề xuất mới đang tạm dừng. Bạn vẫn có thể xem các đề xuất đã lưu.');
+    await expect(legacyStatus.getByRole('link')).toHaveCount(0);
+  }
+  phase(info, 'status-paused');
+  await page.goto('/#chat?portfolio=' + pid);
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
+  await page.getByTestId('chat-title').fill('Kiểm tra trạng thái tạo đề xuất');
+  const created = await uiPost(page, '/api/v1/conversations', () => page.getByTestId('chat-create').click(), 201);
+  const cid = created.value.id, durations: number[] = [], jobIds: string[] = [];
+  async function ask(content: string, portfolioId: string) {
+    const nextAnswer = page.locator('.chat-assistant').nth(await page.locator('.chat-assistant').count());
+    await page.getByTestId('chat-input').fill(content);
+    const started = performance.now();
+    const sent = await uiPost(page, '/api/v1/conversations/' + cid + '/messages', () => page.getByTestId('chat-send').click(), 202);
+    await nextAnswer.waitFor({ state: 'visible' });
+    durations.push(Math.round(performance.now() - started));
+    expect(sent.body.portfolio_id).toBe(portfolioId);
+    const job = await waitJob(context, sent.value.job_id);
+    expect(job.recommendation_id).toBeNull();
+    expect(job.provider_usage).toEqual([]);
+    const message = (await messages(cid)).find((m: Value) => m.id === job.result_message_id);
+    const visible = page.locator('[data-message-id="' + message.id + '"]');
+    await expect(visible).toContainText(message.content);
+    jobIds.push(job.job_id);
+    return { card: message.structured, visible, content: message.content };
+  }
+  const paused = await ask('Tạo đề xuất phân bổ', pid);
+  expect(paused.card).toMatchObject({ type: 'allocation_status', status: 'BLOCKED', reason_code: 'SYSTEM_PAUSED', scope: 'system', portfolio_id: pid });
+  await expect(paused.visible).toContainText('Tính năng tạo đề xuất mới đang tạm dừng.');
+  await expect(paused.visible.getByRole('link', { name: 'Xem đề xuất đã lưu' })).toHaveAttribute('href', '#proposal?focus=history&portfolio=' + pid);
+  await page.reload();
+  await expect(paused.visible).toContainText(paused.content);
+  phase(info, 'status-why-and-now');
+  const why = await ask('Vì sao vậy?', pid);
+  expect(why.card).toMatchObject({ type: 'allocation_status', reason_code: 'SYSTEM_PAUSED', checked_at: paused.card.checked_at, portfolio_id: pid });
+  expect(why.content).toMatch(/chưa (cung cấp|có).*lý do/i);
+  const now = await ask('Bây giờ tạo được chưa?', pid);
+  expect(now.card).toMatchObject({ type: 'allocation_status', status: 'BLOCKED', reason_code: 'SYSTEM_PAUSED', portfolio_id: pid });
+  expect(Date.parse(now.card.checked_at)).toBeGreaterThan(Date.parse(paused.card.checked_at));
+  await expect(now.visible.locator('time[datetime="' + now.card.checked_at + '"]')).toBeVisible();
+
+  await now.visible.screenshot({ path: resolve(directory, 'status-current.png') });
+
+  phase(info, 'status-switch-and-knowledge');
+  await page.locator('.chat-context-summary').click();
+  const select = page.getByTestId('chat-portfolio');
+  const other = await select.locator('option').evaluateAll(options => options.map(o => (o as HTMLOptionElement).value)).then(ids => ids.find(id => id && id !== pid));
+  if (!other) throw new Error('Expected a second portfolio owned by the signed-in investor');
+  await select.selectOption(other);
+  await expect(page).toHaveURL(new RegExp('portfolio=' + other));
+  await expect(paused.visible.getByRole('link')).toHaveCount(0);
+  const knowledge = await ask('Black–Litterman là gì?', other);
+  expect(knowledge.card.type).toBe('knowledge');
+  const evidence = knowledge.card.knowledge;
+  expect(evidence.mode).toBe('LEXICAL');
+  expect(evidence.citations.length).toBeGreaterThan(0);
+  await knowledge.visible.getByRole('button', { name: 'Xem nguồn tham khảo' }).click();
+  await expect(page.getByTestId('chat-knowledge')).toContainText(evidence.citations[0].text);
+  for (const id of jobIds) expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  const statusIds = jobIds.slice(0, 3).map(id => "'" + id + "'").join(',');
+  expect(sql('chat_db', 'select count(*) from knowledge_evidence where job_id in (' + statusIds + ')')).toBe('0');
+  expect(sql('chat_db', 'select count(*) from chat_job where dependency_id is not null and id in (' + statusIds + ')')).toBe('0');
+  const tools = sql('chat_db', 'select tool from tool_call where job_id in (' + statusIds + ') order by tool').split('\n').filter(Boolean);
+  expect(tools).not.toContain('retrieve_knowledge');
+  expect(counts()).toEqual(before);
+  phase(info, 'status-reopen-pinned-proposal');
+  await openProposal();
+  expect(await oldPins()).toEqual(pins);
+  phase(info, 'status-second-owner');
+  const otherOwner = await browser.newContext({ baseURL: process.env.PLAYWRIGHT_BASE_URL });
+  try {
+    const viewer = await otherOwner.newPage();
+    await viewer.goto('/login');
+    await submitLogin(viewer, accounts.users.find((a: Value) => a.username === 'bob'));
+    for (const path of [factsPath, factsPath + '/evidence', '/api/v1/conversations/' + cid, '/api/v1/jobs/chat/' + jobIds[0]]) {
+      expect((await otherOwner.request.get(path)).status()).toBe(404);
+    }
+  } finally { await otherOwner.close(); }
+  await store('browser-exercise', { other_owner_denied_reads: 4, ...pins, conversation_id: cid, switched_portfolio_id: other, job_ids: jobIds, legacy_job_id: legacy[1] ?? null, status_checked_at: [paused.card.checked_at, now.card.checked_at], provider_calls: 0, status_tools: tools, job_counts_before_and_after: before, turn_duration_ms: durations, knowledge_evidence_hash: evidence.evidence_hash, messages_hash: digest(await messages(cid)) });
 });

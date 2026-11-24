@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trình diễn đề xuất HYBRID đã lưu</title>
+<style>
+  :root { color-scheme: light; font-family: "Source Sans 3", system-ui, sans-serif; color: #172e29; background: #fafaf7; }
+  body { max-width: 52rem; margin: 0 auto; padding: clamp(1.15rem, 4vw, 3.5rem); line-height: 1.55; }
+  h1, h2 { line-height: 1.18; }
+  h1 { font-size: clamp(1.8rem, 5vw, 3rem); margin-bottom: .5rem; }
+  h2 { font-size: 1.22rem; margin: 0 0 .4rem; }
+  p { margin: .35rem 0 .7rem; }
+  aside { border-inline-start: 4px solid #9a5814; padding: .95rem 1.1rem; background: #fff3df; margin: 1.4rem 0; }
+  ol { padding-inline-start: 1.7rem; }
+  li { padding: .6rem 0 .85rem .2rem; }
+  a { color: #125440; text-underline-offset: .2em; }
+  a:focus-visible { outline: 3px solid #12614c; outline-offset: 3px; }
+  footer { border-top: 1px solid #d2d8d1; padding-top: .8rem; }
+</style>
+<main>
+  <h1>Đề xuất HYBRID đã lưu</h1>
+  <p>Danh mục “Kiểm chứng HYBRID 22-11-2026” · Hồ sơ Thận trọng · Ngày dữ liệu 17/11/2026.</p>
+  <aside aria-labelledby="pause">
+    <h2 id="pause">Vì sao bản demo tạm dừng tạo đề xuất mới?</h2>
+    <p>Trong đợt kiểm định ngày 22/11, biến động năm của hồ sơ Tăng trưởng là <strong>19,29%</strong>, so với <strong>16,98%</strong> của phương án đối chứng. Mức tăng <strong>2,31 điểm phần trăm</strong> vượt giới hạn <strong>2 điểm</strong>. Sau pilot, người vận hành tạm dừng tạo mới cho toàn hệ thống.</p>
+    <p>Ứng dụng hiển thị trạng thái hiện tại. Các số trên thuộc đợt kiểm định đã lưu. <a href="../../output/hybrid-20261122/REPORT.md">Báo cáo pilot 22/11</a> · <a href="../../output/hybrid-20261122/quantitative.json">Kết quả định lượng</a></p>
+  </aside>
+  <p><a target="_blank" rel="noopener" href="http://127.0.0.1:3100/login">Đăng nhập</a> tài khoản demo <strong>alice</strong> trên máy chạy ứng dụng. Mở từng bước trong tab mới để giữ phần giải thích này khi trình chiếu.</p>
+  <ol>
+    <li><h2><a target="_blank" rel="noopener" href="http://127.0.0.1:3100/#proposal?portfolio=493fc38c-9cd3-481f-b3b0-1761f0044a75&amp;focus=request">Xem trạng thái tạo mới</a></h2>
+      <p>Ứng dụng thông báo tạm dừng và có lối mở các đề xuất đã lưu. Dữ liệu phân bổ bên dưới đến từ lần tính của pilot.</p></li>
+    <li><h2><a target="_blank" rel="noopener" href="http://127.0.0.1:3100/#proposal?portfolio=493fc38c-9cd3-481f-b3b0-1761f0044a75&amp;proposal=dae8ccd4-33e7-48fe-9d2d-82187da6e86b">Mở phân bổ của lần tính cũ</a></h2>
+      <p>VFF chiếm 50,0% và CTG khoảng 25,1%. Mở “So sánh với phương án tham chiếu” để xem EW và MVO trên cùng rổ. Đề xuất này đã hết hạn và khóa chấp nhận.</p></li>
+    <li><h2><a target="_blank" rel="noopener" href="http://127.0.0.1:3100/#chat?conversation=d2be28d3-c8fd-4cb0-b717-cc2a9040c123&amp;portfolio=493fc38c-9cd3-481f-b3b0-1761f0044a75">Mở căn cứ trong hội thoại đã lưu</a></h2>
+      <p>Trong thẻ đề xuất từ kết quả định lượng, chọn “Xem dữ kiện và nguồn”. Hội thoại cho thấy 10 tài sản được cân nhắc, 6 tài sản có tỷ trọng dương và giới hạn 50% mỗi tài sản. “Xem đề xuất và quyết định” quay về đúng bản phân bổ. Toàn bộ bước này chỉ đọc.</p></li>
+    <li><h2><a target="_blank" rel="noopener" href="http://127.0.0.1:3100/#proposal?focus=history&amp;portfolio=493fc38c-9cd3-481f-b3b0-1761f0044a75">Xem lịch sử đề xuất</a></h2>
+      <p>Chọn bản muốn đối chiếu. Bản Tăng trưởng được tạo trước khi đổi hồ sơ, sau đó có hai bản Thận trọng trên Web và Chat. Tải lại bản từ Chat để xem tỷ trọng đã ghim.</p></li>
+  </ol>
+  <footer><strong>Phạm vi nghiệm thu.</strong> Kịch bản này xác minh đọc lại đề xuất. E2E-18 còn bước tạo đề xuất sau khi làm mới đầu vào. E2E-23 còn chuỗi tạo, chấp nhận mục tiêu mới và kiểm lại cùng bản ghi sau restart trên cấu hình cuối. <a href="../../output/playwright/sanitized/saved-hybrid-demo/verification.json">Biên bản kiểm chứng local</a></footer>
+</main>
+</html>

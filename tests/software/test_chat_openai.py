@@ -209,3 +209,63 @@ def test_explanation_plan_receives_redacted_current_question(monkeypatch):
         {}, "a" * 64, question="Nói rõ rủi ro, email alice@example.com"
     )
     assert sections == ["risk"] and meta["reason"] == "VERIFIED"
+
+
+def test_knowledge_quotes_opt_in_uses_only_public_candidates_and_sanitized_question(monkeypatch):
+    from portfolio_contracts import canonical_hash
+    data = {"passages": [{"chunk_id": "a"*36, "text": "Một đoạn công khai đã được duyệt."}]}
+    def serve(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        assert context == {"question": "Hỏi [redacted]", "candidates": data, "candidate_hash": canonical_hash(data)}
+        assert payload["store"] is False and "tools" not in payload
+        assert payload["text"]["format"]["name"] == "chat_knowledge_quotes_v2"
+        return httpx.Response(200, json=response({"coverage": "MISSING", "candidate_hash": canonical_hash(data), "supports": []}))
+    monkeypatch.setenv("CHAT_KNOWLEDGE_SEMANTIC_SELECTION", "1")
+    result, meta = provider(monkeypatch, serve).select_knowledge(data, question="Hỏi test@example.org")
+    assert result["supports"] == [] and meta["prompt_version"] == "knowledge-quotes-v1"
+
+
+def test_source_route_measures_wait_for_headers_and_keeps_turn_deadline(monkeypatch):
+    import asyncio
+    import time
+    from chat_service.openai_provider import SourcePlan
+
+    calls = []
+
+    async def serve(request):
+        calls.append(request)
+        assert 0 < request.extensions["timeout"]["read"] <= 0.1
+        await request.extensions["trace"]("http11.send_request_body.complete", {})
+        await asyncio.sleep(1)
+        pytest.fail("The outer deadline must cancel a slow provider")
+
+    p = provider(monkeypatch, serve)
+    plan, meta = p.generate("source_route", {}, SourcePlan, deadline=time.monotonic() + 0.10)
+    assert plan is None and meta["reason"] == "TIMEOUT"
+    assert 0 <= meta["request_sent_ms"] <= meta["latency_ms"]
+    assert "headers_ms" not in meta and "input_tokens" not in meta
+    assert 0 < meta["timeout_ms"] <= 100
+    assert len(calls) == 1
+
+
+def test_source_route_deadline_is_independent_and_reports_success_timing(monkeypatch):
+    from chat_service.openai_provider import SourcePlan
+
+    def serve(request):
+        assert request.extensions["timeout"]["read"] == 12
+        return httpx.Response(200, json=response({"source": "clarify"}))
+
+    plan, meta = provider(monkeypatch, serve).generate("source_route", {}, SourcePlan)
+    assert plan == {"source": "clarify"}
+    assert meta["timeout_ms"] == 12000
+    assert 0 <= meta["headers_ms"] <= meta["latency_ms"]
+
+
+def test_source_route_with_expired_worker_deadline_skips_http(monkeypatch):
+    import time
+    from chat_service.openai_provider import SourcePlan
+
+    p = provider(monkeypatch, lambda _: pytest.fail("Worker budget expired"))
+    plan, meta = p.generate("source_route", {}, SourcePlan, deadline=time.monotonic() - 1)
+    assert plan is None and meta["reason"] == "TURN_BUDGET_EXHAUSTED"

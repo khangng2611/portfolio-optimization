@@ -367,3 +367,39 @@ def test_versioned_cli_manifest_replays_exact_availability():
     ) == indexing_manifest(root, 2, stamp).model_dump(mode="json")
     with pytest.raises(ValueError):
         indexing_manifest(root, 2, None)
+
+
+def test_editorial_candidate_preserves_active_versions_and_hash():
+    from knowledge_service.corpus import load_manifest
+    from portfolio_contracts import canonical_hash
+
+    root = Path(__file__).resolve().parents[2] / "services/knowledge/corpus"
+    baseline = load_manifest(root)
+    candidate = load_manifest(root / "candidate-20261123")
+    assert (
+        canonical_hash(baseline.model_dump(mode="json"))
+        == "a8d21c647e8a514510873dce49b8414b7fc32921840c74b53a383b189e9600d4"
+    )
+    original = {d.key: d for d in baseline.documents}
+    for document in candidate.documents:
+        old = original.get(document.key)
+        if old and document.version == old.version:
+            assert document == old
+        elif old:
+            assert document.version > old.version
+            assert document.available_at > old.available_at
+
+
+@pytest.mark.parametrize(
+    ("question", "term"),
+    [
+        ("Rủi ro danh mục chỉ do từng tài sản quyết định sao?", "rui ro danh muc"),
+        ("Chấp nhận đề xuất có thực hiện giao dịch luôn không?", "chap nhan de xuat"),
+        ("Trượt giá làm giảm lãi sau chi phí thế nào?", "truot gia"),
+        ("Target có chứng minh quyền sở hữu cổ phiếu không?", "tai san nam giu"),
+    ],
+)
+def test_fallback_looks_for_the_requested_concept(question, term):
+    from knowledge_service.retrieval import lexical_query, topic_query
+
+    assert f'"{term}"' in topic_query(lexical_query(question))

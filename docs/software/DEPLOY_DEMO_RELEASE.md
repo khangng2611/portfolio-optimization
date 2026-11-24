@@ -12,6 +12,8 @@ git tag -a v0.1.0-demo.9 -m 'Describe the release'
 
 The command runs the software suite, Web unit tests and typecheck locally. It starts the existing VM, checks that auto-shutdown remains Enabled at 23:00 Vietnam, transfers a Git bundle over the existing pinned SSH connection, and prepares the selected commit on the VPS. Expired Azure login can prompt for browser/MFA. Dependencies must already be prepared locally; use the project's existing software setup workflow.
 
+The public profile reuses the existing Funnel hostname and generated credentials. It uses explicit DEMO strategies with `SYSTEM_HYBRID_ENABLED=false`. The local HYBRID, paid-provider and research overlays are separate from this release. Running them on another host requires provisioning the corresponding data and model artifacts, or separately configuring provider access and budget.
+
 ## Transaction and maintenance window
 
 1. Prepare a candidate checkout, isolated smoke Python environment and **release-tagged application images** before interrupting the current service. Prefetch external images if necessary. Build logs remain private on the VPS.
@@ -42,6 +44,22 @@ python3.12 ~/demo-deploy/controller.py --remote-action recover
 Recovery refuses to run while another deploy/start owns the lock. When a backup checksum is invalid or a volume path/driver is unsupported, keep maintenance enabled and inspect the private journal; do not delete state or manually run a different Compose profile.
 
 No backup/image cleanup is automatic. Review successful releases and space before retiring old backups, candidate environments and rollback tags. Do not run `docker volume prune`, `docker image prune -a` or `down -v` while depending on retained rollback state.
+
+## Diễn tập DB-08 trên bản sao local
+
+Từ thư mục gốc, khi stack `portfolio-auth-demo` đang chạy, chọn một đề xuất HYBRID đã lưu. Chủ sở hữu cần có tài khoản kiểm thử trong `accounts.json` và ít nhất một target đã chấp nhận. Lệnh dưới đây tạo bản sao lưu mới và kiểm phục hồi bằng dữ liệu của chính chủ sở hữu đó.
+
+```sh
+.venv-software/bin/python scripts/drill_demo_restore.py 3823ed98-7ef5-45f5-b79f-73768d0c2cd0
+```
+
+1. Lưu dump của Auth, Portfolio, Quant, Market, ML, Chat, Knowledge và vai trò của cả hai cluster. Lưu bundle, model, dataset, tài khoản và cấu hình trong archive riêng tư. Khi cần phục hồi lại từ bộ lưu này, đối chiếu SHA-256 của từng file với `restore-checksums.json` trước khi giải nén hoặc nạp SQL.
+2. Dùng hai container PostgreSQL mới theo đúng image đã ghi nhận, cùng tên tài khoản quản trị của cluster gốc, volume trống và một mạng Docker `--internal`. Nạp các vai trò trên từng cluster, bỏ đúng câu `CREATE ROLE` của tài khoản mà initdb vừa tạo và giữ các câu `ALTER ROLE`/cấp quyền. Với mỗi dump, dùng `pg_restore --exit-on-error --create` kết nối vào DB `postgres`. Đối chiếu schema từng DB theo `alembic_version`. Giải nén artifact/config vào thư mục riêng có quyền `0700`.
+3. Chạy Auth API và Portfolio API với cấu hình đã phục hồi trên mạng bản sao. Bằng tài khoản chủ sở hữu, đăng nhập, đọc đề xuất HYBRID và target đã lưu, so ID, run, input, bundle, hash kết quả và phân bổ. Khởi động lại hai DB và hai API của bản sao, đợi sẵn sàng, đăng nhập lại và so cùng dữ liệu, hash từng file lần nữa. Script tự dọn các container, volume tạm và mạng được tạo trong lượt diễn tập.
+
+Ngày 23/11/2026 lúc 22:37 GMT+7, cả hai lần đăng nhập và đọc qua API đều đạt; 7 DB được khôi phục và 1.026 file/config/artifacts khớp. Đề xuất `3823ed98…` có SHA-256 kết quả `67541d3a…`; target đã chấp nhận `41d8f41f…` ở danh mục khác của cùng chủ có SHA-256 phân bổ `a34d92ec…`. Cả hai bản ghi đều có sẵn trước diễn tập. [Biên bản](../../output/db08-drill/20261123T153550Z/receipt.json) · [Script thực hiện](../../scripts/drill_demo_restore.py)
+
+Mỗi DB được dump bằng một snapshot logic riêng. Phép thử bao phủ các bản ghi demo đã lưu và artifact được đối chiếu. Phục hồi chính xác một thời điểm chung cho mọi dịch vụ, Redis và hàng đợi đang xử lý thuộc phạm vi diễn tập khác. Bản sao lưu nằm trong `output/db08-drill/<UTC>/` trên máy local, chứa dữ liệu tài khoản và khóa nội bộ. Chỉ chia sẻ `receipt.json`.
 
 ## Manual service inspection
 

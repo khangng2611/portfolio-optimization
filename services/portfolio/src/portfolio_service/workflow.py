@@ -91,7 +91,8 @@ def validate_result(result, command, *, resolver=None, deadline=None):
         if command["strategy"] == "HYBRID":
             from portfolio_contracts.hybrid import hybrid_policy, validate_hybrid_weights
 
-            pin = hybrid_policy(context["regime"]["regime"], command["decision_context"]["risk_profile"].get("profile"))
+            pin = hybrid_policy(context["regime"]["regime"], command["decision_context"]["risk_profile"].get("profile"),
+                                command["hybrid_policy"]["version"])
             if pin != command["hybrid_policy"]:
                 raise ValueError("HYBRID policy pin mismatch")
             validate_hybrid_weights(ids, proof.active_asset_ids, c, pin, result)

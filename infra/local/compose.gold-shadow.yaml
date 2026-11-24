@@ -1,0 +1,62 @@
+services:
+  hybrid-forward-capture:
+    environment:
+      GOLD_SHADOW_CAPTURE_EXTENSION: "1"
+
+  portfolio-migrate:
+    volumes:
+      - ../../services/portfolio/migrations/versions/d099d443a191_gold_shadow.py:/app/services/portfolio/migrations/versions/d099d443a191_gold_shadow.py:ro
+      - ../../services/portfolio/migrations/versions/eedf7a9e3721_gold_shadow_witness.py:/app/services/portfolio/migrations/versions/eedf7a9e3721_gold_shadow_witness.py:ro
+
+  gold-shadow-observer:
+    image: portfolio-software-quant:local
+    command: [python, -m, quant_service.gold_shadow_worker, run]
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
+      BUNDLE_DIRECTORY: /bundles
+      GOLD_SHADOW_DATASETS: /datasets
+      GOLD_SHADOW_ARCHIVE: /gold-shadow/archive.csv
+      GOLD_SHADOW_FORECAST_WARMUP: /gold-shadow/warmup
+      GOLD_SHADOW_FORECAST_EPOCHS: /gold-shadow/epochs
+      PYTHONPATH: /observer
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    volumes:
+      - ../../services/portfolio/src/portfolio_service:/observer/portfolio_service:ro
+      - ../../services/quant-serving/src/quant_service:/observer/quant_service:ro
+      - ./.generated/bundles:/bundles:ro
+      - ./.generated/ml-models:/bundles/ml-models:ro
+      - ./.generated/datasets:/datasets:ro
+      - ../../phase2_gold_k5/revision/alternate/archive.csv:/gold-shadow/archive.csv:ro
+      - ../../phase2_gold_k5/revision/runs/20261124T090146690849Z:/gold-shadow/warmup:ro
+      - ../../output/gold-k5-shadow/epochs:/gold-shadow/epochs:rw
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  gold-shadow-assessment:
+    image: portfolio-hybrid-forward-study:local
+    user: "${LOCAL_BUNDLE_UID:?Run bootstrap.py}:${LOCAL_BUNDLE_GID:?Run bootstrap.py}"
+    entrypoint: [python, -m, scripts.gold_shadow_assess]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      DATABASE_URL: postgresql+psycopg://portfolio_runtime:${PORTFOLIO_RUNTIME_PASSWORD:?Run bootstrap.py}@postgres:5432/portfolio_db
+      PGOPTIONS: "-c default_transaction_read_only=on"
+    volumes:
+      - ../../scripts/gold_shadow_assess.py:/study/scripts/gold_shadow_assess.py:ro
+      - ../../scripts/gold_shadow_score.py:/study/scripts/gold_shadow_score.py:ro
+      - ../../scripts/gold_shadow_marks.py:/study/scripts/gold_shadow_marks.py:ro
+      - ../../scripts/hybrid_forward_panel.py:/study/scripts/hybrid_forward_panel.py:ro
+      - ../../services/quant-serving/src/quant_service/gold_shadow_quotes.py:/study/services/quant-serving/src/quant_service/gold_shadow_quotes.py:ro
+      - ../../services/quant-serving/src/quant_service/gold_shadow_receipt.py:/study/services/quant-serving/src/quant_service/gold_shadow_receipt.py:ro
+      - ../../experiments_core/src/core.py:/study/experiments_core/src/core.py:ro
+      - ../../phase2_gold_k5/portfolio.py:/study/phase2_gold_k5/portfolio.py:ro
+      - ../../output/hybrid-mvo60-forward:/archive:ro
+      - ../../output/gold-k5-shadow/assessment:/results:rw
+    depends_on:
+      portfolio-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped

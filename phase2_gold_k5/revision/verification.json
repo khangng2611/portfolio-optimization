@@ -1,0 +1,31 @@
+{
+  "checked_at_utc": "2026-11-24T09:06:15.454397+00:00",
+  "phase1_original_reference_and_phase2_baseline_hashes_match": true,
+  "runs": {
+    "snapshot": {
+      "primary": "20261124T085618964318Z",
+      "repeat": "20261124T085832420279Z",
+      "matched_csvs": 35,
+      "inputs_and_sources": 255,
+      "archive_sha256": "2bd1b56dadf4dd883b19fea538940b20d5460ca072e3243b10fea8b03b9aa779"
+    },
+    "alternate": {
+      "primary": "20261124T090146690849Z",
+      "repeat": "20261124T090419955677Z",
+      "matched_csvs": 35,
+      "inputs_and_sources": 342,
+      "archive_sha256": "42ee952f6a6e0486464c5e39e84cbb66f2a857d723cc15b39a46870bb9c58275"
+    }
+  },
+  "supporting_sha256": {
+    "verification/manual_conflicts.csv": "9a257ad1f93852d92c1f55efd7f41afd7c8a0011b0efd2f94a932b52228fe5ec",
+    "verification/overrides.csv": "b524e487fdd4ff348fdcdde50700aab362e7490789214cdc053e1ef9be2142af",
+    "verification/compare.py": "55e8ebfb50ccec5d8044412c46310087e4c80701fe7665d5640b9bc98fc123a9",
+    "verification/capture.py": "f993b0714ebc14d626ee0415b0b15cb3479cd2bb0cbcf485cbeaae676adaa996",
+    "alternate/source_policy.md": "b826512be7966bde5f022e5594a0a8e970b1d1b3a40dd3bb84b7cf71861b7b84",
+    "alternate.py": "242644ed5f9a02ff10bcd14785a122496653ffd43d97e7c00d3b86d42de5173f",
+    "test_alternate.py": "b4add921ddf381aee7429fd4f15086efd829662ff226b62644f6897127ff42fb",
+    "REPORT.md": "51e01147c4f03b34b4bd4c259805295237f0858033151ea22e00294c7cbc9a56",
+    "doi-soat-sjc.png": "7ff52e927d861df60be851f6285c849b587e0d784640f846db8c025637ad1060"
+  }
+}

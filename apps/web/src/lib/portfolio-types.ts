@@ -2,8 +2,13 @@ import type { SelectionRevision } from './selection-types';
 import type { AllocationConstraints } from './p1-types';
 import type { Allocation } from '../components/allocation-view';
 import type { TraceReference } from './job-trace';
-export type RiskAnswers = { questionnaire_version: string; horizon_months: number; liquidity_need: 'low' | 'medium' | 'high'; loss_tolerance: 'low' | 'medium' | 'high'; experience: 'beginner' | 'experienced' };
-export type RiskProfile = { profile: string; answers?: RiskAnswers; version_id?: string; mapping_version?: string };
+export type RiskLevel = 'low' | 'medium' | 'high';
+export type ReserveMonths = 'under_3' | '3_to_under_6' | 'at_least_6';
+type Experience = 'beginner' | 'experienced';
+type RiskInputs = { horizon_months: number; liquidity_need: RiskLevel; loss_tolerance: RiskLevel };
+export type QuantifiedAnswers = RiskInputs & { questionnaire_version: 'risk-v2'; reserve_months: ReserveMonths; experience?: Experience | null };
+export type RiskAnswers = QuantifiedAnswers | (RiskInputs & { questionnaire_version: 'risk-v1'; experience: Experience });
+export type RiskProfile = { profile: string; answers?: RiskAnswers; version_id?: string; mapping_version?: string; determining_factors?: (keyof RiskInputs | 'reserve_months')[] };
 export type Portfolio = { asset_selection?: SelectionRevision | null; id: string; name: string; capital_vnd: string; universe_id: string; version: number; constraints: AllocationConstraints; risk_profile: RiskProfile | null; policy_version_id: string };
 export type Recommendation = TraceReference & Allocation & { id: string; portfolio_id: string; portfolio_version: number; run_id?: string; risk_profile?: RiskProfile | null };
 export type Target = { id: string; recommendation_id: string; accepted_at: string; allocation: Recommendation; portfolio_version: number };
@@ -11,5 +16,5 @@ export type Dashboard = { portfolio: Portfolio; accepted_target: Target | null; 
 export type Api = <T>(path: string, init?: RequestInit) => Promise<T>;
 export type Page<T> = { items: T[]; total: number; limit: number; offset: number };
 export type PageApi = <T>(path: string) => Promise<Page<T>>;
-export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
+export class ApiError extends Error { constructor(public status: number, message: string, public code?: string) { super(message); } }
 export const dateTime = (date: string) => new Date(date).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });

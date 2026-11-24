@@ -32,6 +32,7 @@ ReasonCode = Literal[
     "INPUT_INVALID",
     "INPUT_EXPIRED",
     "INPUT_UNAVAILABLE",
+    "SYSTEM_PAUSED",
     "MODEL_UNAVAILABLE",
 ]
 

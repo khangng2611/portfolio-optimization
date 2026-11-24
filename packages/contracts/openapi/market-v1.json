@@ -599,6 +599,71 @@
         }
       }
     },
+    "/api/v1/market/price-series": {
+      "get": {
+        "summary": "Price Series",
+        "operationId": "price_series_api_v1_market_price_series_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_-]{1,64}$",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPriceHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/market/selected-snapshots": {
       "post": {
         "summary": "Selected Snapshot",
@@ -816,6 +881,57 @@
       "get": {
         "summary": "Chat Market Facts",
         "operationId": "chat_market_facts_internal_v1_chat_market_facts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:ACB|BID|CTG|DGC|FPT|GAS|GVR|HDB|HPG|LPB|MBB|MSN|MWG|PLX|SAB|SHB|SSI|STB|TCB|TPB|VCB|VHM|VIB|VIC|VJC|VNM|VPB|VRE|BVH|POW|GOLD)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Id"
+            }
+          },
+          {
+            "name": "requested_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Requested Date"
+            }
+          },
+          {
+            "name": "description",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Description"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -824,13 +940,18 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/market/refresh-schedules": {
@@ -1303,6 +1424,76 @@
         "type": "object",
         "title": "IngestionRequest"
       },
+      "MarketPriceHistory": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "title": "Asset Id"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/MarketPriceSeries"
+            },
+            "type": "array",
+            "title": "Series"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_id",
+          "as_of",
+          "series"
+        ],
+        "title": "MarketPriceHistory"
+      },
+      "MarketPriceSeries": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "price_type": {
+            "type": "string",
+            "title": "Price Type"
+          },
+          "price_basis": {
+            "type": "string",
+            "title": "Price Basis"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "source_unit": {
+            "type": "string",
+            "title": "Source Unit"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/PriceSeriesObservation"
+            },
+            "type": "array",
+            "title": "Observations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "price_type",
+          "price_basis",
+          "unit",
+          "source_unit",
+          "observations"
+        ],
+        "title": "MarketPriceSeries"
+      },
       "Observation": {
         "properties": {
           "asset_id": {
@@ -1404,6 +1595,43 @@
           "provider"
         ],
         "title": "Observation"
+      },
+      "PriceSeriesObservation": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "price_vnd": {
+            "type": "string",
+            "title": "Price Vnd"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Revision Id"
+          },
+          "available_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Available At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "price_vnd",
+          "revision",
+          "revision_id",
+          "available_at"
+        ],
+        "title": "PriceSeriesObservation"
       },
       "RefreshInput": {
         "properties": {

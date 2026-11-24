@@ -71,6 +71,9 @@ class Tools:
                 "reason": "NO_EVIDENCE",
                 "passages": [],
             }
+        if tool == "get_allocation_status":
+            return {"portfolio_id": job.request.get("portfolio_id"), "status": "READY", "reason_code": "READY",
+                    "checked_at": utcnow().isoformat(), "scope": "portfolio"}
         if tool == "get_profile":
             return {"portfolio": self.summary}
         if tool == "get_portfolio_summary":
@@ -540,3 +543,144 @@ def test_provider_budget_survives_crash_before_final_message(chat):
         -1
     ]
     assert result["structured"]["provider"]["reason"] == "PROVIDER_BUDGET_EXHAUSTED"
+
+
+@pytest.mark.parametrize("day,expected", [
+    ("2026-11-23", "ngày 23/11/2026"),
+    ("2026-11-20", "Chưa có giá ngày 23/11/2026"),
+    (None, "Chưa có dữ liệu"),
+])
+def test_gold_price_without_portfolio_or_model(chat, monkeypatch, day, expected):
+    c, sessions, tools = chat
+    cid = conversation(c)
+    worker = Worker(sessions, tools)
+    monkeypatch.setattr(worker.dialogue, "interpret", lambda *_: pytest.fail("unexpected model routing"))
+    monkeypatch.setattr(worker.dialogue, "respond", lambda *_: pytest.fail("unexpected model response"))
+    calls = []
+    def read(job, name, args):
+        calls.append(name)
+        if name == "get_profile":
+            return {}
+        assert name == "get_market_facts" and args == {"asset_id": "GOLD"}
+        return {"scope": "gold_quote", "local_date": "2026-11-23", "observations":
+                [{"asset_id":"GOLD", "observation_date": day, "price_vnd":"101000000.000000"}] if day else []}
+    monkeypatch.setattr(tools, "call", read)
+    assert send(c, cid, content="Giá vàng hôm nay", intent=None, strategy=None).status_code == 202
+    assert worker.tick()
+    with sessions() as db:
+        answer = db.scalar(select(Message).where(Message.role == "assistant"))
+        assert expected in answer.content
+        assert answer.structured["facts"]["scope"] == "gold_quote"
+        if day:
+            assert "101.000.000 đồng/lượng" in answer.content
+    assert calls == ["get_profile", "get_market_facts"]
+
+
+@pytest.mark.parametrize("question,quote", [
+    ("Gia vang hom nay?", True),
+    ("Cho mình biết giá bán vàng miếng SJC hiện tại là bao nhiêu?", True),
+    ("Vàng SJC hôm nay bao nhiêu?", True),
+    ("Giá vàng thế giới hôm nay", False),
+    ("Giá vàng hôm qua", False),
+    ("Giá vàng SJC mua vào", False),
+    ("Vì sao danh mục có vàng?", False),
+    ("Tạo đề xuất phân bổ", False),
+])
+def test_gold_price_routing(question, quote):
+    from chat_service.workflow import intent_of
+    assert (intent_of({"content": question}) == "gold_quote") is quote
+
+
+def test_stock_price_question_pins_its_own_ticker_and_date(chat, monkeypatch):
+    from chat_service.workflow import equity_quote_query
+    c, sessions, tools = chat
+    cid = conversation(c)
+    worker = Worker(sessions, tools)
+    def read(job, name, args):
+        if name == "get_profile":
+            return {}
+        assert name == "get_market_facts" and args == {"asset_id": "FPT"}
+        return {"scope": "equity_quote", "local_date": "2026-11-23", "asset_id": "FPT", "observations":
+                [{"asset_id": "FPT", "observation_date": "2026-11-17", "price_vnd": "48500.000000"}]}
+    monkeypatch.setattr(tools, "call", read)
+    assert send(c, cid, content="Giá FPT hôm nay là bao nhiêu?", intent=None, strategy=None).status_code == 202
+    assert worker.tick()
+    with sessions() as db:
+        answer = db.scalar(select(Message).where(Message.role == "assistant"))
+        assert "Chưa xác minh được giá hôm nay" in answer.content
+        assert "17/11/2026" in answer.content and "48.500 đồng/cổ phiếu" in answer.content
+        assert answer.structured["facts"]["asset_id"] == "FPT"
+    assert equity_quote_query("Vì sao giá FPT tăng?") is None
+    assert equity_quote_query("Giá FPT hay VCB hôm nay?") is None
+
+    assert equity_quote_query("Giá FPT ngày 01/01/2099?") is None
+    assert equity_quote_query("Dự báo giá cổ phiếu FPT ngày 01/01/2024?") is None
+    assert equity_quote_query("Mua FPT ngày 01/01/2024?") is None
+
+
+@pytest.mark.parametrize("observed,expected", [("2024-01-01", "48.500 đồng/cổ phiếu"),
+                                               ("2026-11-17", "Chưa có giá FPT đã xác minh cho ngày 01/01/2024")])
+def test_dated_quote_never_substitutes_another_days_price(chat, monkeypatch, observed, expected):
+    client, sessions, tools = chat
+    cid = conversation(client)
+    def read(job, name, args):
+        if name == "get_profile":
+            return {}
+        assert name == "get_market_facts" and args == {"asset_id": "FPT", "requested_date": "2024-01-01"}
+        return {**args, "scope": "equity_quote", "local_date": "2026-11-23", "observations":
+                [{"asset_id": "FPT", "observation_date": observed, "price_vnd": "48500"}]}
+    monkeypatch.setattr(tools, "call", read)
+    assert send(client, cid, content="Giá FPT ngày 01/01/2024?", intent=None).status_code == 202
+    assert Worker(sessions, tools).tick()
+    with sessions() as db:
+        answer = db.scalar(select(Message).where(Message.role == "assistant"))
+        assert expected in answer.content
+        if observed != "2024-01-01":
+            assert "48.500" not in answer.content
+        assert answer.structured["facts"]["observations"][0]["observation_date"] == observed
+
+
+@pytest.mark.parametrize("question", ["MBB là mã gì", "Mô tả về mã MBB", "mo ta ve ma mbb"])
+def test_description_reads_named_asset_without_classifier(chat, monkeypatch, question):
+    c, sessions, tools = chat
+    cid = conversation(c)
+    def read(job, name, args):
+        if name == "get_profile":
+            return {}
+        assert name == "get_market_facts" and args == {"asset_id":"MBB","description":True}
+        return {"scope":"asset_description","asset_id":"MBB","display_name":"Ngân hàng MB","description":"Dịch vụ ngân hàng."}
+    monkeypatch.setattr(tools, "call", read)
+    assert send(c, cid, content=question, intent=None, strategy=None).status_code == 202
+    assert Worker(sessions, tools).tick()
+    with sessions() as db:
+        answer = db.scalar(select(Message).where(Message.role=="assistant"))
+        assert "Ngân hàng MB" in answer.content and answer.structured["facts"]["asset_id"] == "MBB"
+
+
+def test_saved_target_after_portfolio_selection(chat):
+    c, sessions, tools = chat
+    pid = tools.summary["id"]
+    cid = conversation(c)
+    target = {"id": str(uuid4()), "recommendation_id": str(uuid4()),
+              "accepted_at": "2026-11-24T05:09:35+00:00", "asset_ids": ["AAA", "VFF", "BBB"],
+              "weights": ["0", "0.41", "0.59"]}
+    tools.summary.update(name="ssssss", scope="saved_target", accepted_target=target)
+    def ask(content, **scope):
+        response = send(c, cid, intent=None, strategy=None, content=content, **scope)
+        assert response.status_code == 202, response.text
+        assert run(sessions, tools)
+        return c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()[-1]
+
+    first = ask("Mục tiêu tôi đã lưu là gì?")
+    assert first["structured"]["fields"] == ["portfolio_id"]
+    mismatch = ask("danh mục khác", portfolio_id=pid)
+    assert mismatch["structured"]["fields"] == ["portfolio_id"] and "41" not in mismatch["content"]
+    clarified = ask("danh mục ssssss", portfolio_id=pid)
+    assert "VFF 41,00%" in clarified["content"] and "BBB 59,00%" in clarified["content"]
+    assert "AAA" not in clarified["content"]
+    again = ask("Mục tiêu tôi đã lưu là gì?", portfolio_id=pid, recommendation_id=str(uuid4()))
+    assert again["structured"]["facts"]["accepted_target"] == target
+    tools.summary["accepted_target"] = None
+    empty = ask("Muc tieu toi da luu la gi?", portfolio_id=pid)
+    assert "chưa có mục tiêu" in empty["content"]
+    assert not tools.allocations

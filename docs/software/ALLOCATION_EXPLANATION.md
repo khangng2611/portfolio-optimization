@@ -2,6 +2,41 @@
 
 Triển khai theo [plan](../superpowers/plans/2026-11-22-allocation-explanation.md) và [thiết kế](../superpowers/specs/2026-11-22-allocation-explanation-design.md). Phần này giúp đọc kết quả đã tính, không thay đổi mô hình đầu tư, trọng số, input/result/facts hash, confirmation hoặc accept target.
 
+## Hỏi về một tài sản trong đề xuất đã lưu · 24/11/2026
+
+Chat hiểu câu “VFF chiếm bao nhiêu %?” là yêu cầu đọc một tỷ trọng. Với câu “Tại sao chọn VFF quá nhiều?”, Chat bổ sung các giới hạn đã dùng và tỷ trọng của từng nhánh HYBRID khi phép phối khớp kết quả đã lưu. Nếu thiếu dữ kiện để giải thích chính xác tỷ trọng, câu trả lời nêu giới hạn đó.
+
+Bộ phân loại OpenAI dùng schema `ProposalFocus`. Đầu vào gồm câu hỏi đã lọc và mã được nhắc ở lượt ngay trước nếu vẫn đang giải thích cùng đề xuất. Backend kiểm mã do model trả về, đọc lại đề xuất theo quyền của chủ danh mục và gắn các đường dẫn đến dữ kiện trong thẻ Chat. Khi tắt provider hoặc hết quota, câu có dấu hiệu tỷ trọng rõ vẫn dùng được. Mã mơ hồ cần được người dùng làm rõ.
+
+Chạy từ thư mục gốc với một receipt còn truy cập được của tài khoản QA Alice. Thư mục đích phải tồn tại. Mỗi lần chạy dùng một tên receipt mới.
+
+```sh
+.venv-software/bin/python scripts/eval_proposal_followup.py --mode dry-run
+.venv-software/bin/python scripts/eval_proposal_followup.py --mode offline --source output/concise-explanation/paid-final-receipt.json --output output/proposal-followup/offline-repeat.json
+.venv-software/bin/python scripts/eval_proposal_followup.py --mode openai --source output/concise-explanation/paid-final-receipt.json --output output/proposal-followup/openai-repeat.json
+```
+
+Chế độ `openai` thực hiện tối đa bốn lần gọi trong một stack QA với cap riêng 0,02 USD. Lượt đầu gắn đề xuất. Ba lượt eval kế tiếp chỉ gửi câu hỏi và danh mục. Script đối chiếu trực tiếp với Portfolio API, kiểm tra claim được hiển thị, sau đó đọc lại cùng lịch sử và usage sau restart Chat QA.
+
+## Câu trả lời ngắn mặc định — 22/11/2026
+
+Chat hiển thị câu trả lời trước. Mục **Căn cứ và số liệu chi tiết** mở các claim đầy đủ và evidence của cùng đề xuất. Các đoạn phương pháp nằm trong **Nguồn tham khảo** cùng phiên bản corpus. Lượt hỏi chỉ số trả đúng chỉ số, mã và ngày dữ liệu nếu đã lưu. Luồng v2 chỉ nêu không có view âm khi bộ ML views đã lưu có evidence `COMPLETE`. Các câu hỏi chi tiết dùng phần diễn giải đầy đủ. OpenAI sắp xếp tập claim ID do backend xác định, và backend kiểm lại tập ID cùng hai hash trước khi render.
+
+```sh
+.venv-software/bin/python scripts/eval_allocation_explanation.py --mode offline --cases tests/fixtures/knowledge/eval-allocation-explanation-vi-v2.jsonl --output output/concise-explanation/eval-v2.json
+.venv-software/bin/python scripts/smoke_allocation_explanation.py --run --provider openai --approval-id "$CHAT_TEST_APPROVAL_ID" --max-cost-usd 1.00 --dry-run --receipt output/concise-explanation/paid-final-receipt.json
+.venv-software/bin/python scripts/smoke_allocation_explanation.py --run --provider openai --approval-id "$CHAT_TEST_APPROVAL_ID" --max-cost-usd 1.00 --existing-recommendation-id 23df1353-2021-4d8d-bc19-c232b1f70148 --receipt output/concise-explanation/paid-final-receipt.json
+.venv-software/bin/python scripts/smoke_allocation_explanation.py --verify-receipt --receipt output/concise-explanation/paid-final-receipt.json
+```
+
+`CHAT_TEST_APPROVAL_ID` là ID phê duyệt hiện tại của worker. Chạy dry-run trước và dùng một path receipt mới. `--existing-recommendation-id` dùng đề xuất của tài khoản test Alice, mở một chat kiểm thử riêng và gửi tám câu giải thích, gồm bảy câu nối tiếp tự tìm đề xuất đã ghim. Đo usage theo các job ID của lượt này.
+
+Eval cuối đạt 38/38 ca theo rubric tự động. Với 14 ca có baseline cùng câu hỏi, tổng số từ giảm từ 2.069 xuống 541. Python/core đạt 986 tests và 10 skips, Web 169 tests, TypeScript và build production trực tiếp trên máy đạt. Review bổ sung regression cho phạm vi mã, kỳ hạn momentum, dữ kiện thiếu và hiển thị chi tiết.
+
+Lượt OpenAI thật trên bản trước các sửa biên của review đạt 8/8, với 5.189 input và 862 output tokens. Ước tính từ usage là 0,001079625 USD, mức dự trù 0,0136 USD và cap 1 USD. Hóa đơn chưa đối soát. Toàn bộ 16 lượt trích dẫn khớp hash và manifest của `knowledge-vi-v1`. Facts và evidence khớp receipt trước đó. Chi tiết ở `output/concise-explanation/paid-review.json`.
+
+Sau khi người dùng restart Docker, build và triển khai image cuối cho Chat API, Chat worker và Web đã đạt. Lượt OpenAI cuối đạt 8/8, gồm bảy câu nối tiếp cùng đề xuất. Usage là 5.281 input và 862 output tokens, chi phí ước tính 0,001091125 USD với cap 1 USD. Cả 16 lượt citation khớp corpus `knowledge-vi-v1`. Hóa đơn chưa đối soát. Browser thật đã kiểm phần trả lời ngắn, bàn phím và nguồn tại 1440, 390 và 375 CSS px. Sau khi restart ba dịch vụ, cả bốn receipt khớp về facts, evidence, nội dung hội thoại và usage. Lượt xác minh không gọi provider. Báo cáo tại `output/concise-explanation/verification.json` và `paid-final-review.json`.
+
 ## OpenAI thật — 22/11/2026, cap 1 USD
 
 Người dùng đã xác nhận giữ cap **1 USD** cho đợt này, thay mức 0,50 USD của gate trước. Runtime đã là `KNOWLEDGE_BUDGET_USD=1.00`, approval/day quotas 100; giữ nguyên approval ID, counters, embeddings disabled và Auto Recharge. Không sửa prompt/code/model/solver để làm đẹp kết quả. Stack dùng local Auth JWT, PostgreSQL, broker, Chat/Portfolio/Quant thật; không mock HTTP hoặc sửa business SQL.

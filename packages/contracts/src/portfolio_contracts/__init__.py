@@ -81,7 +81,7 @@ def system_hybrid_managed():
 
 
 class HybridPolicy(StrictModel):
-    version: Literal["phase1-hybrid-profile-v1"]
+    version: Literal["phase1-hybrid-profile-v1", "hybrid-growth-normal-mvo60-v1"]
     mvo_share: Annotated[FiniteFloat, Field(gt=0, lt=1)]
 
 

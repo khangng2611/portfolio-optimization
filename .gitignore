@@ -242,3 +242,14 @@ csonet-paper/
 
 # Standalone research repository with its own history and releases
 /paper5_research/
+
+# Local GOLD K5 source captures, frozen datasets and generated study runs
+/phase2_gold_k5/diagnostics/
+/phase2_gold_k5/runs/
+/phase2_gold_k5/shadow/
+/phase2_gold_k5/revision/alternate/
+/phase2_gold_k5/revision/runs/
+/phase2_gold_k5/revision/snapshot/
+/phase2_gold_k5/revision/verification/
+/phase2_gold_k5/revision/derived_exploratory.csv
+/phase2_gold_k5/revision/doi-soat-sjc.png

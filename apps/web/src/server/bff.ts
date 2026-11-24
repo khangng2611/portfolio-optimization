@@ -11,6 +11,7 @@ const equal = (a: string, b: string) => { const left = Buffer.from(a); const rig
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 const operatorRoutes = [
+  { path: /^\/api\/v1\/market\/prices$/, template: '/api/v1/market/prices', methods: ['GET'], query: ['asset_id', 'start_date', 'end_date', 'limit'], service: 'market' },
   { path: /^\/api\/v1\/market\/refresh-schedules$/, template: '/api/v1/market/refresh-schedules', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market', idempotent: true },
   { path: new RegExp(`^/api/v1/market/refresh-schedules/${uuid}$`), template: '/api/v1/market/refresh-schedules/{schedule_id}', methods: ['GET', 'PATCH'], query: [], service: 'market', idempotent: true },
   { path: /^\/api\/v1\/market\/refresh-jobs$/, template: '/api/v1/market/refresh-jobs', methods: ['GET', 'POST'], query: ['limit', 'offset'], service: 'market', idempotent: true },
@@ -44,6 +45,11 @@ const chatRoutes = [
   { path: new RegExp(`^/api/v1/recommendations/${uuid}/explanation$`), template: '/api/v1/recommendations/{recommendation_id}/explanation', methods: ['GET'], query: [], service: 'chat', roles: chatRoles },
 ] as const;
 const routes = [
+  { path: /^\/api\/v1\/knowledge\/corpora$/, template: '/api/v1/knowledge/corpora', methods: ['GET'], query: ['limit', 'offset'], service: 'knowledge', roles: ['data-operator'] },
+  { path: /^\/api\/v1\/knowledge\/indexing-jobs$/, template: '/api/v1/knowledge/indexing-jobs', methods: ['POST'], query: [], service: 'knowledge', roles: ['data-operator'], idempotent: true, maxBody: 1048576 },
+  { path: new RegExp(`^/api/v1/knowledge/indexing-jobs/${uuid}$`), template: '/api/v1/knowledge/indexing-jobs/{id}', methods: ['GET'], query: [], service: 'knowledge', roles: ['data-operator'] },
+  { path: new RegExp(`^/api/v1/knowledge/corpora/${uuid}/(activate|deactivate)$`), template: '/api/v1/knowledge/corpora/{id}/lifecycle', methods: ['POST'], query: [], service: 'knowledge', roles: ['data-operator'], idempotent: true, precondition: true },
+  { path: /^\/api\/v1\/market\/price-series$/, template: '/api/v1/market/price-series', methods: ['GET'], query: ['asset_id', 'start_date', 'end_date'], service: 'market', roles: chatRoles },
   { path: /^\/api\/v1\/market\/assets$/, template: '/api/v1/market/assets', methods: ['GET'], query: [], service: 'market', roles: ['investor', 'researcher', 'data-operator', 'model-reviewer', 'system-admin'] },
   { path: /^\/api\/v1\/assets\/catalog$/, template: '/api/v1/assets/catalog', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/portfolios/${uuid}/asset-selections$`), template: '/api/v1/portfolios/{portfolio_id}/asset-selections', methods: ['GET', 'POST'], query: [], idempotent: true },
@@ -65,7 +71,7 @@ const routes = [
   { path: new RegExp(`^/api/v1/recommendations/${uuid}$`), template: '/api/v1/recommendations/{recommendation_id}', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/recommendations/${uuid}/evidence$`), template: '/api/v1/recommendations/{recommendation_id}/evidence', methods: ['GET'], query: [] },
   { path: new RegExp(`^/api/v1/jobs/portfolio/${uuid}$`), template: '/api/v1/jobs/portfolio/{job_id}', methods: ['GET'], query: [] },
-];
+] as const;
 async function readBounded(request: Request, max: number) {
   if (Number(request.headers.get('content-length') ?? 0) > max) throw new HttpError(413, 'Request too large');
   if (!request.body) return '';
@@ -221,6 +227,8 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       if (!route || [...url.searchParams.keys()].some(key => !(route.query as readonly string[]).includes(key))) throw new HttpError(404, 'Route not found');
       for (const [key, value] of url.searchParams) {
         if (url.searchParams.getAll(key).length !== 1) throw new HttpError(400, 'Duplicate query parameter');
+        if (key === 'asset_id' && !/^[A-Z0-9_-]{1,64}$/.test(value)) throw new HttpError(400, 'Invalid asset');
+        if ((key === 'start_date' || key === 'end_date') && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new HttpError(400, 'Invalid date');
         if (key === 'limit' && (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 100)) throw new HttpError(400, 'Invalid pagination');
         if (key === 'offset' && (!/^\d{1,7}$/.test(value) || Number(value) > 1_000_000)) throw new HttpError(400, 'Invalid pagination');
         if (key === 'q' && (value.trim().length > 120 || /[\x00-\x1f\x7f]/.test(value))) throw new HttpError(400, 'Invalid search');
@@ -248,11 +256,11 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       let body: string | undefined;
       if (mutates) {
         if (request.headers.get('content-type')?.split(';')[0] !== 'application/json') throw new HttpError(415, 'JSON required');
-        body = await readBounded(request, 64 * 1024);
+        body = await readBounded(request, ('maxBody' in route ? route.maxBody : undefined) ?? 64 * 1024);
         try { JSON.parse(body); } catch { throw new HttpError(400, 'Invalid JSON'); }
         headers.set('content-type', 'application/json');
         const precondition = request.headers.get('if-match');
-        if (url.pathname.endsWith('/asset-selections') && !precondition) throw new HttpError(428, 'If-Match required');
+        if ((url.pathname.endsWith('/asset-selections') || 'precondition' in route) && !precondition) throw new HttpError(428, 'If-Match required');
         if (precondition) headers.set('if-match', precondition);
         const idempotency = request.headers.get('idempotency-key');
         if ((('idempotent' in route && route.idempotent) || url.pathname.endsWith('/recommendations') || ['/api/v1/market/ingestions', '/api/v1/market/datasets', '/api/v1/market/publications'].includes(url.pathname)) && !idempotency) throw new HttpError(400, 'Idempotency-Key required');
@@ -261,7 +269,8 @@ export function createBff(config: Config, store: EncryptedStore, identity: Ident
       const active = await fresh(id, session);
       headers.set('authorization', `Bearer ${active.accessToken}`);
       injectTraceHeaders(headers);
-      const serviceUrl = 'service' in route ? route.service === 'chat' ? config.chatUrl : route.service === 'market' ? config.marketUrl : route.service === 'ml' ? config.mlUrl : config.quantUrl : config.portfolioUrl;
+      const serviceUrls = { chat: config.chatUrl, market: config.marketUrl, ml: config.mlUrl, quant: config.quantUrl, knowledge: config.knowledgeUrl };
+      const serviceUrl = 'service' in route && route.service ? serviceUrls[route.service] : config.portfolioUrl;
       if (!serviceUrl) throw new HttpError(503, 'Operator service unavailable');
       const disconnect = new AbortController();
       const lifetime = streaming ? Math.max(1, Math.min(80_000, active.accessExpiresAt - Date.now(), active.expiresAt - Date.now())) : 10_000;

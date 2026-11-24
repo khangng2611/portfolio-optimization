@@ -136,6 +136,26 @@ class Recommendation(Base):
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class GoldShadowEnrollment(Base):
+    __tablename__ = "gold_shadow_enrollment"
+    study_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    started_at: Mapped[object] = mapped_column(DateTime(timezone=True))
+
+
+class GoldShadowDecision(Base):
+    __tablename__ = "gold_shadow_decision"
+    job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    series_id: Mapped[str] = mapped_column(String(36), index=True)
+    receipt: Mapped[dict] = mapped_column(JSON)
+
+
+class GoldShadowWitness(Base):
+    __tablename__ = "gold_shadow_witness"
+    job_id: Mapped[str] = mapped_column(ForeignKey("gold_shadow_decision.job_id"), primary_key=True)
+    witnessed_at: Mapped[object] = mapped_column(DateTime(timezone=True))
+    receipt_sha256: Mapped[str] = mapped_column(String(64))
+
+
 class AcceptedTarget(Base):
     __tablename__ = "accepted_target"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

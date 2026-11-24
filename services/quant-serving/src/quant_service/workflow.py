@@ -78,7 +78,8 @@ def execute(sessions, catalog, event: Envelope):
                     from portfolio_contracts.hybrid import constraint_violations, hybrid_policy, validate_hybrid_weights
 
                     pin = hybrid_policy(command.selection_context.regime.regime,
-                                        command.decision_context.risk_profile.get("profile"))
+                                        command.decision_context.risk_profile.get("profile"),
+                                        command.hybrid_policy.version)
                     if pin != command.hybrid_policy.model_dump():
                         raise ValueError("HYBRID blend policy mismatch")
                     result = allocate_hybrid(numerical, constraints, pin)

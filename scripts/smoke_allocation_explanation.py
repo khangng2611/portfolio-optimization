@@ -159,11 +159,11 @@ def preflight(provider, approval=None, max_cost=None, worker=DEFAULT_WORKER):
     return budget_preflight(state["config"], usage, provider, approval, max_cost)
 
 
-def wait_message(token, cid, body):
+def wait_message(token, cid, body, *, chat_base=CHAT):
     key = str(uuid4())
     code, queued = request(
         "POST",
-        CHAT + f"/api/v1/conversations/{cid}/messages",
+        chat_base + f"/api/v1/conversations/{cid}/messages",
         token=token,
         headers={"Idempotency-Key": key},
         body=body | {"client_message_id": key},
@@ -171,7 +171,7 @@ def wait_message(token, cid, body):
     require(code == 202, "Message rejected")
     end = time.monotonic() + 60
     while time.monotonic() < end:
-        job = get(CHAT, queued["status_url"], token)
+        job = get(chat_base, queued["status_url"], token)
         if job["status"] in {
             "SUCCEEDED",
             "WAITING_INPUT",
@@ -183,7 +183,7 @@ def wait_message(token, cid, body):
     require(
         job["status"] in {"SUCCEEDED", "WAITING_INPUT"}, "Chat job did not complete"
     )
-    messages = get(CHAT, f"/api/v1/conversations/{cid}/messages?limit=100", token)
+    messages = get(chat_base, f"/api/v1/conversations/{cid}/messages?limit=100", token)
     return job, next(m for m in messages if m["id"] == job["result_message_id"])
 
 
@@ -400,6 +400,108 @@ def verify_receipt(path, worker=DEFAULT_WORKER):
     )
 
 
+def run_existing(
+    path, rid, provider, approval=None, max_cost=None, worker=DEFAULT_WORKER
+):
+    """Read an existing draft result; follow-ups omit its ID and cannot allocate."""
+    path = Path(path)
+    require(not path.exists(), "Refuse to replace receipt")
+    require(
+        preflight(provider, approval, max_cost, worker)["allowed"], "Preflight blocked"
+    )
+    token = login("alice")
+    facts = get(PORTFOLIO, f"/api/v1/recommendations/{rid}", token)
+    evidence = get(PORTFOLIO, f"/api/v1/recommendations/{rid}/evidence", token)
+    features = list((evidence.get("quant") or {}).get("features", {}))
+    require(len(features) >= 2, "Concise acceptance requires retained native features")
+    asset, other = features[0], features[-1]
+    missing = next(
+        (
+            a
+            for a in facts["asset_ids"]
+            if a not in features and a not in ("GOLD", "VFF")
+        ),
+        "HPG",
+    )
+    questions = [
+        "Vì sao phân bổ như vậy?",
+        f"RSI của {asset} là bao nhiêu?",
+        f"Còn tín hiệu của {other}?",
+        "Có view âm nào không?",
+        f"Confidence và Q của {asset} thế nào?",
+        f"Chi tiết đặc trưng của {asset}?",
+        f"RSI của {missing}?",
+        "Còn rủi ro của rổ?",
+    ]
+    pid = facts["portfolio_id"]
+    code, conversation = request(
+        "POST", CHAT + "/api/v1/conversations", token=token, body={"portfolio_id": pid}
+    )
+    require(code == 201, "Test conversation failed")
+    cid, jobs, cards = conversation["id"], [], []
+    for index, question in enumerate(questions):
+        body = dict(portfolio_id=pid, content=question)
+        if index == 0:
+            body["recommendation_id"] = rid
+        job, message = wait_message(token, cid, body)
+        jobs.append(job["job_id"])
+        card = message["structured"]
+        cards.append({"job_id": job["job_id"], "card": card})
+        require(
+            card.get("recommendation_id") == rid
+            and card.get("renderer_version") == "allocation-explanation-v2",
+            "Wrong contextual result/renderer",
+        )
+        require(
+            card["facts_hash"] == canonical_hash(facts)
+            and card["explanation_evidence"] == evidence,
+            "Frozen evidence mismatch",
+        )
+        require(
+            "Mình đang giải thích đề xuất này" not in message["content"],
+            "Repeated boilerplate",
+        )
+    messages = get(CHAT, f"/api/v1/conversations/{cid}/messages?limit=100", token)
+    usage = [r for r in ledger(worker)["rows"] if r["job_id"] in jobs]
+    require(provider != "template" or not usage, "Template produced paid usage")
+    require(
+        get(PORTFOLIO, f"/api/v1/portfolios/{pid}/dashboard", token)["accepted_target"]
+        is None,
+        "Unexpected target",
+    )
+    gate = paid_outcome(cards, usage) if provider == "openai" else {"status": "NOT RUN"}
+    receipt = dict(
+        portfolio_id=pid,
+        conversation_id=cid,
+        recommendation_id=rid,
+        job_ids=jobs,
+        facts_hash=canonical_hash(facts),
+        evidence_hash=evidence["evidence_hash"],
+        facts=facts,
+        evidence=evidence,
+        messages=messages,
+        message_hash=canonical_hash(messages),
+        usage=usage,
+        provider=provider,
+        paid_provider=gate["status"],
+        paid_provider_details=gate,
+        new_allocation=False,
+        implicit_followups=len(questions) - 1,
+        hybrid="NOT RUN",
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
+    return dict(
+        status="PASS"
+        if provider == "template" or gate["status"] == "PASS"
+        else "PARTIAL",
+        receipt=str(path),
+        recommendation_id=rid,
+        provider_calls=len(usage),
+        new_allocation=False,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -415,12 +517,22 @@ def main():
     parser.add_argument("--worker-container", default=DEFAULT_WORKER)
     parser.add_argument("--strategy", choices=["MVO", "BL_ML"], default="MVO")
     parser.add_argument("--source-portfolio-id")
+    parser.add_argument("--existing-recommendation-id")
     args = parser.parse_args()
     if args.verify_receipt:
         report = verify_receipt(args.receipt, args.worker_container)
     elif args.dry_run:
         report = preflight(
             args.provider, args.approval_id, args.max_cost_usd, args.worker_container
+        )
+    elif args.existing_recommendation_id:
+        report = run_existing(
+            args.receipt,
+            args.existing_recommendation_id,
+            args.provider,
+            args.approval_id,
+            args.max_cost_usd,
+            args.worker_container,
         )
     else:
         report = run(

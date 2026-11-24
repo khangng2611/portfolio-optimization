@@ -16,11 +16,13 @@ from chat_service.explanation import (
     default_ids,
     render_claims,
     validate_plan,
+    detail_requested,
 )
 from chat_service.provider import render
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "tests/fixtures/knowledge/eval-allocation-explanation-vi-v1.jsonl"
+CONCISE_CASES = CASES.with_name("eval-allocation-explanation-vi-v2.jsonl")
 FACTS = ROOT / "tests/fixtures/knowledge/allocation-explanation-facts-v1.json"
 
 
@@ -35,7 +37,9 @@ def frozen(path):
 
 
 def evaluate(cases=CASES):
-    dataset = [json.loads(row) for row in frozen(Path(cases)).splitlines()]
+    cases = Path(cases)
+    dataset = [json.loads(row) for row in frozen(cases).splitlines()]
+    production_rendering = cases.name == CONCISE_CASES.name
     base = json.loads(frozen(FACTS))
     if (
         len(dataset) < 24
@@ -46,17 +50,28 @@ def evaluate(cases=CASES):
     rows = []
     for case in dataset:
         facts = deepcopy(base["facts"])
-        quant = OptimizationExplanationEvidence(**base["quant"]).seal()
+        values = deepcopy(base["quant"])
+        variant = case.get("variant", "")
+        if "positive" in variant:
+            for view in values["views"]:
+                if view["source_kind"] == "ML":
+                    view["raw_mean_return"] = abs(view["raw_mean_return"])
+                    if view["applied_q_daily"] is not None:
+                        view["applied_q_daily"] = abs(view["applied_q_daily"])
+        if variant.startswith("partial"):
+            values["status"] = "PARTIAL"
+        quant = OptimizationExplanationEvidence(**values).seal()
         evidence = RecommendationEvidence(
             recommendation_id=facts["id"],
             run_id=facts["run_id"],
             facts_hash=canonical_hash(facts),
-            status="PARTIAL" if case["category"] == "legacy" else "COMPLETE",
+            status="PARTIAL" if case["category"] == "legacy" else values["status"],
             quant=None if case["category"] == "legacy" else quant,
             limitations=["NOT_RETAINED"] if case["category"] == "legacy" else [],
         ).seal()
         rejected, text, ids, references = False, "", [], []
         baseline = render(facts)
+        concise = production_rendering and not detail_requested(case["question"])
         if case["category"] == "hash":
             facts["weights"][0] = "0.9"
         elif case["category"] == "resource":
@@ -78,7 +93,7 @@ def evaluate(cases=CASES):
                     evidence,
                     claims,
                 )
-            text = render_claims(claims, ids)
+            text = render_claims(claims, ids, concise=concise)
             references = [ref for c in claims if c.id in ids for ref in c.refs]
         except ValueError:
             rejected = True
@@ -86,7 +101,11 @@ def evaluate(cases=CASES):
         relevance = not rejected and all(
             s.casefold() in text.casefold() for s in case["contains"]
         )
-        passed = rejected if wanted_reject else relevance
+        relevance = relevance and not any(
+            s.casefold() in text.casefold() for s in case.get("excludes", [])
+        )
+        brief = len(text.split()) <= case.get("max_words", float("inf"))
+        passed = rejected if wanted_reject else relevance and brief
         if case["category"] == "injection":
             passed = passed and "99%" not in text and "mua ngay" not in text.casefold()
         rows.append(
@@ -102,6 +121,11 @@ def evaluate(cases=CASES):
                 selected_claim_ids=ids,
                 references=references,
                 text=text,
+                concise_case=case.get("concise", False),
+                concise_rendering=concise,
+                word_budget_passed=brief,
+                words=len(text.split()),
+                before_words=len(case.get("before_text", "").split()),
             )
         )
 
@@ -111,6 +135,7 @@ def evaluate(cases=CASES):
             passed=sum(values), total=len(values), rate=sum(values) / len(values)
         )
 
+    concise_rows = [row for row in rows if row["concise_case"]]
     return dict(
         dataset=Path(cases).name,
         dataset_hash=hashlib.sha256(Path(cases).read_bytes()).hexdigest(),
@@ -125,6 +150,12 @@ def evaluate(cases=CASES):
         retrieval_hit_at_5="N/A",
         live_integration="NOT RUN",
         rows=rows,
+        concision=dict(
+            total=len(concise_rows),
+            passed=sum(row["passed"] for row in concise_rows),
+            before_words=sum(row["before_words"] for row in concise_rows),
+            after_words=sum(row["words"] for row in concise_rows),
+        ),
     )
 
 

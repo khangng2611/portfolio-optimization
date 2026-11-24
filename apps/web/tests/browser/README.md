@@ -37,10 +37,31 @@ Credentials come only from the ignored generated accounts file and never enter
 the report. Traces, videos, storageState, automatic screenshots and default raw
 error reporters are disabled. The custom reporter records static test names,
 status and a safe phase; screenshots are explicit post-login product captures
-with the account name masked. CI uploads only the named files in
-`output/playwright/sanitized/`, never raw results or generated local config.
+with the account name masked or with the capture limited to the synthetic list.
+CI uploads only the named sanitized reports and screenshots.
 Vitest excludes this entire directory. To inspect discovery without logging in,
 use `npm run test:browser -- --list --reporter=list`.
+
+## Portfolio list, context picker and asset picker visual regression
+
+Enable `USER_SELECTED_ASSETS_ENABLED=true` on the disposable portfolio and quant APIs, then run from `apps/web`:
+
+```sh
+E2E_DISPOSABLE_STACK=1 npm run test:browser:portfolio-list -- --update-snapshots=none
+```
+
+Set `PLAYWRIGHT_BASE_URL` if the web app uses a different localhost port. The
+tests use fresh accounts on the real BFF. They compare the list, context picker
+and basket controls at 1440 and 390 px and exercise the narrow layout at 320 px.
+The basket capture shows ACB selected and VFF available. Only live asset
+names, descriptions and price status are omitted from the capture. The test
+exercises the populated rows by keyboard, saves the basket and reopens it. The same Linux amd64 Chromium container is used locally
+and in CI.
+
+For an approved visual change, rerun using `--update-snapshots=changed` and review
+the six PNGs in `portfolio-list.e2e.ts-snapshots/` before including them in the
+change. CI compares against the committed PNGs and retains the actual and diff
+images for any visual mismatch.
 
 
 ## P1 real provider, model and risk gate
@@ -183,6 +204,28 @@ enabled state in `finally`. Credentials/grants remain in memory. Do not run this
 gate concurrently with another test using Bob. It neither accepts a target nor
 modifies existing investor data. Local acceptance is separate from GitHub CI or
 production certification.
+
+## Vietnamese Chat status and pinned evidence
+
+On the local `portfolio-auth-demo` stack at port 3100, select a new receipt directory and run from `apps/web`. The baseline opens the owner’s saved conversation and proposal from `output/concise-explanation/paid-final-receipt.json` and checks the recorded facts, allocation and evidence hashes.
+
+```sh
+export PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 E2E_DISPOSABLE_STACK=1
+export RAG_STATUS_OUTPUT="$(mktemp -d)"
+RAG_STATUS_MODE=baseline npx --no-install playwright test chat.e2e.ts --grep 'real Chat paused followups'
+```
+
+Run the exchange on a paused stack with the updated Chat, Web and Portfolio services. The single acceptance worker must have `CHAT_LLM_ENABLED` disabled and `CHAT_PROVIDER_URL` unset. The test opens a legacy failed turn when the signed-in fixture owner has one, opens a new paused turn, asks why, checks current readiness, changes portfolio, asks a knowledge question and reloads the saved proposal. A second owner checks the same four protected resources. The receipt records a null legacy job ID when the first owner has no matching historical turn.
+
+```sh
+RAG_STATUS_MODE=exercise npx --no-install playwright test chat.e2e.ts --grep 'real Chat paused followups'
+```
+
+After a service restart using the same database volumes, open both conversations and check the original hashes again.
+
+```sh
+RAG_STATUS_MODE=verify npx --no-install playwright test chat.e2e.ts --grep 'real Chat paused followups'
+```
 
 ## Chat LLM paid gate
 

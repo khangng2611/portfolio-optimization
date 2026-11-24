@@ -4,14 +4,14 @@ import { AllocationView } from '../src/components/allocation-view';
 import { ReadinessNotice } from '../src/components/portfolio-lifecycle';
 import { readinessAllows } from '../src/lib/workspace-state';
 import type { SelectionReadiness } from '../src/lib/selection-types';
-it('preserves saved candidates and selection proof while hiding inactive zero rows', () => {
+it('shows candidates and selected assets without revision IDs or inactive zero rows', () => {
   const html = renderToStaticMarkup(<AllocationView allocation={{ asset_ids: ['FPT', 'MWG', 'VFF'], weights: [0, .5, .5], capital_vnd: '100', strategy: 'BL_ML', selection_context: { revision_id: 'old-revision', candidate_asset_ids: ['FPT', 'MWG', 'VFF'], candidate_hash: 'old-hash', selection_policy_id: 'user-k5-v1', risk_policy_id: 'custom-mixed-risk-v1', valid_until: '2026-11-14T00:00:00Z', regime: { regime: 'normal' } }, selection_proof: { candidate_hash: 'old-hash', active_asset_ids: ['MWG', 'VFF'], selected_equity_ids: ['MWG'], rejected_equity_ids: ['FPT'], selection_hash: 'selection-hash', applied_selection: 'equity-k5-v1', decision_session: '2026-11-12', selection_price_end_date: '2026-11-11' } }}/>);
-  expect(html).toContain('old-revision');
+  expect(html).not.toMatch(/old-revision|old-hash|custom-mixed-risk-v1/);
   expect(html).toContain('FPT · MWG · VFF');
-  expect(html).toContain('K5 thực tế');
+  expect(html).toContain('Cổ phiếu được dùng');
   expect(html).not.toContain('Không thuộc tập tính toán · 0%');
   expect(html.split('<tbody>')[1].split('</tbody>')[0]).not.toContain('FPT');
-  expect(html).toContain('2 tài sản trong tập tính toán; 2 tài sản có tỷ trọng dương');
+  expect(html).toContain('Tài sản dùng trong lần tính: MWG · VFF');
 });
 it('keeps stale custom NAV blocked even with explicit fallback', () => {
   const readiness: SelectionReadiness = { readiness_kind: 'user-selection-v1', candidate_asset_ids: ['GOLD', 'VFF'], can_submit: false, reason_code: 'VFF_STALE', strategies: [{ strategy: 'BL_ML', can_submit: false, reason_code: 'VFF_STALE' }, { strategy: 'EW', can_submit: false, reason_code: 'VFF_STALE' }], asset_status: [{ asset_id: 'VFF', observation_date: '2026-11-03', age_days: 8 }], selection_valid_until: '2099-01-01T00:00:00Z' };

@@ -153,9 +153,11 @@ def _accepted_rows(session, asset, job, report, directory, knowledge_cutoff):
 
 
 def build_selected_snapshot(
-    session, asset_ids=None, calendar=None, as_of=None, *, directory=None
+    session, asset_ids=None, calendar=None, as_of=None, *, directory=None, availability_policy=LIVE_NAV_POLICY
 ):
     """Build the shared catalog resource; refresh selections never shrink its order."""
+    if availability_policy not in (POLICY, LIVE_NAV_POLICY):
+        raise ValueError("Unknown NAV availability policy")
     canonical_candidates(list(asset_ids) if asset_ids is not None else list(ASSET_IDS))
     as_of = as_of or utcnow().astimezone(ZoneInfo("Asia/Ho_Chi_Minh")).date()
     as_of = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
@@ -289,7 +291,7 @@ def build_selected_snapshot(
         "catalog_version": CATALOG_VERSION,
         "asset_ids": list(ASSET_IDS),
         "candidate_equity_ids": list(EQUITY_IDS),
-        "availability_policy": LIVE_NAV_POLICY,
+        "availability_policy": availability_policy,
         "availability_basis": "ingestion",
         "historical_publication_verified": False,
         "status": "READY",

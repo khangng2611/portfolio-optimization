@@ -272,6 +272,8 @@ def test_provider_unknown_claim_or_missing_overview_group_falls_back():
     "question",
     [
         "Vì sao phân bổ như vậy?",
+        "Tại sao chọn VFF quá nhiều?",
+        "VFF chiếm bao nhiêu %?",
         "Dự báo của ACB thế nào?",
         "Còn tín hiệu của BID?",
         "RSI của ACB là bao nhiêu?",
@@ -337,7 +339,152 @@ def test_real_worker_uses_evidence_without_new_allocation(chat, monkeypatch, que
     assert card["facts_hash"] == canonical_hash(facts)
     assert card["explanation_evidence"]["evidence_hash"] == evidence["evidence_hash"]
     assert card["selected_claim_ids"]
+    assert card["renderer_version"] == "allocation-explanation-v2"
+    assert "Mình đang giải thích đề xuất này" not in messages[-1]["content"]
+    if question in ("Tại sao chọn VFF quá nhiều?", "VFF chiếm bao nhiêu %?"):
+        assert "VFF" in messages[-1]["content"] and "50,00%" in messages[-1]["content"]
+        assert card["focus"]["asset"] == "VFF"
     if "hồ sơ" in question.casefold() or question.startswith("Vì sao"):
         assert "30,00%" in messages[-1]["content"]
     assert "get_recommendation_evidence" in calls
     assert not tools.allocations
+
+
+def test_named_asset_explanation_cites_only_pinned_weight_and_support():
+    from chat_service.explanation import build_claims, default_ids, render_claims
+    facts, evidence = fixture_evidence()
+    claims = build_claims(facts, evidence)
+    for asset, weight in [("ACB", "0,00%"), ("VFF", "50,00%")]:
+        ids = default_ids(claims, f"Vì sao quyết định cho {asset} tỷ trọng đó trong đề xuất này?")
+        answer = render_claims(claims, ids, concise=True)
+        assert asset in answer and weight in answer and "nguyên nhân riêng" in answer
+        assert len(ids) <= 2
+
+
+def test_missing_pit_flag_does_not_assert_certification_state():
+    from chat_service.explanation import build_claims
+    facts, _ = fixture_evidence()
+    evidence = RecommendationEvidence(recommendation_id=facts["id"], run_id=facts["run_id"], facts_hash=canonical_hash(facts), status="UNAVAILABLE").seal()
+    limit = next(c for c in build_claims(facts, evidence) if c.id == "limitations")
+    assert "chưa được chứng nhận" not in (limit.text + (limit.summary or ""))
+
+
+@pytest.mark.parametrize("predicted", ["VFF", "ACB"])
+def test_classifier_handles_paraphrase_but_cannot_substitute_asset(chat, monkeypatch, predicted):
+    from chat_service.workflow import Worker
+    from chat_service.openai_provider import OpenAIProvider
+
+    c, sessions, tools = chat
+    facts, _ = fixture_evidence()
+    facts["portfolio_id"] = tools.summary["id"]
+    cid = conversation(c, facts["portfolio_id"])
+    question = "Trong chiếc bánh này, phần của VFF to cỡ nào?"
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
+    monkeypatch.setenv("CHAT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test")
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "unit")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "0.02")
+    seen = []
+
+    def generate(self, purpose, context, schema):
+        seen.append((purpose, context))
+        return {"asset": predicted, "field": "weight"}, {"reason": "VERIFIED"}
+
+    monkeypatch.setattr(OpenAIProvider, "generate", generate)
+    original = tools.call
+    monkeypatch.setattr(tools, "call", lambda j, t, a: facts if t == "get_recommendation" else original(j, t, a))
+    assert send(c, cid, content=question, intent=None, strategy=None, recommendation_id=facts["id"]).status_code == 202
+    assert Worker(sessions, tools).tick()
+    msg = c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()[-1]
+    assert seen == [("proposal_focus", {"question": question, "previous_asset": None})]
+    assert not tools.allocations
+    if predicted == "VFF":
+        assert msg["content"] == "VFF chiếm 50,00% trong đề xuất đã lưu."
+    else:
+        assert msg["structured"]["type"] == "input_required" and "%" not in msg["content"]
+
+
+def test_focused_hybrid_reason_explains_only_reconciled_saved_branches():
+    from chat_service.explanation import focused_weight
+    facts = {"strategy": "HYBRID", "asset_ids": ["VFF"], "weights": ["0.41"],
+             "diagnostics": {"hybrid": {"mvo_share": 0.45, "mvo_weights": [0.30], "bl_ml_weights": [0.50]}}}
+    focus = {"asset": "VFF", "field": "reason"}
+    answer = focused_weight(facts, focus)
+    assert all(value in answer.text for value in ["41,00%", "MVO", "30,00%", "BL_ML", "50,00%", "45,00%", "55,00%"])
+    assert "facts.diagnostics.hybrid.mvo_weights.0" in answer.refs
+    facts["diagnostics"]["hybrid"]["mvo_weights"][0] = 0.32
+    assert "MVO" not in focused_weight(facts, focus).text
+
+
+def test_contextual_asset_turns_read_only_and_skip_clear_classifications(chat, monkeypatch):
+    from chat_service.workflow import Worker
+    from chat_service.openai_provider import OpenAIProvider
+
+    c, sessions, tools = chat
+    facts, _ = fixture_evidence()
+    facts.update(portfolio_id=tools.summary["id"], capital_vnd="100000000")
+    cid = conversation(c, facts["portfolio_id"])
+    monkeypatch.setenv("CHAT_CONTEXT_FOLLOWUPS", "1")
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
+    monkeypatch.setenv("CHAT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test")
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "unit")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "0.03")
+    calls = []
+    def classify(self, purpose, context, schema):
+        calls.append((purpose, context["question"]))
+        assert context["previous_asset"] == "VFF"
+        return {"asset": "VFF", "field": "reason"}, {"reason": "VERIFIED"}
+
+    monkeypatch.setattr(OpenAIProvider, "generate", classify)
+    original = tools.call
+    monkeypatch.setattr(tools, "call", lambda j,t,a: facts if t == "get_recommendation" else original(j,t,a))
+    worker = Worker(sessions, tools)
+    for idx, (question, field, asset, snippet) in enumerate([
+        ("VFF chiếm bao nhiêu %?", "weight", "VFF", "50,00%"),
+        ("Sao lại cao vậy?", "reason", "VFF", "phòng thủ"),
+        ("Thế còn BID?", "reason", "BID", "50,00%"),
+        ("Tương ứng bao nhiêu tiền?", "amount", "BID", "50.000.000"),
+    ]):
+        pin = {"recommendation_id": facts["id"]} if idx == 0 else {}
+        assert send(c,cid,content=question,intent=None,strategy=None,**pin).status_code == 202
+        assert worker.tick()
+        msg = c.get(f"/api/v1/conversations/{cid}/messages",headers=headers()).json()[-1]
+        assert msg["structured"].get("focus") == {"field":field,"asset":asset}
+        assert snippet in msg["content"] and msg["structured"]["facts_hash"] == canonical_hash(facts)
+    for question in ("VFF đang chiếm bao nhiêu % trong tài sản tôi đang nắm giữ?", "Số tiền mục tiêu của mã xyz?", "XYZ tương ứng bao nhiêu tiền?", "Số tiền VFF hiện đang nắm giữ tương ứng bao nhiêu tiền?"):
+        assert send(c,cid,content=question,intent=None,strategy=None,recommendation_id=facts["id"]).status_code == 202
+        assert worker.tick()
+        msg = c.get(f"/api/v1/conversations/{cid}/messages",headers=headers()).json()[-1]
+        assert msg["structured"]["type"] == "input_required" and "₫" not in msg["content"]
+    assert calls == [("proposal_focus","Sao lại cao vậy?")]
+    assert not tools.allocations
+
+
+@pytest.mark.parametrize("question,expected", [
+    ("Lúc đó vì sao yêu cầu tạo đề xuất bị chặn được không?", "previous_status"),
+    ("Trong danh mục của tôi mô hình còn chờ reviewer duyệt không?", "current_status"),
+    ("Giờ được chưa?", "recheck_previous"),
+    ("Vì sao lúc này bị chặn tạo đề xuất?", "current_status"),
+    ("Vì sao lúc nãy bị chặn tạo đề xuất?", "previous_status"),
+])
+def test_time_reference_on_status_followups(question, expected):
+    from chat_service.workflow import intent_of
+    assert intent_of({"content":question}) == expected
+
+
+def test_amount_missing_historical_capital_asks_for_another_reference(chat, monkeypatch):
+    from chat_service.workflow import Worker
+    c, sessions, tools = chat
+    facts, _ = fixture_evidence()
+    facts.update(portfolio_id=tools.summary["id"], capital_vnd=None)
+    cid = conversation(c, facts["portfolio_id"])
+    monkeypatch.setenv("CHAT_CONTEXT_FOLLOWUPS", "1")
+    original = tools.call
+    monkeypatch.setattr(tools, "call", lambda j,t,a: facts if t == "get_recommendation" else original(j,t,a))
+    result = send(c,cid,content="VFF tương ứng bao nhiêu tiền?", intent=None,strategy=None,recommendation_id=facts["id"]).json()
+    assert Worker(sessions,tools).tick()
+    job = c.get(result["status_url"],headers=headers()).json()
+    assert job["status"] == "WAITING_INPUT" and job["stage"] == "COLLECT"
+    message = c.get(f"/api/v1/conversations/{cid}/messages",headers=headers()).json()[-1]
+    assert message["structured"]["fields"] == ["reference"] and "thiếu vốn" in message["content"]

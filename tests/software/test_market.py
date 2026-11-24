@@ -527,3 +527,41 @@ def test_refreshed_csv_uses_new_registry_pin_without_rebinding_old_dataset(marke
     with sessions() as session:
         assert session.get(RegisteredDataset, 'DEMO_STOCK').spec == old_pin
         assert session.get(RegisteredDataset, key).spec == spec
+
+
+def test_price_series_separates_basis_and_source_and_selects_available_revisions(market):
+    from market_service.models import Asset, PriceRevision
+
+    client, sessions, _, _ = market
+    now = utcnow()
+    day = now.date() - timedelta(days=1)
+    with sessions.begin() as db:
+        db.add(Asset(id="FPT", kind="stock", unit="VND/share"))
+        db.flush()
+        for provider, basis, revision, offset, origin, price in [
+            ("A", "adjusted", 1, -4, "real", 100),
+            ("A", "adjusted", 2, -3, "real", 120),
+            ("A", "adjusted", 3, 24, "real", 999),
+            ("A", "unadjusted", 4, -2, "real", 150),
+            ("B", "unadjusted", 1, -1, "real", 155),
+            ("C", "unadjusted", 1, -1, "synthetic", 160),
+        ]:
+            db.add(PriceRevision(
+                asset_id="FPT", observation_date=day, provider=provider, price_type="close",
+                price_basis=basis, unit="VND/share", source_unit="VND/share",
+                data_origin=origin, available_at=now + timedelta(hours=offset),
+                content_hash="f" * 64, revision=revision, price_vnd=price,
+            ))
+    path = "/api/v1/market/price-series"
+    query = {"asset_id": "FPT", "start_date": str(day), "end_date": str(now.date())}
+    assert client.get(path, params=query).status_code == 401
+    response = client.get(path, params=query, headers=headers("investor"))
+    assert response.status_code == 200, response.text
+    series = response.json()["series"]
+    assert [(s["provider"], s["price_basis"]) for s in series] == [
+        ("A", "adjusted"), ("A", "unadjusted"), ("B", "unadjusted"),
+    ]
+    assert [s["observations"][0]["revision"] for s in series] == [2, 4, 1]
+    assert all(len(s["observations"]) == 1 and s["observations"][0]["available_at"] for s in series)
+    assert client.get(path, params=query | {"asset_id": "MISSING"}, headers=headers("investor")).status_code == 404
+    assert client.get(path, params=query | {"start_date": "2020-01-01"}, headers=headers("investor")).status_code == 422

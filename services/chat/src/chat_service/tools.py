@@ -8,7 +8,7 @@ import httpx
 
 ALLOCATION_INPUT_ERRORS = frozenset({
     "INPUT_EXPIRED", "VFF_STALE", "GOLD_STALE", "ASSET_DATA_STALE", "INPUT_INVALID",
-    "INPUT_UNAVAILABLE", "ASSET_DATA_MISSING", "HISTORY_INSUFFICIENT",
+    "INPUT_UNAVAILABLE", "SYSTEM_PAUSED", "ASSET_DATA_MISSING", "HISTORY_INSUFFICIENT",
     "ASSET_SELECTION_REQUIRED", "RISK_PROFILE_REQUIRED", "INSUFFICIENT_ASSETS",
     "DEFENSIVE_ASSET_REQUIRED", "CONSTRAINTS_INFEASIBLE", "NO_VALID_ML_VIEWS",
     "MODEL_UNAVAILABLE", "MODEL_REVIEW_PENDING", "MODEL_COVERAGE_MISSING", "MODEL_EPOCH_MISMATCH",
@@ -92,6 +92,7 @@ class Tools:
         }
         permitted = [
             "get_profile",
+            "get_allocation_status",
             "get_portfolio_summary",
             "get_recommendation",
             "get_allocation_job",

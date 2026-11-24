@@ -14,14 +14,14 @@ it('offers server supplied real assets and a separately labelled demo choice', (
   expect(html).toMatch(/<option[^>]*value="REAL_STOCKS"[^>]*selected=""/);
 });
 
-it('labels the full universe with K5 and defensive assets instead of 32 option names', () => {
+it('labels the full universe with asset classes instead of algorithm names', () => {
   const html = renderToStaticMarkup(<RiskWizard busy={false} onCreate={async () => true} universes={[
     { universe_id: 'VN_PHASE1_FULL', asset_ids: ['FPT', 'VCB', 'GOLD', 'VFF'], as_of_date: '2026-11-11', demo: false,
       provenance: { data_origin: 'real', phase1_full: { active_asset_ids: ['FPT', 'GOLD', 'VFF'], selected_equity_ids: ['FPT'], selection_id: 'hash', selection_epoch: '2026-11-01', fit_epoch: '2026-11-02' } } },
   ]}/>);
-  expect(html).toContain('K5 + GOLD + VFF (32 tài sản)');
-  expect(html).toContain('K5: FPT · GOLD · VFF');
-  expect(html).toContain('VFF là tài sản phòng thủ');
+  expect(html).toContain('Danh sách tài sản Việt Nam (32 mã)');
+  expect(html).toContain('30 cổ phiếu, vàng và quỹ trái phiếu VFF');
+  expect(html).toContain('Quỹ trái phiếu VFF thuộc nhóm tài sản phòng thủ');
 });
 
 it('keeps legacy creation when the server selection gate is off', () => {
@@ -30,10 +30,12 @@ it('keeps legacy creation when the server selection gate is off', () => {
   expect(html).not.toContain('Tìm tài sản');
 });
 
-it('uses the asset basket directly when selection is enabled without a redundant mode chooser', () => {
+it('makes the basket the next step after entering goals when selection is enabled', () => {
   const html = renderToStaticMarkup(<RiskWizard busy={false} onCreate={async () => true} catalog={{ catalog_version: 'supported-assets-v1', selection_enabled: true, assets: [] }} universes={[{ universe_id: 'DEMO', asset_ids: ['AAA', 'BBB'], as_of_date: '2026-11-12', demo: true }]}/>);
-  expect(html).toContain('Tài sản hỗ trợ');
-  expect(html).toContain('Rổ tài sản của bạn');
+  expect(html).toContain('2. Rổ tài sản');
+  expect(html).toContain('4. Xác nhận');
+  expect(html).toMatch(/<button type="submit">Chọn tài sản<svg[^>]+aria-hidden="true"/);
+  expect(html).not.toContain('Tìm tài sản để thêm');
   expect(html).not.toContain('Cách chọn tài sản');
   expect(html).not.toContain('name="universe"');
 });

@@ -1,5 +1,7 @@
 # Phục vụ Phase 1 trên stack local
 
+Từ 24/11/2026, bộ điều phối HYBRID local phát hành snapshot dùng buffer VFF 5 phiên và freshness 7 ngày. Xem [lịch chạy và cách kiểm tra](#tự-cập-nhật-hybrid-trên-compose-local). Quy tắc NAV live bên dưới mô tả các bundle đã phát hành theo phiên bản trước.
+
 **Cập nhật 18/11/2026:** selected snapshot mới dùng `user-selection-live-nav-v2`,
 NAV đã thu thập/xác minh dùng cho live không chờ thêm 5 phiên, freshness vẫn
 7 ngày từ ngày NAV. MVO backend thật và cùng receipt sau restart đã đạt;
@@ -508,3 +510,23 @@ Receipt chi tiết tại `.generated/user-selection/`; reviewer độc lập kh�
 Critical/Important findings. Không tái lập hiệu suất backtest; giữ
 historical_publication_verified=false. Các mục full legacy còn blocked ở phần
 trước không được đổi thành passed bởi đợt custom này.
+
+### Tự cập nhật HYBRID trên Compose local
+
+Hai worker chạy cùng project `portfolio-auth-demo`. Market kiểm tra mỗi 10 phút và tải KBS, GOLD và VFF cho mỗi khung 4 giờ. Worker cũng kiểm tra khi cutoff đổi lúc 18:00 giờ Việt Nam. Nếu nguồn trả trùng phiên, KBS phải trả lại một chuỗi hợp lệ trong tối đa bốn lần đọc. Tài sản lỗi được thử lại sau 30 phút trong cùng khung. Snapshot mới dùng `user-selection-data-v1`, VFF trễ 5 phiên quan sát và mỗi tài sản có tuổi tối đa 7 ngày lịch. Lịch này tạo nhiều cơ hội phát hành trước hạn bundle tối đa 24 giờ. Sau khi Docker ngủ hoặc dừng, worker xử lý khung hiện tại khi chạy lại.
+
+```sh
+docker compose -p portfolio-auth-demo --env-file infra/local/.generated/.env -f infra/local/compose.yaml build market-migrate quant-migrate
+docker compose -p portfolio-auth-demo --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.hybrid-refresh.yaml up -d --no-deps hybrid-market-refresh hybrid-snapshot-publication
+docker compose -p portfolio-auth-demo --env-file infra/local/.generated/.env -f infra/local/compose.yaml -f infra/local/compose.hybrid-refresh.yaml logs --tail=20 hybrid-market-refresh hybrid-snapshot-publication
+```
+
+Quant kiểm tra bản ghi bàn giao mỗi phút, đọc snapshot theo ID và SHA-256, đối chiếu epoch và hash dữ liệu huấn luyện, rồi gửi job có khóa idempotency qua hàng đợi phát hành hiện có. Worker phục hồi sau restart bằng bản ghi bàn giao và khóa trong DB. Hai worker mới chỉ có quyền đọc artifact model. Model tiếp tục cần reviewer duyệt thủ công. Khi epoch thay đổi, log `MODEL_REVIEW_OR_COMPATIBILITY_REQUIRED` yêu cầu người vận hành kiểm tra ứng viên tương thích và xử lý qua màn hình review. Worker kiểm lại sau khi duyệt.
+
+Mỗi tài sản bị chặn có mã và nguyên nhân trong log Quant. `VFF_STALE` tính tuổi từ ngày định giá NAV đã qua buffer. Lượt refresh thành công vẫn có thể nhận mã này. Đổi ngày kiểm tra hoặc phát hành snapshot mới không làm NAV trẻ lại. `COVERAGE_REGRESSION` giữ bundle còn hạn nếu refresh làm mất tài sản trước đó dùng được theo cùng chính sách. Để dừng tự động, chạy `stop hybrid-market-refresh hybrid-snapshot-publication` với cùng các tham số Compose. Theo dõi dung lượng của thư mục datasets/bundles vì lịch sử snapshot và artifact được lưu để mở lại đề xuất cũ.
+
+Khi nhà cung cấp đã sửa dữ liệu trước lần thử tự động kế tiếp, có thể chạy ngay một lượt cho các mã còn lỗi bằng lệnh sau. Lượt này dùng cùng khóa với worker đang chạy.
+
+```sh
+docker exec portfolio-auth-demo-hybrid-market-refresh-1 python -m market_service.hybrid_refresh --retry-failed
+```

@@ -1,0 +1,45 @@
+.investor-profile, .investor-settings { width: 100%; max-width: 1132px; }
+.investor-context { margin: 0 0 34px; font-size: 18px; }
+.investor-fact {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  min-height: 82px;
+  border-radius: var(--radius);
+  background: white;
+}
+.investor-fact h2 { font-size: 20px; line-height: 1.4; margin: 0; }
+.investor-fact :is(p, dl) { margin: 0; color: var(--muted); }
+.investor-fact .account-facts { display: grid; gap: 4px; font-size: 15px; }
+.account-facts > div { display: flex; align-items: baseline; gap: 6px; }
+.account-facts dt { flex: none; font-weight: 500; }
+.account-facts dd { margin: 0; overflow-wrap: anywhere; }
+.account-facts dd::before { content: '·'; margin-right: 6px; }
+.investor-settings .investor-fact { padding: 20px; }
+.investor-disclosure { margin-top: 16px; max-width: 760px; }
+.investor-disclosure > summary { font-weight: 500; }
+.investor-disclosure[open] { background: white; padding: 10px 16px 16px; border-radius: var(--radius); }
+.investor-disclosure .profile-allocation-rules { border: 0; }
+.investor-settings .actions .button, .investor-profile .actions .button { min-height: 44px; min-width: 150px; }
+@media (max-width: 600px) {
+  .investor-context { font-size: 15px; margin-bottom: 28px; }
+  .investor-fact h2 { font-size: 16px; }
+  .investor-fact p, .investor-fact .account-facts { font-size: 14px; }
+  .investor-settings > .actions a { justify-content: start; width: 100%; }
+}
+@media (min-width: 1200px) {
+  .app-shell > .workspace:is(.workspace-profile, .workspace-settings) {
+    --task-content-width: 1136px;
+    --page-gutter: 48px;
+  }
+  .workspace:is(.workspace-profile, .workspace-settings) > .page-heading h1 { font-size: 38px; }
+  .investor-settings > .investor-fact { max-width: 736px; }
+  .investor-settings > .actions { display: grid; justify-content: start; gap: 18px; }
+  .investor-settings > .actions a { width: fit-content; min-width: 236px; }
+  .investor-settings > .actions a:first-child { min-width: 330px; }
+}
+@media (max-width: 600px) {
+  .investor-profile .actions { display: flex; flex-direction: row; }
+  .investor-profile .actions .button { width: auto; min-width: 132px; }
+}

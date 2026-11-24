@@ -1,8 +1,10 @@
 """Real pgvector storage with synthetic vectors in an isolated schema; NOT provider hybrid evidence."""
 
 import os
+import json
 from pathlib import Path
 import subprocess
+import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,10 +46,17 @@ try:
   assert [p['claim_id'] for p in result['passages']]==['public']
   assert 'embedding' not in str(result)
   assert retrieve(s,Query(query='zxqvnomatch',as_of=now))['passages']==[]
+  from sqlalchemy import event
+  chunk_reads=[]
+  def count_chunk_reads(conn,cursor,statement,parameters,context,executemany):
+   if 'SELECT * FROM eligible WHERE id' in statement:chunk_reads.append(statement)
+  event.listen(scoped,'after_cursor_execute',count_chunk_reads)
   lexical=retrieve(s,Query(query='covariance',as_of=now))
   assert {p['claim_id'] for p in lexical['passages']}=={'public','weak','wrong-model'}
+  assert len(chunk_reads)==1, 'All ranked passages must be loaded in one query'
+  event.remove(scoped,'after_cursor_execute',count_chunk_reads)
   paraphrase=retrieve(s,Query(query='Bạn diễn giải cách dùng ma trận đồng biến được không?',as_of=now))
-  assert paraphrase['retrieval_version']=='knowledge-retrieval-v2'
+  assert paraphrase['retrieval_version']=='knowledge-retrieval-v6'
   assert {p['claim_id'] for p in paraphrase['passages']}=={'public','weak','wrong-model'}
   unaccented=retrieve(s,Query(query='ban dien giai cach dung ma tran dong bien duoc khong',as_of=now))
   assert unaccented['passages']==paraphrase['passages']
@@ -96,9 +105,82 @@ finally:
         "python",
         "-",
     ]
+    env = os.environ.copy()
+    if isolated_url := env.get("KNOWLEDGE_POSTGRES_TEST_URL"):
+        command = [sys.executable, "-"]
+        env["MIGRATION_DATABASE_URL"] = isolated_url
     result = subprocess.run(
-        command, input=code, text=True, capture_output=True, timeout=45
+        command, input=code, text=True, capture_output=True, timeout=45, env=env
     )
     assert result.returncode == 0, (
         "Knowledge isolated PostgreSQL storage probe failed; no raw credentials logged"
     )
+
+
+@pytest.mark.skipif(
+    not os.getenv("KNOWLEDGE_EVAL_PORT"),
+    reason="Requires the isolated candidate HTTP arm",
+)
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("EW có bảo đảm lợi nhuận không?", "ew-limit"),
+        ("Views ML có chắc chắn đúng không?", "ml-views-limit"),
+    ],
+    ids=["A21", "A24"],
+)
+def test_candidate_answers_with_approved_claim(question, expected):
+    import httpx
+    from chat_service.knowledge import knowledge_answer, render_evidence
+
+    url = f"http://127.0.0.1:{int(os.environ['KNOWLEDGE_EVAL_PORT'])}/internal/v1/knowledge/retrieve"
+
+    def retrieve(cutoff):
+        response = httpx.post(
+            url,
+            headers={"Authorization": "Bearer p3-local-read"},
+            json={"query": question, "as_of": cutoff},
+        )
+        response.raise_for_status()
+        data = response.json()
+        assert data["corpus_version"] == "knowledge-vi-v2-20261123"
+        assert data["retrieval_version"] == "knowledge-retrieval-v6"
+        return render_evidence(data, None, query_hash="b" * 64, question=question)
+
+    ready = retrieve("2026-11-23T16:00:00Z")
+    assert [p["claim_id"] for p in ready["citations"]] == [expected]
+    assert knowledge_answer(ready) == ready["citations"][0]["text"]
+    assert retrieve("2026-11-22T00:00:00Z")["citations"] == []
+
+
+@pytest.mark.skipif(
+    not os.getenv("KNOWLEDGE_EVAL_PORT"),
+    reason="Requires the isolated candidate HTTP arm",
+)
+def test_candidate_preserves_frozen_v1_answerable_and_abstention_cases():
+    import httpx
+    from chat_service.knowledge import render_evidence
+
+    cases = ROOT / "tests/fixtures/knowledge/eval-vi-v1.jsonl"
+    url = f"http://127.0.0.1:{int(os.environ['KNOWLEDGE_EVAL_PORT'])}"
+    with httpx.Client(
+        base_url=url, headers={"Authorization": "Bearer p3-local-read"}
+    ) as client:
+        for case in map(json.loads, cases.read_text().splitlines()):
+            if case["category"] not in {"answerable", "no_evidence"}:
+                continue
+            question = case["messages"][-1]
+            response = client.post(
+                "/internal/v1/knowledge/retrieve",
+                json={"query": question, "as_of": "2026-11-23T16:00:00Z"},
+            )
+            response.raise_for_status()
+            answer = render_evidence(
+                response.json(), None, query_hash="b" * 64, question=question
+            )
+            selected = {p["claim_id"] for p in answer["citations"]}
+            if case["category"] == "answerable":
+                assert selected & set(case["allowed_claim_ids"]), case["id"]
+                assert answer["coverage"] == "SUPPORTED", case["id"]
+            else:
+                assert not selected, case["id"]

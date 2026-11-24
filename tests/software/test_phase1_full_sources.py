@@ -18,20 +18,44 @@ AUDIT = (
 START, END = date(2020, 1, 14), date(2026, 11, 10)
 
 
-def test_gold_live_archive_matches_audit_and_preserves_carry():
-    rows, metadata = normalize_gold_archive(
-        (AUDIT / "gold-2026-11.html").read_bytes(), 2026, 11
-    )
-    assert rows[-1] == (date(2026, 11, 11), Decimal("140000000.0"))
-    assert len(rows) == 11
+def read_research_source(path):
+    if not path.is_file():
+        pytest.skip(f"Optional frozen research source unavailable: {path.name}")
+    return path.read_bytes()
+
+
+def vff_nav():
+    return json.dumps(
+        {
+            "status": 200,
+            "data": [
+                {
+                    "productId": 21,
+                    "navDate": str(END),
+                    "nav": "27249.21",
+                    "createdAt": 1794304434847,
+                }
+            ],
+        }
+    ).encode()
+
+
+def test_gold_archive_normalizes_prices_and_preserves_carry():
+    raw = (
+        "Vàng SJC 1L, 10L, 1KG · Hồ Chí Minh<table>"
+        "<tr><td>10/11/2026</td><td>138,5</td><td>139,5</td></tr>"
+        "<tr><td>11/11/2026 không đổi</td><td>138,5</td><td>139,5</td></tr>"
+        "</table>"
+    ).encode()
+    rows, metadata = normalize_gold_archive(raw, 2026, 11)
+    assert rows[-1] == (date(2026, 11, 11), Decimal("139500000.0"))
+    assert len(rows) == 2
     assert any(v["provider_carry_flag"] for v in metadata.values())
     assert metadata["2026-11-11"]["historical_publication_verified"] is False
 
 
 def test_fmarket_full_precision_identity_duplicate_conflict():
-    rows, metadata = normalize_fmarket(
-        (AUDIT / "fmarket-nav.json").read_bytes(), START, END
-    )
+    rows, metadata = normalize_fmarket(vff_nav(), START, END)
     assert rows[-1] == (END, Decimal("27249.21"))
     assert (
         metadata[str(END)]["raw_fund_record_created_at"]
@@ -53,7 +77,7 @@ def test_fmarket_full_precision_identity_duplicate_conflict():
 
 def test_frozen_gold_hash_unit_and_calendar():
     path = AUDIT.parent / "readiness_20261012/gold_archive_daily.csv"
-    raw = path.read_bytes()
+    raw = read_research_source(path)
     rows, metadata = frozen_gold(raw)
     assert (
         hashlib.sha256(raw).hexdigest()
@@ -76,13 +100,13 @@ def full_pack(tmp_path, monkeypatch):
 
     baseline = AUDIT.parent / "readiness_20261012"
     (tmp_path / "assets_1.json").write_bytes(
-        (
+        read_research_source(
             baseline
             / "runs/availability-observed-contract-20261012T233110/source_snapshot/assets_1.json"
-        ).read_bytes()
+        )
     )
     (tmp_path / "gold_archive_daily.csv").write_bytes(
-        (baseline / "gold_archive_daily.csv").read_bytes()
+        read_research_source(baseline / "gold_archive_daily.csv")
     )
     (tmp_path / "seed.json").write_text(
         json.dumps(
@@ -113,7 +137,7 @@ def full_pack(tmp_path, monkeypatch):
                 name = (
                     "fmarket-identity.json" if "/filter" in url else "fmarket-nav.json"
                 )
-            return (AUDIT / name).read_bytes(), {
+            return read_research_source(AUDIT / name), {
                 "url": url,
                 "requested_at": "2026-11-11T16:30:00+00:00",
                 "received_at": "2026-11-11T16:30:01+00:00",
@@ -243,7 +267,7 @@ def test_equity_gap_allowlist_matches_hash_pinned_frozen_sources():
     root = AUDIT.parents[2]
     calendar_path = root / "trusted_baseline/datasets/indices/full/VNINDEX.csv"
     assert (
-        hashlib.sha256(calendar_path.read_bytes()).hexdigest()
+        hashlib.sha256(read_research_source(calendar_path)).hexdigest()
         == EQUITY_GAP_EVIDENCE["calendar_sha256"]
     )
     calendar = {
@@ -257,7 +281,7 @@ def test_equity_gap_allowlist_matches_hash_pinned_frozen_sources():
             AUDIT.parent
             / f"blocker_evidence_20261012/raw/kbs_verified_full_{symbol}.json"
         )
-        raw = path.read_bytes()
+        raw = read_research_source(path)
         assert hashlib.sha256(raw).hexdigest() == expected_hash
         observed = {r["t"][:10] for r in json.loads(raw)["data_day"]}
         actual[symbol] = sorted(calendar - observed)

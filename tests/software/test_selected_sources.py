@@ -14,6 +14,8 @@ from market_service.selected_refresh import refresh_selected
 from market_service.selected_snapshots import build_selected_snapshot
 from market_service.snapshots import snapshot_json
 
+from test_phase1_full_sources import read_research_source, vff_nav
+
 NOW = datetime(2026, 11, 12, 8, tzinfo=timezone.utc)
 END = date(2026, 11, 11)
 # Frozen source dates do not backdate rows inserted by the real ORM clock.
@@ -57,8 +59,24 @@ class Vff:
     def fetch(self, url, payload=None):
         if self.failure:
             raise self.failure
-        name = "fmarket-identity.json" if "/filter" in url else "fmarket-nav.json"
-        return (AUDIT / name).read_bytes(), {
+        raw = vff_nav()
+        if "/filter" in url:
+            raw = json.dumps(
+                {
+                    "status": 200,
+                    "data": {
+                        "rows": [
+                            {
+                                "id": 21,
+                                "code": "VFF",
+                                "dataFundAssetType": {"code": "BOND"},
+                                "owner": {"shortName": "VINACAPITAL"},
+                            }
+                        ]
+                    },
+                }
+            ).encode()
+        return raw, {
             "url": url,
             "requested_at": NOW.isoformat(),
             "received_at": NOW.isoformat(),
@@ -326,7 +344,7 @@ def test_gold_uses_frozen_seed_archive_carry_and_metadata_pins(owner):
         baseline
         / "runs/availability-observed-contract-20261012T233110/source_snapshot/assets_1.json",
     ]:
-        (store.directory / source.name).write_bytes(source.read_bytes())
+        (store.directory / source.name).write_bytes(read_research_source(source))
     seed = store.directory / "seed.json"
     seed.write_text(
         json.dumps(
@@ -340,7 +358,7 @@ def test_gold_uses_frozen_seed_archive_carry_and_metadata_pins(owner):
     class Gold:
         def fetch(self, url, payload=None):
             year, month = url.split("/")[-2:]
-            return (AUDIT / f"gold-{year}-{int(month):02}.html").read_bytes(), {
+            return read_research_source(AUDIT / f"gold-{year}-{int(month):02}.html"), {
                 "url": url,
                 "requested_at": NOW.isoformat(),
                 "received_at": NOW.isoformat(),
@@ -597,7 +615,7 @@ def test_current_snapshot_keeps_all_32_latest_sources_available(owner):
         baseline
         / "runs/availability-observed-contract-20261012T233110/source_snapshot/assets_1.json",
     ]:
-        (store.directory / source.name).write_bytes(source.read_bytes())
+        (store.directory / source.name).write_bytes(read_research_source(source))
     seed = store.directory / "seed.json"
     seed.write_text(
         json.dumps(
@@ -613,7 +631,7 @@ def test_current_snapshot_keeps_all_32_latest_sources_available(owner):
             if "/lich-su/" not in url:
                 return super().fetch(url, payload)
             year, month = url.split("/")[-2:]
-            return (AUDIT / f"gold-{year}-{int(month):02}.html").read_bytes(), {
+            return read_research_source(AUDIT / f"gold-{year}-{int(month):02}.html"), {
                 "url": url,
                 "requested_at": NOW.isoformat(),
                 "received_at": NOW.isoformat(),

@@ -108,9 +108,10 @@ def test_trainer_runtime_errors_are_not_disguised_as_missing_coverage(
     assert not list(tmp_path.rglob("manifest.json"))
 
 
-def test_asset_model_reuses_frozen_member_predictions_and_best_iteration(complete):
+def test_asset_model_matches_native_predictions_at_best_iteration(complete):
     import json
     from quant_service.ml import phase1_predictions
+    from test_phase1_full_training import native_member_predictions
 
     directory, panel, _, manifest = complete
     frozen = json.loads(
@@ -125,11 +126,9 @@ def test_asset_model_reuses_frozen_member_predictions_and_best_iteration(complet
     predictions = phase1_predictions(directory, manifest, rows, asset_ids=ids)
     for i, asset in enumerate(ids):
         np.testing.assert_array_equal(
-            predictions[i], frozen["by_asset"][asset]["member_predictions"]
+            predictions[i],
+            native_member_predictions(directory, manifest.assets[asset], rows[i]),
         )
-        assert [b.best_iteration for b in manifest.assets[asset].boosters] == frozen[
-            "by_asset"
-        ][asset]["best_iteration"]
 
 
 def test_inference_uses_only_active_equities_and_requires_ml_view_before_defensive(

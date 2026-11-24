@@ -52,6 +52,9 @@ jobs:
     needs: [backend, web]
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      # DEMO lifecycle exercises the explicit EW/MVO/BL_ML endpoints.
+      SYSTEM_HYBRID_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -135,6 +138,8 @@ jobs:
     needs: [backend, web]
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      SYSTEM_HYBRID_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

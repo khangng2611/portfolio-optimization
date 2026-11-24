@@ -118,7 +118,7 @@ def chat(tmp_path, monkeypatch):
     Base.metadata.create_all(sessions.kw["bind"])
     tools = Tools()
     app = create_app(
-        sessions=sessions, verifier=Verifier(), tools=tools, stream_seconds=0.05
+        sessions=sessions, verifier=Verifier(), tools=tools, stream_seconds=1
     )
     with TestClient(app) as c:
         yield c, sessions, tools

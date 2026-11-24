@@ -8,12 +8,40 @@ from sqlalchemy import select, update, func
 
 from portfolio_contracts import system_hybrid_managed, utcnow
 from .models import Conversation, Job, Message, ProviderInvocation
-from .openai_provider import OpenAIProvider, redact
+from .openai_provider import KnowledgeRewrite, OpenAIProvider, ProposalFocus, SourcePlan, redact
 from .embeddings import Embeddings, approved_budget
+from .explanation import plain
+
+
+def allocation_request(value):
+    return re.search(
+        r"\b(?:tao|lap|tinh|chay|xin|muon) (?:(?:giup|cho) (?:toi |minh |em )?)?(?:(?:mot|ban) )?(?:de xuat|phan bo|phuong an)|"
+        r"\b(?:giup|cho) (?:minh|toi) (?:chia von|phan bo|toi uu)|"
+        r"^(?:chia von|phan bo|toi uu|allocation)\b", value,
+    )
 
 
 def developer_enabled():
     return os.environ.get("CHAT_LLM_ENABLED") == "1"
+
+
+def scoped_history(job, current):
+    """A return to a portfolio starts a new implicit reference window."""
+    scope = (Job.owner_key == job.owner_key, Job.conversation_id == job.conversation_id)
+    last_other = select(func.max(Job.created_at)).where(
+        *scope, Job.created_at < job.created_at,
+        Job.request["portfolio_id"].as_string().is_distinct_from(job.request.get("portfolio_id")),
+    ).scalar_subquery()
+    # Cut at the first user message after a switch; the previous job's response
+    # may have been written well after its creation timestamp.
+    start = select(func.min(Message.created_at)).join(Job, Job.message_id == Message.id).where(
+        *scope, Job.created_at > last_other, Job.created_at <= job.created_at,
+    ).correlate(None).scalar_subquery()
+    return (
+        Message.conversation_id == job.conversation_id,
+        Message.created_at < current.created_at,
+        Message.created_at >= func.coalesce(start, Message.created_at),
+    )
 
 
 class InvocationLedger:
@@ -21,7 +49,7 @@ class InvocationLedger:
         self.sessions = sessions
 
     def invoke(self, job, purpose, call, *, rag=False):
-        if purpose not in ("intent", "explanation", "query_embedding", "response"):
+        if purpose not in ("intent", "source_route", "proposal_focus", "explanation", "query_embedding", "query_rewrite", "response"):
             return None, {"reason": "INVALID_PURPOSE"}
         now = utcnow()
         with self.sessions.begin() as s:
@@ -68,7 +96,7 @@ class InvocationLedger:
             if budget:
                 try:
                     text_limit = min(
-                        100,
+                        250,
                         max(
                             0, int(os.environ.get("CHAT_LLM_APPROVAL_CALL_LIMIT", "20"))
                         ),
@@ -165,9 +193,8 @@ class Dialogue:
             reference = s.scalar(
                 select(Message.structured["recommendation_id"].as_string())
                 .where(
-                    Message.conversation_id == conversation.id,
+                    *scoped_history(job, current),
                     Message.role == "assistant",
-                    Message.created_at < current.created_at,
                     Message.structured["type"].as_string() == "recommendation",
                     Message.structured["facts"]["portfolio_id"].as_string()
                     == str(portfolio_id),
@@ -186,12 +213,12 @@ class Dialogue:
             if not c or c.owner_key != job.owner_key or not developer_enabled():
                 return None, None
             current = s.get(Message, job.message_id)
+            if not current or current.conversation_id != c.id:
+                return None, None
             rows = s.scalars(
                 select(Message)
                 .where(
-                    Message.conversation_id == c.id,
-                    Message.id != current.id,
-                    Message.created_at <= current.created_at,
+                    *scoped_history(job, current),
                 )
                 .order_by(Message.created_at.desc(), Message.id.desc())
                 .limit(4)
@@ -211,9 +238,28 @@ class Dialogue:
                     for m in reversed(rows)
                 ],
                 "has_portfolio": bool(job.request.get("portfolio_id")),
-                "has_recommendation": bool(last_result),
+                "has_recommendation": bool(job.request.get("recommendation_id") or last_result),
             }
             return context, last_result
+
+    def allocation_source(self, job, pending_portfolio, deadline):
+        context = {
+            "question": redact(job.request["content"]),
+            "has_portfolio": bool(job.request.get("portfolio_id")),
+            "has_recommendation": bool(job.request.get("recommendation_id") or self.recommendation_reference(job)),
+            "pending_portfolio": pending_portfolio,
+        }
+        return self.ledger.invoke(
+            job, "source_route", lambda: self.provider.generate("source_route", context, SourcePlan, deadline=deadline), rag=True,
+        )
+
+    def proposal_focus(self, job, previous_asset):
+        if not self.enabled or not approved_budget():
+            return None, {"reason": "NOT_CONFIGURED"}
+        context = {"question": redact(job.request["content"]), "previous_asset": previous_asset}
+        return self.ledger.invoke(
+            job, "proposal_focus", lambda: self.provider.generate("proposal_focus", context, ProposalFocus), rag=True,
+        )
 
     def interpret(self, job):
         request = job.request.copy()
@@ -229,6 +275,11 @@ class Dialogue:
             rag=self.contextual or bool(approved_budget()),
         )
         if plan:
+            if plan["intent"] == "allocation":
+                value = plain(request["content"]).strip(" ?!.,")
+                method = re.fullmatch(r"(?:chon |dung )?(?:ew|mvo|bl[ _+]*ml)(?: nhe| di)?", value)
+                if not allocation_request(value) and not method:
+                    return request | {"intent": "clarify"}, meta
             request["intent"] = plan["intent"]
             # An explicit UI strategy wins; otherwise use only extracted intent.
             evidence = {
@@ -295,7 +346,17 @@ class Dialogue:
             ), rag=True,
         )
 
-    def select_knowledge(self, job, data):
+    def rewrite_knowledge(self, job, question, topic):
+        if not self.enabled or os.getenv("CHAT_KNOWLEDGE_REWRITE") != "1":
+            return None
+        context = {"question": question, "previous_topic": topic}
+        plan, meta = self.ledger.invoke(
+            job, "query_rewrite",
+            lambda: self.provider.generate("knowledge_rewrite", context, KnowledgeRewrite), rag=True,
+        )
+        return plan.get("query") if plan and meta.get("reason") == "VERIFIED" else None
+
+    def select_knowledge(self, job, data, *, previous_topic=None):
         if not self.enabled:
             return None, {"reason": "NOT_CONFIGURED"}
         # New RAG spending never inherits old Chat approval or a configured key.
@@ -305,7 +366,7 @@ class Dialogue:
             job,
             "explanation",
             lambda: self.provider.select_knowledge(
-                data, question=job.request["content"]
+                data, question=job.request["content"], **({"previous_topic": previous_topic} if previous_topic else {})
             ),
             rag=True,
         )

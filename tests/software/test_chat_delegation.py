@@ -223,3 +223,47 @@ def test_reconcile_prior_submission_after_portfolio_version_changes(grants):
     assert (
         tool(c, issue(c, pid).json(), "request_allocation", **args).status_code == 409
     )
+
+
+def test_readiness_tool_uses_owner_release_and_grant_portfolio(grants, monkeypatch):
+    c, _, state = grants
+    pid = portfolio(c)
+    name = "get_allocation_status"
+    response = issue(c, pid, tools=[name])
+    assert response.status_code == 200
+    grant = response.json()
+    monkeypatch.setenv("SYSTEM_HYBRID_ENABLED", "paused")
+    facts = tool(c, grant, name).json()
+    assert (facts["portfolio_id"], facts["status"], facts["reason_code"], facts["scope"]) == (
+        pid, "BLOCKED", "SYSTEM_PAUSED", "system"
+    )
+    assert facts["checked_at"]
+    assert tool(c, grant, name, portfolio_id=str(uuid4())).status_code == 403
+    monkeypatch.setenv("SYSTEM_HYBRID_ENABLED", "true")
+    monkeypatch.delenv("HYBRID_REVIEWED_REPORT_SHA256", raising=False)
+    assert tool(c, grant, name).json()["reason_code"] == "ASSET_SELECTION_REQUIRED"
+    state["active"] = False
+    assert tool(c, grant, name).status_code == 403
+
+
+def test_portfolio_summary_saved_target_is_scoped_and_opt_in(grants):
+    from test_onboarding import complete, accept
+
+    client, sessions, _ = grants
+    pid = portfolio(client)
+    grant = issue(client, pid).json()
+    assert "accepted_target" not in tool(client, grant, portfolio_id=pid).json()
+    result = tool(client, grant, portfolio_id=pid, include_saved_target=True)
+    assert result.status_code == 200, result.text
+    assert result.json()["accepted_target"] is None
+    assert tool(client, grant, portfolio_id=str(uuid4()), include_saved_target=True).status_code == 403
+    rid = complete(client, sessions, pid)
+    assert tool(client, grant, portfolio_id=pid, include_saved_target=True).json()["accepted_target"] is None
+    accepted = accept(client, rid)
+    assert accepted.status_code == 200, accepted.text
+    target = accepted.json()
+    snapshot = tool(client, grant, portfolio_id=pid, include_saved_target=True).json()["accepted_target"]
+    assert snapshot == {
+        "id": target["id"], "recommendation_id": rid, "accepted_at": target["accepted_at"],
+        "asset_ids": target["allocation"]["asset_ids"], "weights": target["allocation"]["weights"],
+    }

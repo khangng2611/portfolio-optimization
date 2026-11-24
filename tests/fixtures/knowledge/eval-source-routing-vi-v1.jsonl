@@ -1,0 +1,8 @@
+{"id":"S1","text":"Nhắc mình xem phân bổ đã chốt bao gồm các mã nào với.","source":"saved_target"}
+{"id":"S2","text":"Cho tôi xem cơ cấu vốn tôi đã lưu hôm trước.","source":"saved_target"}
+{"id":"S3","text":"Phân bổ đã chấp nhận của mình gồm gì thế?","source":"saved_target","unbound":true}
+{"id":"S4","text":"Phân bổ tài sản nghĩa là gì?","source":"knowledge"}
+{"id":"S5","text":"Giá bán vàng miếng SJC hôm nay là bao nhiêu?","source":"gold_quote"}
+{"id":"S6","text":"Mục tiêu đang nói ở đây là gì vậy?","source":"clarify"}
+{"id":"S7","text":"Trong phương án đang mở, các tỷ trọng được tính như thế nào?","source":"explain"}
+{"id":"S8","text":"Mình muốn biết bản phân bổ mình đã đồng ý có những tài sản gì.","source":"saved_target"}

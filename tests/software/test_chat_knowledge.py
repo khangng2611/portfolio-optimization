@@ -1,5 +1,7 @@
 """Injected provider/owner tests. Live acceptance is separately exercised over HTTP."""
 
+import hashlib
+
 from copy import deepcopy
 from uuid import uuid4
 import pytest
@@ -89,7 +91,13 @@ def test_knowledge_needs_no_portfolio_and_never_allocates(chat, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "version", ["knowledge-retrieval-v1", "knowledge-retrieval-v2"]
+    "version",
+    [
+        "knowledge-retrieval-v1",
+        "knowledge-retrieval-v2",
+        "knowledge-retrieval-v3",
+        "knowledge-retrieval-v4", "knowledge-retrieval-v5", "knowledge-retrieval-v6",
+    ],
 )
 def test_forged_references_never_render_prose_or_urls(version):
     from chat_service.knowledge import render_evidence
@@ -371,7 +379,7 @@ def test_slow_turn_uses_lexical_references_and_preserves_canonical_budget(
 
 
 @pytest.mark.parametrize(
-    "outcome", ["match", "lexical", "invalid", "changed", "timeout"]
+    "outcome", ["match", "lexical", "invalid", "changed", "timeout", "new_ticker", "new_amount"]
 )
 def test_rewrite_fallback_is_bounded_and_preserves_evidence(chat, monkeypatch, outcome):
     c, s, t = chat
@@ -385,6 +393,8 @@ def test_rewrite_fallback_is_bounded_and_preserves_evidence(chat, monkeypatch, o
         attempts.append((question, topic))
         if outcome == "timeout":
             raise TimeoutError
+        if outcome in {"new_ticker", "new_amount"}:
+            return "tỷ trọng VIC" if outcome == "new_ticker" else "target 999 đồng"
         return {"query": "EW"} if outcome == "invalid" else "equal weight"
 
     def call(job, tool, args):
@@ -411,6 +421,8 @@ def test_rewrite_fallback_is_bounded_and_preserves_evidence(chat, monkeypatch, o
         [] if outcome == "lexical" else [("Cách chia vốn cho [redacted]?", None)]
     )
     assert all("embedding" not in args for args in calls)
+    if outcome in {"new_ticker", "new_amount"}:
+        assert all(a["query"] == "Cách chia vốn cho [redacted]?" for a in calls)
     if outcome in {"match", "changed"}:
         assert calls[1] == calls[0] | {
             "query": "equal weight",
@@ -453,8 +465,466 @@ def test_followup_rewrite_uses_only_previous_cited_topic_in_same_conversation(
     assert worker.tick()
     assert attempts == [(question, "EW")]
     rows = c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()
-    assert (
-        rows[-1]["structured"]["knowledge"]["citations"][0]["claim_id"]
-        == "ew-definition"
-    )
+    # The rewrite found a definition, which cannot answer a question about limits.
+    assert rows[-1]["structured"]["knowledge"]["status"] == "MISSING"
     assert not t.allocations
+
+
+def test_portfolio_switch_discards_last_knowledge_topic(chat, monkeypatch):
+    from chat_service.knowledge import previous_knowledge_topic
+    from chat_service.queue import Queue
+
+    c, sessions, tools = chat
+    cid = conversation(c, tools.summary["id"])
+    original = tools.call
+    data = candidates()
+    monkeypatch.setattr(
+        tools,
+        "call",
+        lambda job, tool, args: data
+        if tool == "retrieve_knowledge"
+        else original(job, tool, args),
+    )
+    send(c, cid, intent="knowledge", content="EW là gì?")
+    assert Worker(sessions, tools).tick()
+    send(
+        c,
+        cid,
+        intent="knowledge",
+        content="Vậy nó có nhược điểm gì?",
+        portfolio_id=str(uuid4()),
+    )
+    assert previous_knowledge_topic(sessions, Queue(sessions).claim()) is None
+
+
+def test_definition_cannot_answer_guarantee_even_with_verified_provider_ids():
+    from chat_service.knowledge import knowledge_answer, render_evidence
+
+    data = candidates()
+    plan = {
+        "selected_chunk_ids": [data["passages"][0]["chunk_id"]],
+        "candidate_hash": canonical_hash(data),
+    }
+
+    def answer(question):
+        return render_evidence(data, plan, query_hash="b" * 64, question=question)
+
+    assert answer("EW có bảo đảm lợi nhuận không?")["citations"] == []
+    partial = answer("EW là gì và lợi nhuận năm tới là bao nhiêu?")
+    assert partial["coverage"] == "PARTIAL"
+    assert partial["selected_chunk_ids"] == plan["selected_chunk_ids"]
+    assert knowledge_answer(partial).startswith(data["passages"][0]["text"])
+    assert "chưa đủ căn cứ" in knowledge_answer(partial)
+
+
+def approved_candidate_passages(*claim_ids):
+    from pathlib import Path
+    from knowledge_service.corpus import load_manifest, sha
+
+    m = load_manifest(
+        Path(__file__).resolve().parents[2]
+        / "services/knowledge/corpus/candidate-20261123"
+    )
+    base = candidates()
+    by_id = {
+        c.id: base["passages"][0]
+        | {
+            "chunk_id": str(uuid4()),
+            "document_title": d.title,
+            "document_version": d.version,
+            "claim_id": c.id,
+            "text": c.text,
+            "text_hash": sha(c.text),
+            "source_title": c.source_title,
+            "source_url": c.source_url,
+            "locator": c.locator,
+            "available_at": d.available_at.isoformat(),
+        }
+        for d in m.documents
+        for c in d.claims
+        if c.id in claim_ids
+    }
+    return base | {"passages": [by_id[k] for k in claim_ids]}
+
+
+@pytest.mark.parametrize(
+    ("question", "irrelevant", "supported"),
+    [
+        ("MVO có hứa hẹn sinh lời không?", "mvo-definition", "mvo-estimation"),
+        (
+            "Đa dạng hóa có xóa bỏ toàn bộ rủi ro thị trường không?",
+            "diversification-definition",
+            "diversification-limit",
+        ),
+        (
+            "Kết quả backtest tốt có cam kết lợi nhuận tương lai không?",
+            "backtest-definition",
+            "backtest-limit",
+        ),
+        (
+            "Điểm tin cậy của views trong Black Litterman có ý nghĩa gì?",
+            "bl-definition",
+            "bl-uncertainty",
+        ),
+        (
+            "Chấp nhận đề xuất có tự khớp lệnh mua bán không?",
+            "target-not-holdings",
+            "accept-not-trade",
+        ),
+        (
+            "Tại sao trượt giá làm thay đổi kết quả sau chi phí?",
+            "turnover-definition",
+            "fees-limit",
+        ),
+        (
+            "Target có chứng minh là tôi đang nắm giữ cổ phiếu không?",
+            "accept-not-trade",
+            "target-not-holdings",
+        ),
+        (
+            "Quy tắc hết hạn dữ liệu có làm thay đổi tỷ trọng của mục tiêu cũ?",
+            "freshness-window",
+            "freshness-history",
+        ),
+    ],
+)
+def test_question_facets_choose_an_answering_paragraph(question, irrelevant, supported):
+    from chat_service.knowledge import render_evidence
+
+    data = approved_candidate_passages(irrelevant, supported)
+    answer = render_evidence(data, None, query_hash="a" * 64, question=question)
+    assert [p["claim_id"] for p in answer["citations"]] == [supported]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "MVO có bảo đảm lợi nhuận cho FPT không?",
+        "EW có bảo đảm cho bitcoin sinh lời không?",
+        "Dữ liệu VFF của danh mục tôi hôm nay đã hết hạn chưa?",
+        "Mức phí giao dịch VCB chính xác bao nhiêu?",
+        "Bao giờ hệ thống của tôi mở lại?",
+    ],
+)
+def test_financial_rule_never_supplies_individual_fact(question):
+    from chat_service.knowledge import render_evidence
+
+    data = approved_candidate_passages(
+        "mvo-estimation",
+        "ew-limit",
+        "vff-nav-availability",
+        "fees-limit",
+        "proposal-pause-rule",
+    )
+    assert not render_evidence(data, None, query_hash="a" * 64, question=question)[
+        "citations"
+    ]
+
+
+def test_intervening_failed_job_removes_previous_knowledge_topic(chat, monkeypatch):
+    from chat_service.knowledge import previous_knowledge_topic
+    from chat_service.queue import Queue
+
+    c, sessions, tools = chat
+    cid = conversation(c, tools.summary["id"])
+    original = tools.call
+    data = candidates()
+    monkeypatch.setattr(
+        tools,
+        "call",
+        lambda j, n, a: data if n == "retrieve_knowledge" else original(j, n, a),
+    )
+    send(c, cid, intent="knowledge", content="EW là gì?")
+    assert Worker(sessions, tools).tick()
+    q = Queue(sessions)
+    send(c, cid, intent="help", content="Câu khác")
+    assert q.finish(q.claim(), status="FAILED", error="UNAVAILABLE")
+    send(c, cid, intent="knowledge", content="Vậy nó có nhược điểm gì?")
+    assert previous_knowledge_topic(sessions, q.claim()) is None
+
+
+def test_claim_label_does_not_create_an_absent_caveat():
+    from chat_service.knowledge import render_evidence
+
+    data = candidates()
+    data["passages"][0]["claim_id"] = "ew-limit"
+    assert not render_evidence(
+        data, None, query_hash="a" * 64, question="Nhược điểm EW là gì?"
+    )["citations"]
+
+
+@pytest.mark.parametrize(
+    ("q", "claims", "gold"),
+    [
+        (
+            "Trong phương pháp Black–Litterman, vì sao lại phối hợp prior và views?",
+            ["bl-uncertainty", "bl-definition"],
+            "bl-definition",
+        ),
+        (
+            "Chia tiền bằng nhau có khiến các khoản đầu tư chịu rủi ro ngang nhau chứ?",
+            ["ew-definition", "ew-limit"],
+            "ew-limit",
+        ),
+        (
+            "Còn có thể mất tiền sau khi đã đa dạng danh mục không?",
+            ["diversification-definition", "diversification-limit"],
+            "diversification-limit",
+        ),
+        (
+            "Giữa target đã chấp nhận và tài sản thực sự nắm giữ có điểm gì khác?",
+            ["target-not-holdings", "accept-not-trade"],
+            "target-not-holdings",
+        ),
+        (
+            "Việc xét duyệt một model candidate thuộc trách nhiệm của ai?",
+            ["model-approval-definition", "model-approval-reviewer"],
+            "model-approval-reviewer",
+        ),
+        (
+            "Trong quy trình NAV VFF cơ sở, ý nghĩa của bộ đệm 5 phiên là gì?",
+            ["freshness-window", "vff-nav-availability"],
+            "vff-nav-availability",
+        ),
+    ],
+)
+def test_concept_and_requested_relationship_survive_paraphrase(q, claims, gold):
+    from chat_service.knowledge import render_evidence
+
+    answer = render_evidence(
+        approved_candidate_passages(*claims), None, query_hash="a" * 64, question=q
+    )
+    assert [p["claim_id"] for p in answer["citations"]] == [gold]
+    assert answer["coverage"] == "SUPPORTED"
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "Tỷ trọng EW cho mã mới TSLA chính xác là bao nhiêu?",
+        "VFF có yêu cầu trễ 19 tuần theo quy trình NAV của quỹ không?",
+        "MVO chắc có lãi cho quỹ zzzunknown không?",
+        "Tác giả của mô hình Black–Litterman sinh năm nào?",
+        "Nếu dùng EW ở Canada thì tiền thuế là bao nhiêu?",
+        "Ngày mai hệ thống mở lại lúc mấy giờ?",
+    ],
+)
+def test_semantic_match_rejects_unpublished_scope(q):
+    from chat_service.knowledge import render_evidence
+
+    data = approved_candidate_passages(
+        "ew-limit",
+        "mvo-estimation",
+        "bl-definition",
+        "vff-nav-availability",
+        "proposal-pause-rule",
+    )
+    assert not render_evidence(data, None, query_hash="a" * 64, question=q)["citations"]
+
+
+def test_semantic_selection_requires_verbatim_evidence_and_bound_question_scope():
+    from chat_service.knowledge import render_evidence
+    from portfolio_contracts import canonical_hash
+
+    data = approved_candidate_passages("ew-definition")
+    p = data["passages"][0]
+    support = {"chunk_id": str(p["chunk_id"]), "quote": p["text"][:55]}
+    plan = {"supports": [support], "candidate_hash": canonical_hash(data), "coverage": "SUPPORTED"}
+    def result(q, value):
+        return render_evidence(data, value, query_hash="a"*64, question=q, metadata={"reason": "VERIFIED"})
+    good = result("EW phân phần vốn theo cách nào?", plan)
+    assert good["selection_reason"] == "VERIFIED_QUOTES"
+    assert good["citations"][0]["text"] == p["text"]
+    for invalid in [
+        plan | {"supports": [support | {"quote": "Trích dẫn không tồn tại trong tài liệu này."}]},
+        plan | {"candidate_hash": "c"*64},
+        plan | {"coverage": "MISSING"},
+        plan | {"supports": [support, support]},
+    ]:
+        assert result("EW phân phần vốn theo cách nào?", invalid)["selection_reason"] == "INVALID_REFERENCES"
+    for q in ("EW có bảo đảm lợi nhuận cho FPT không?", "EW có bảo đảm lợi nhuận không?"):
+        assert not result(q, plan)["citations"]
+
+
+@pytest.mark.parametrize(("question","claim","distractor"), [
+    ("MVO mô tả sự đánh đổi giữa những đại lượng nào?", "mvo-definition", "mvo-estimation"),
+    ("Kết quả backtest đẹp có bảo đảm mình sẽ kiếm được tiền thật không?", "backtest-limit", "backtest-definition"),
+    ("Nếu đồng ý với đề xuất thì lệnh mua bán có tự chạy không?", "accept-not-trade", "target-not-holdings"),
+    ("Chỉ hỏi trong chat thì hồ sơ của mình có tự thay đổi không?", "risk-policy-boundary", "risk-policy-definition"),
+    ("Khi đầu vào hết hạn, target đã lưu có bị sửa theo số liệu mới không?", "freshness-history", "freshness-window"),
+])
+def test_answer_the_requested_relationship(question, claim, distractor):
+    from chat_service.knowledge import render_evidence
+    data = approved_candidate_passages(distractor, claim)
+    result = render_evidence(data, None, query_hash="c"*64, question=question)
+    assert [r["claim_id"] for r in result["citations"]] == [claim]
+    assert result["coverage"] == "SUPPORTED"
+
+
+@pytest.mark.parametrize(
+    ("question", "claims", "expected"),
+    [
+        (
+            "EW và MVO có bảo đảm lợi nhuận không?",
+            ["ew-definition", "mvo-estimation"],
+            ["mvo-estimation"],
+        ),
+        (
+            "EW có bảo đảm lợi nhuận và hoàn lại vốn gốc không?",
+            ["ew-limit"],
+            ["ew-limit"],
+        ),
+    ],
+)
+def test_compound_assurance_requires_support_for_each_subject_and_object(
+    question, claims, expected
+):
+    from chat_service.knowledge import render_evidence
+
+    data = approved_candidate_passages(*claims)
+    plan = {
+        "supports": [
+            {"chunk_id": p["chunk_id"], "quote": p["text"]} for p in data["passages"]
+        ],
+        "coverage": "SUPPORTED",
+        "candidate_hash": canonical_hash(data),
+    }
+    for proposed in [None, plan]:
+        answer = render_evidence(
+            data,
+            proposed,
+            query_hash="a" * 64,
+            question=question,
+            metadata={"reason": "VERIFIED"},
+        )
+        assert [p["claim_id"] for p in answer["citations"]] == expected
+        assert answer["coverage"] == "PARTIAL"
+
+
+def test_verbatim_substring_cannot_drop_the_negation_of_a_guarantee():
+    from chat_service.knowledge import render_evidence
+
+    data = approved_candidate_passages("ew-limit")
+    plan = {
+        "supports": [
+            {"chunk_id": data["passages"][0]["chunk_id"], "quote": "bảo đảm lợi nhuận"}
+        ],
+        "coverage": "SUPPORTED",
+        "candidate_hash": canonical_hash(data),
+    }
+    answer = render_evidence(
+        data,
+        plan,
+        query_hash="b" * 64,
+        question="EW có bảo đảm lợi nhuận không?",
+        metadata={"reason": "VERIFIED"},
+    )
+    assert answer["selection_reason"] == "INVALID_REFERENCES"
+    assert "không bảo đảm lợi nhuận" in answer["citations"][0]["text"]
+
+
+def test_clause_selection_reports_exact_unanswered_question_and_rejects_bad_spans():
+    from chat_service.knowledge import render_evidence, knowledge_answer
+    data = candidates()
+    p = data["passages"][0]
+    q = "EW là gì? Giá vàng ngày mai bao nhiêu?"
+    parts = [{"index": 0, "chunk_id": p["chunk_id"], "quote": p["text"]},
+             {"index": 1, "chunk_id": None, "quote": None}]
+    def run(parts):
+        return render_evidence(data, {"candidate_hash": canonical_hash(data), "parts":parts},
+                               query_hash="b"*64, metadata={"reason":"VERIFIED"}, question=q)
+    ev = run(parts)
+    assert ev["selection_reason"] == "VERIFIED_CLAUSES"
+    assert ev["coverage"] == "PARTIAL" and "Giá vàng ngày mai bao nhiêu" in knowledge_answer(ev)
+    assert [(c["chunk_id"], c["text_hash"]) for c in ev["citations"]] == [(p["chunk_id"], p["text_hash"])]
+    for bad in ([parts[0]], [parts[1],parts[1]], [dict(parts[0],quote="Một câu hoàn toàn tự tạo"),parts[1]]):
+        assert run(bad)["selection_reason"] == "INVALID_REFERENCES"
+
+
+def test_provider_rewrite_only_after_empty_lexical_result(chat, monkeypatch):
+    c, s, tools = chat
+    data = candidates()
+    calls = []
+    original = tools.call
+    def retrieve(job, tool, args):
+        if tool != "retrieve_knowledge":
+            return original(job, tool, args)
+        if args["query"] == "equal weight":
+            return data
+        return data | {"reason": "NO_EVIDENCE", "passages": []}
+    worker = Worker(s, tools)
+    def generate(purpose, context, schema):
+        calls.append((purpose, context))
+        return {"query":"equal weight"}, {"reason":"VERIFIED"}
+    monkeypatch.setenv("CHAT_KNOWLEDGE_REWRITE", "1")
+    monkeypatch.setenv("CHAT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "rewrite-test")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "0.01")
+    monkeypatch.setattr(tools, "call", retrieve)
+    monkeypatch.setattr(worker.dialogue.provider, "generate", generate)
+    cid = conversation(c)
+    question = "Cách chia vốn cho user@example.org?"
+    assert send(c, cid, intent="knowledge", content=question).status_code == 202
+    assert worker.tick()
+    ev = c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()[-1]["structured"]["knowledge"]
+    assert calls == [("knowledge_rewrite", {"question": "Cách chia vốn cho [redacted]?", "previous_topic": None})]
+    assert ev["rewritten_query_hash"] and ev["citations"] and not tools.allocations
+
+
+def test_clause_split_keeps_compound_pair_and_separates_new_question():
+    from chat_service.knowledge import question_parts
+    assert question_parts("MVO cân bằng lợi nhuận và rủi ro, còn RSI đo gì?") == [
+        "MVO cân bằng lợi nhuận và rủi ro", "RSI đo gì"
+    ]
+
+
+def test_clause_quote_cannot_reverse_a_negative_source_statement():
+    from chat_service.knowledge import render_evidence
+    text = "Chiến lược này không thực hiện giao dịch khi chấp nhận mục tiêu."
+    passage = candidates()["passages"][0] | {"text": text, "text_hash": hashlib.sha256(text.encode()).hexdigest()}
+    data = candidates() | {"passages": [passage]}
+    plan = {"candidate_hash": canonical_hash(data), "parts": [
+        {"index": 0, "chunk_id": passage["chunk_id"], "quote": "thực hiện giao dịch khi chấp nhận mục tiêu"}
+    ]}
+    result = render_evidence(data, plan, metadata={"reason": "VERIFIED"}, question="Chiến lược này làm gì?", query_hash="b"*64)
+    assert result["selection_reason"] == "INVALID_REFERENCES"
+
+
+def test_checked_clause_requires_requested_limitation_in_source():
+    from chat_service.knowledge import render_evidence
+    data = candidates()
+    p = data["passages"][0]
+    plan = {"candidate_hash": canonical_hash(data), "parts": [{"index": 0, "chunk_id": p["chunk_id"], "quote": p["text"]}]}
+    result = render_evidence(data, plan, metadata={"reason":"VERIFIED"}, question="EW có nhược điểm gì?", query_hash="b"*64)
+    assert result["selection_reason"] == "INVALID_REFERENCES" and not result["citations"]
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_asset_allocation_definition_needs_its_own_source(chat, monkeypatch, present):
+    c, sessions, tools = chat
+    cid = conversation(c)
+    data = approved_candidate_passages("target-not-holdings")
+    from pathlib import Path
+    from knowledge_service.corpus import load_manifest
+    release = load_manifest(Path(__file__).resolve().parents[2] / "services/knowledge/corpus/release-20261124")
+    doc = next(d for d in release.documents if d.key == "asset-allocation")
+    claim = next(c for c in doc.claims if c.id == "asset-allocation-definition")
+    definition = claim.text
+    if present:
+        data["passages"].append(data["passages"][0] | dict(
+            chunk_id=str(uuid4()), claim_id=claim.id, document_title=doc.title, text=definition,
+            source_url=claim.source_url, text_hash=hashlib.sha256(definition.encode()).hexdigest()))
+    original = tools.call
+    monkeypatch.setattr(tools, "call", lambda j,t,a: data if t=="retrieve_knowledge" else original(j,t,a))
+    assert send(c,cid,intent=None,strategy=None,content="Phân bổ tài sản là gì?").status_code == 202
+    worker = Worker(sessions, tools)
+    monkeypatch.setattr(worker.dialogue, "select_knowledge", lambda *a, **kw: pytest.fail("Explicit glossary term needs no classifier"))
+    assert worker.tick()
+    msg=c.get(f"/api/v1/conversations/{cid}/messages",headers=headers()).json()[-1]
+    evidence=msg["structured"]["knowledge"]
+    assert [p["claim_id"] for p in evidence["citations"]] == (["asset-allocation-definition"] if present else [])
+    assert msg["content"] == (definition if present else "Chưa có nguồn phù hợp trong tài liệu đã duyệt để trả lời câu hỏi này.")
+    assert evidence["coverage"] == ("SUPPORTED" if present else "MISSING")
+    assert not tools.allocations

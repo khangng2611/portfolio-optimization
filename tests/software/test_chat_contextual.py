@@ -154,7 +154,16 @@ def test_vietnamese_context_eval_offline(chat, monkeypatch, case):
     from test_chat_knowledge import candidates
 
     data = candidates()
-    data["passages"][0]["claim_id"] = "mvo-definition"
+    from hashlib import sha256
+
+    passage = data["passages"][0]
+    text = "MVO tìm sự đánh đổi giữa lợi nhuận kỳ vọng và phương sai danh mục."
+    passage.update(
+        claim_id="mvo-definition",
+        document_title="MVO",
+        text=text,
+        text_hash=sha256(text.encode()).hexdigest(),
+    )
     empty = data | {"passages": [], "reason": "NO_EVIDENCE"}
     original = tools.call
     monkeypatch.setattr(
@@ -173,11 +182,18 @@ def test_vietnamese_context_eval_offline(chat, monkeypatch, case):
         assert Worker(sessions, tools).tick()
         result = last(c, cid)
         assert result["structured"]["type"] == case["types"][index]
-        if result["structured"]["type"] not in {"confirmation"} and case.get(
+        if result["structured"]["type"] == "knowledge":
+            if case.get("claim"):
+                assert result["content"] == text
+            else:
+                assert "Chưa có nguồn phù hợp" in result["content"]
+        elif result["structured"]["type"] not in {"confirmation"} and case.get(
             "developer_enabled", True
         ):
             assert result["content"] == case["reply"]
-    assert bool(response_calls) == case.get("developer_enabled", True)
+    assert bool(response_calls) == (
+        case.get("developer_enabled", True) and "knowledge" not in case["types"]
+    )
     assert not tools.allocations
     if case.get("fields"):
         assert result["structured"]["fields"] == case["fields"]
@@ -269,3 +285,90 @@ def test_contextual_reply_still_runs_after_six_second_interpretation(chat, monke
     send(c, cid, content="Bạn có thể làm gì?", intent=None, strategy=None)
     assert worker.tick()
     assert last(c, cid)["content"] == "Bạn muốn mình giúp phần nào?"
+
+
+@pytest.mark.parametrize("mode", ["openai_adapter", "disabled", "quota"])
+def test_source_routing_uses_owner_target_or_requests_source(chat, monkeypatch, mode):
+    from uuid import uuid4
+
+    c, sessions, tools = chat
+    pid = tools.summary["id"]
+    tools.summary.update(scope="saved_target", accepted_target={
+        "id": str(uuid4()), "recommendation_id": str(uuid4()), "accepted_at": "2026-11-24T05:00:00Z",
+        "asset_ids": ["VFF", "AAA"], "weights": ["0.41", "0.59"],
+    })
+    called = []
+
+    def serve(req):
+        assert mode == "openai_adapter"
+        body = json.loads(req.content)
+        assert set(json.loads(body["input"])) == {"question", "has_portfolio", "has_recommendation", "pending_portfolio"}
+        called.append(body["text"]["format"]["name"])
+        return httpx.Response(200, json=response({"source": "saved_target"}))
+
+    configured(monkeypatch, serve)
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "unit")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "0.50")
+    if mode == "disabled":
+        monkeypatch.setenv("CHAT_LLM_ENABLED", "0")
+    if mode == "quota":
+        monkeypatch.setenv("CHAT_LLM_DAILY_CALL_LIMIT", "0")
+    cid = conversation(c, pid)
+    for question in ["Phân bổ mà tôi đã chấp nhận là gì?", "Mục tiêu của tôi trong danh mục này là gì?"]:
+        send(c, cid, content=question, intent=None, strategy=None)
+        assert Worker(sessions, tools).tick()
+        msg = last(c, cid)
+        if mode != "openai_adapter" and question.startswith("Mục tiêu"):
+            assert msg["structured"]["fields"] == ["source"]
+            send(c, cid, content="Mình muốn xem bản đã lưu", strategy=None, intent=None)
+            assert Worker(sessions, tools).tick()
+            msg = last(c, cid)
+        assert msg["structured"]["facts"]["accepted_target"] == tools.summary["accepted_target"]
+        assert "VFF 41,00%" in msg["content"]
+    assert bool(called) == (mode == "openai_adapter")
+    assert not tools.allocations
+
+
+@pytest.mark.parametrize(("question", "expected"), [
+    ("Nếu tôi đã lưu phân bổ thì có tự giao dịch không?", "knowledge"),
+    ("Tạo đề xuất mới cho danh mục đã lưu của tôi", "allocation"),
+    ("Mục tiêu đã lưu trong hồ sơ rủi ro là gì?", "profile"),
+    ("Mục tiêu đã lưu khác gì với tài sản đang nắm giữ?", "knowledge"),
+])
+def test_saved_words_do_not_override_object_or_action(question, expected):
+    assert intent_of({"content": question}) == expected
+
+
+@pytest.mark.parametrize(("question", "expected"), [
+    ("Đề xuất đã lưu của mình có gì?", "explain"),
+    ("Phân bổ trong bản nháp đã lưu gồm gì?", "source_choice"),
+    ("Cơ cấu lần trước mình bấm đồng ý gồm gì?", "source_choice"),
+])
+def test_saved_proposal_and_accepted_allocation_are_distinct(question, expected):
+    assert intent_of({"content": question}) == expected
+
+
+@pytest.mark.parametrize("output", [{"source": "allocation"}, {"source": "saved_target", "portfolio_id": "other"}])
+def test_source_classifier_cannot_supply_an_action_or_record(chat, monkeypatch, output):
+    c, sessions, tools = chat
+    configured(monkeypatch, lambda _: httpx.Response(200, json=response(output)))
+    monkeypatch.setenv("KNOWLEDGE_PAID_APPROVAL", "unit")
+    monkeypatch.setenv("KNOWLEDGE_BUDGET_USD", "0.5")
+    cid = conversation(c, tools.summary["id"])
+    send(c, cid, intent=None, strategy=None, content="Mục tiêu đang nói ở đây là gì?")
+    assert Worker(sessions, tools).tick()
+    card = last(c, cid)["structured"]
+    assert card["fields"] == ["source"]
+    assert card["dialogue"]["reason"] == "UNVERIFIED_OUTPUT"
+    assert not tools.allocations
+
+
+def test_dated_saved_target_does_not_answer_with_current_target(chat):
+    c, sessions, tools = chat
+    tools.summary.update(scope="saved_target", accepted_target=None)
+    cid = conversation(c, tools.summary["id"])
+    send(c, cid, intent=None, strategy=None, content="Mục tiêu tôi đã lưu ngày 01/09/2026 gồm gì?")
+    assert Worker(sessions, tools).tick()
+    message = last(c, cid)
+    assert message["structured"]["fields"] == ["recommendation_id"]
+    assert "lịch sử" in message["content"]

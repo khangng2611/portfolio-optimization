@@ -1,0 +1,387 @@
+{
+  "name": "knowledge-vi-v2-20261123",
+  "parser_version": "markdown-claims-v1",
+  "chunker_version": "approved-claims-v1",
+  "review": "Vietnamese editorial candidate. Source locators checked on 2026-11-23. Independent operator review and activation are pending.",
+  "documents": [
+    {
+      "key": "ew",
+      "version": 20261123,
+      "title": "EW · chia đều",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "ew.md",
+      "content_hash": "fdc58f3ef6d43516ed902015d6595a718aaa5198644bcbe3a86656c9088848d4",
+      "published_at": null,
+      "available_at": "2026-11-23T15:20:10.281375+00:00",
+      "claims": [
+        {
+          "id": "ew-definition",
+          "text": "EW (Equal Weight) chia đều tỷ trọng giữa các tài sản được chọn trong tập đầu vào.",
+          "source_title": "Project numerical contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/packages/portfolio-core/src/portfolio_core/allocator.py",
+          "locator": "EW"
+        },
+        {
+          "id": "ew-limit",
+          "text": "EW (Equal Weight) không bảo đảm lợi nhuận. Khi các tài sản cùng giảm giá, danh mục chia đều vẫn có thể lỗ. Tỷ trọng bằng nhau cũng không bảo đảm mỗi tài sản đóng góp rủi ro như nhau.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "§2.1 · Portfolio return and variance"
+        }
+      ]
+    },
+    {
+      "key": "mvo",
+      "version": 1,
+      "title": "MVO · trung bình phương sai",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "mvo.md",
+      "content_hash": "15710e845786a2bba0a0ea67eb64e98396d7bbf88d7b4782f6ff44f4a154e674",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "mvo-definition",
+          "text": "MVO tìm sự đánh đổi giữa lợi nhuận kỳ vọng và phương sai danh mục, dưới các ràng buộc đã chọn.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Mean–variance model"
+        },
+        {
+          "id": "mvo-estimation",
+          "text": "Đầu vào MVO là các ước lượng. Nghiệm tối ưu theo mô hình không bảo đảm kết quả đầu tư tương lai.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Mean–variance model"
+        }
+      ]
+    },
+    {
+      "key": "covariance",
+      "version": 1,
+      "title": "Hiệp phương sai · covariance",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "covariance.md",
+      "content_hash": "84b3370002e04c5e878f3eaca47658a7093820a1e39b598ea010cf08a32c830f",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "covariance-definition",
+          "text": "Ma trận hiệp phương sai mô tả biến động riêng và mức đồng biến giữa các lợi suất tài sản.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Portfolio variance"
+        },
+        {
+          "id": "covariance-risk",
+          "text": "Rủi ro danh mục phụ thuộc cả tỷ trọng lẫn quan hệ giữa tài sản, không chỉ rủi ro từng tài sản.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Portfolio variance"
+        }
+      ]
+    },
+    {
+      "key": "diversification",
+      "version": 1,
+      "title": "Đa dạng hóa",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "diversification.md",
+      "content_hash": "eea6836399d2f5c966aa6b3653af2080e8809a30446ed5ced47616fd997cb6ee",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "diversification-definition",
+          "text": "Đa dạng hóa kết hợp nhiều tài sản để giảm rủi ro riêng khi mức đồng biến không hoàn toàn.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Diversification"
+        },
+        {
+          "id": "diversification-limit",
+          "text": "Đa dạng hóa không loại hết rủi ro thị trường hoặc bảo đảm danh mục không bị lỗ.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Diversification"
+        }
+      ]
+    },
+    {
+      "key": "black-litterman",
+      "version": 20261123,
+      "title": "Black–Litterman · BL",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "black-litterman.md",
+      "content_hash": "5bf458eaabe27d913d44fdb7f74c3fd0f0865bd777b6d98b50f66816a481e52a",
+      "published_at": null,
+      "available_at": "2026-11-23T15:20:10.281375+00:00",
+      "claims": [
+        {
+          "id": "bl-definition",
+          "text": "Black–Litterman kết hợp thông tin prior với views có độ bất định để cập nhật ước lượng lợi nhuận.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/estimationerror.html",
+          "locator": "4.1.1 Black–Litterman"
+        },
+        {
+          "id": "bl-uncertainty",
+          "text": "Độ tin cậy của views ảnh hưởng mức cập nhật; đây là giả định mô hình, không phải bảo đảm lợi nhuận.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/estimationerror.html",
+          "locator": "4.1.1 Black–Litterman"
+        },
+        {
+          "id": "bl-method-ml",
+          "text": "Khi dùng Black–Litterman với ML, hệ thống kết hợp lợi suất cân bằng của thị trường với các dự báo lợi suất và độ tin cậy của chúng. Kết quả là ước lượng lợi suất mới dùng để tối ưu tỷ trọng trong các giới hạn của danh mục.",
+          "source_title": "Project numerical contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/packages/portfolio-core/src/portfolio_core/allocator.py#L143-L161",
+          "locator": "_posterior and allocate"
+        }
+      ]
+    },
+    {
+      "key": "ml-views",
+      "version": 20261123,
+      "title": "ML views · BL_ML",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "ml-views.md",
+      "content_hash": "a18011a682774416ac137915951b8b414113dbcfd9f5314a1a7b9b60e4d21c2c",
+      "published_at": null,
+      "available_at": "2026-11-23T15:20:10.281375+00:00",
+      "claims": [
+        {
+          "id": "ml-views-definition",
+          "text": "Trong ứng dụng, BL_ML sử dụng views từ mô hình đã được duyệt và phát hành tương thích với dữ liệu đầu vào.",
+          "source_title": "Project model serving contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "7.4 Train, publish, serve"
+        },
+        {
+          "id": "ml-views-limit",
+          "text": "Views ML là dự báo lợi suất có sai số. Mô hình có thể dự báo sai cả chiều tăng giảm. Điểm tin cậy của một view không cho biết xác suất dự báo đó đúng.",
+          "source_title": "Giải thích phân bổ có evidence",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/docs/software/ALLOCATION_EXPLANATION.md#L43-L63",
+          "locator": "Raw forecast, applied view and confidence"
+        }
+      ]
+    },
+    {
+      "key": "risk-policy",
+      "version": 1,
+      "title": "Hồ sơ rủi ro và policy",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "risk-policy.md",
+      "content_hash": "4f890fb8050f3f0cde5c2526a7f06204778470bedf92765c7766c3f62bf7193e",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "risk-policy-definition",
+          "text": "Ứng dụng biên dịch câu trả lời rủi ro đã xác nhận thành policy và ràng buộc có phiên bản.",
+          "source_title": "Project risk policy contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "8.1 Risk policy compiler"
+        },
+        {
+          "id": "risk-policy-boundary",
+          "text": "Thay hồ sơ cần xem trước và xác nhận rõ ràng. Câu hỏi kiến thức không tự thay hồ sơ hoặc giới hạn danh mục.",
+          "source_title": "Project risk policy contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "8.1 Risk policy compiler"
+        }
+      ]
+    },
+    {
+      "key": "target-holdings",
+      "version": 1,
+      "title": "Mục tiêu và tài sản nắm giữ",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "target-holdings.md",
+      "content_hash": "c6be43c2100024e3fb099972f547213dbbda6fb107d9b962faf04270e536cc08",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "target-not-holdings",
+          "text": "Target là phân bổ mục tiêu đã chấp nhận trong ứng dụng; target không phải bằng chứng tài sản đang nắm giữ.",
+          "source_title": "Project onboarding and targets",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/WEEKS_6_7.md",
+          "locator": "Targets"
+        },
+        {
+          "id": "accept-not-trade",
+          "text": "Chấp nhận đề xuất chỉ lưu mục tiêu. Ứng dụng không tự đặt lệnh mua bán qua hành động đó.",
+          "source_title": "Project onboarding and targets",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/WEEKS_6_7.md",
+          "locator": "Targets"
+        }
+      ]
+    },
+    {
+      "key": "freshness",
+      "version": 20261123,
+      "title": "Độ mới dữ liệu · freshness",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "freshness.md",
+      "content_hash": "1ac69ee115c5ede9095c57e74ad5057a72dd5dad848dc45320b96b06c9b077b4",
+      "published_at": null,
+      "available_at": "2026-11-23T15:20:10.281375+00:00",
+      "claims": [
+        {
+          "id": "freshness-definition",
+          "text": "Đề xuất mới phải dùng dữ liệu đủ mới theo chính sách hệ thống; nguồn và thời điểm được ghim trong kết quả.",
+          "source_title": "Project data contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "10.3 Availability and replay"
+        },
+        {
+          "id": "freshness-history",
+          "text": "Tỷ trọng và nguồn dữ liệu của một mục tiêu đã lưu được ghim theo đề xuất gốc. Dữ liệu mới hết hạn có thể chặn lần tính tiếp theo, còn người dùng vẫn xem được lịch sử mục tiêu của mình.",
+          "source_title": "Onboarding, accepted target và approved model serving",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/docs/software/WEEKS_6_7.md#L51-L60",
+          "locator": "Target history and immutable accepted target"
+        },
+        {
+          "id": "freshness-window",
+          "text": "Với rổ tài sản đã chọn, hệ thống chỉ xét các quan sát đã khả dụng tại lúc kiểm tra. Tuổi dữ liệu tính theo ngày lịch từ ngày quan sát tới ngày kiểm tra. Quan sát đủ điều kiện gần nhất quá 7 ngày sẽ chặn việc tạo đề xuất mới.",
+          "source_title": "Selection panel",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/services/quant-serving/src/quant_service/selection_panel.py#L241-L285",
+          "locator": "availability and project"
+        },
+        {
+          "id": "vff-nav-availability",
+          "text": "Với dữ liệu VFF theo chính sách baseline hoặc selected v1, hệ thống chờ 5 phiên giao dịch để NAV đủ điều kiện rồi kiểm tra tuổi NAV theo ngưỡng 7 ngày lịch. Với selected live NAV v2, NAV đã thu thập và xác minh dùng được từ lúc khả dụng mà không chờ thêm 5 phiên. Cả hai chính sách tính tuổi từ ngày NAV.",
+          "source_title": "Phục vụ Phase 1 trên stack local",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/docs/software/PHASE1_LOCAL_SERVING.md#L3-L14",
+          "locator": "Chính sách NAV VFF theo phiên bản snapshot"
+        }
+      ]
+    },
+    {
+      "key": "model-approval",
+      "version": 20261123,
+      "title": "Phê duyệt mô hình",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "model-approval.md",
+      "content_hash": "963a8c4c6ceb60fad45d54307ec1f7aaf5234cd1922c3710e2af6f0e562088a1",
+      "published_at": null,
+      "available_at": "2026-11-23T15:20:10.281375+00:00",
+      "claims": [
+        {
+          "id": "model-approval-definition",
+          "text": "Huấn luyện tạo candidate. Reviewer riêng phải duyệt trước khi operator phát hành mô hình cho serving.",
+          "source_title": "Project model lifecycle",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/IMPLEMENTATION_STATUS.md",
+          "locator": "P1 model operations"
+        },
+        {
+          "id": "model-approval-boundary",
+          "text": "Chat không có quyền tự phê duyệt hay promote mô hình. Trạng thái duyệt không bảo đảm hiệu suất tương lai.",
+          "source_title": "Project model lifecycle",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/IMPLEMENTATION_STATUS.md",
+          "locator": "P1 model operations"
+        },
+        {
+          "id": "model-approval-reviewer",
+          "text": "Quyết định duyệt hoặc từ chối một model candidate thuộc người có vai trò model-reviewer và quyền ml:review. Hệ thống lưu quyết định theo phiên bản. Chat và người gửi yêu cầu đầu tư không thể tự duyệt model.",
+          "source_title": "ML Platform · Human model operations",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/services/ml-platform/src/ml_platform/main.py#L299-L369",
+          "locator": "review authorization and audited decision"
+        }
+      ]
+    },
+    {
+      "key": "fees-turnover",
+      "version": 1,
+      "title": "Phí và turnover",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "fees-turnover.md",
+      "content_hash": "b23caad1e9ee17b90d2b44d94da70ab56190e9152d9bf4fa74165e0f98e602d7",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "turnover-definition",
+          "text": "Turnover gắn với mua bán để thay đổi cơ cấu danh mục; giao dịch thực tế có thể phát sinh chi phí.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/transaction.html",
+          "locator": "6 Transaction costs"
+        },
+        {
+          "id": "fees-limit",
+          "text": "Phí giao dịch, chênh lệch giá mua bán và trượt giá có thể làm giảm kết quả sau chi phí so với mô phỏng bỏ qua chúng.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/transaction.html",
+          "locator": "6 Transaction costs"
+        }
+      ]
+    },
+    {
+      "key": "backtest",
+      "version": 1,
+      "title": "Giới hạn backtest",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "backtest.md",
+      "content_hash": "69b2733d3232eabc5324a788cbec4e1a476da6d942e7a921134ac9c7087e171f",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "backtest-definition",
+          "text": "Backtest mô phỏng chiến lược trên dữ liệu quá khứ; thử nhiều cấu hình có thể dẫn đến chọn quá khớp.",
+          "source_title": "Bailey et al. The Probability of Backtest Overfitting",
+          "source_url": "https://www.davidhbailey.com/dhbpapers/backtest-prob.pdf",
+          "locator": "Abstract; introduction"
+        },
+        {
+          "id": "backtest-limit",
+          "text": "Kết quả quá khứ không chứng minh lợi nhuận tương lai. Cần kiểm tra ngoài mẫu, thời điểm khả dụng và giả định chi phí.",
+          "source_title": "Bailey et al. The Probability of Backtest Overfitting",
+          "source_url": "https://www.davidhbailey.com/dhbpapers/backtest-prob.pdf",
+          "locator": "Abstract; introduction"
+        }
+      ]
+    },
+    {
+      "key": "proposal-release",
+      "version": 1,
+      "title": "Quy tắc tạo đề xuất phân bổ",
+      "path": "proposal-release.md",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "published_at": null,
+      "claims": [
+        {
+          "id": "proposal-pause-rule",
+          "text": "Khi tính năng tạo đề xuất phân bổ mới tạm dừng, người dùng vẫn có thể xem lại các đề xuất đã lưu của mình. Để biết hiện đã tạo được hay chưa, ứng dụng cần kiểm tra trạng thái phát hành và dữ liệu của đúng danh mục.",
+          "source_title": "Kế hoạch chuyển sang một đề xuất phân bổ HYBRID",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/docs/superpowers/plans/2026-11-22-system-allocation-hybrid.md#L57-L65",
+          "locator": "Vận hành pilot và cổng định lượng"
+        },
+        {
+          "id": "proposal-method-comparison",
+          "text": "Trong chế độ đề xuất HYBRID, hệ thống phối kết quả của hai nhánh MVO và Black–Litterman dùng views ML. Người dùng có thể xem EW và MVO làm đối chứng để so sánh với đề xuất. Các đối chứng chỉ dùng để tham khảo.",
+          "source_title": "Kế hoạch chuyển sang một đề xuất phân bổ HYBRID",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/ca0043b4a95c8d1fae0a5ec0f373377d307e00fb/docs/superpowers/plans/2026-11-22-system-allocation-hybrid.md#L3-L18",
+          "locator": "Phương pháp và vai trò của đối chứng"
+        }
+      ],
+      "available_at": "2026-11-23T15:20:10.281375+00:00",
+      "content_hash": "c0f60c10212175f8ef9c411116b2afcfdf1e3f08454986f00290ba327564c51d"
+    }
+  ]
+}

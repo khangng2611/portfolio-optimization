@@ -51,6 +51,7 @@ def seed(sessions, cid, pid, *, recent=False):
         "Đề xuất nào?",
         "Vì sao phân bổ như vậy?",
         "Giải thích lại đề xuất vừa rồi",
+        "Hệ thống tính đề xuất này như thế nào?",
     ],
 )
 @pytest.mark.parametrize("explicit", [False, True])
@@ -91,6 +92,27 @@ def test_followup_resolves_last_recommendation_without_paid_intent(
     assert [
         args["resource_id"] for name, args in calls if name == "get_recommendation"
     ] == [rid]
+
+
+def test_method_question_explains_the_saved_hybrid_without_creating_a_proposal(chat, monkeypatch):
+    c, sessions, tools = chat
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "0")
+    pid = tools.summary["id"]
+    cid = conversation(c, pid)
+    rid = seed(sessions, cid, pid)
+    original = tools.call
+
+    def call(job, name, args):
+        result = original(job, name, args)
+        return result | {"strategy": "HYBRID"} if name == "get_recommendation" else result
+
+    monkeypatch.setattr(tools, "call", call)
+    assert send(c, cid, content="Hệ thống tính đề xuất này như thế nào?", intent=None, strategy=None).status_code == 202
+    assert Worker(sessions, tools).tick()
+    answer = c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()[-1]
+    assert answer["structured"]["recommendation_id"] == rid
+    assert "Black–Litterman" in answer["content"] and "Machine Learning" in answer["content"]
+    assert not tools.allocations
 
 
 def test_reference_ignores_other_conversations_and_changed_portfolio(chat):
@@ -249,3 +271,43 @@ def test_requested_explanation_uses_method_from_canonical_facts_and_cited_passag
     assert card["facts"]["strategy"] == "MVO"
     assert card["facts_hash"] == canonical_hash(card["facts"])
     assert card["knowledge"]["citations"][0]["text"] == data["passages"][0]["text"]
+
+
+def test_switching_away_and_back_starts_new_history_scope(chat, monkeypatch):
+    c, sessions, tools = chat
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "1")
+    pid = tools.summary["id"]
+    cid = conversation(c, pid)
+    seed(sessions, cid, pid, recent=True)
+    send(c, cid, content="Giá vàng hôm nay", intent=None, portfolio_id=str(uuid4()))
+    assert Worker(sessions, tools).tick()
+    send(c, cid, content="Giải thích đề xuất vừa xem", intent=None, portfolio_id=pid)
+    job = Queue(sessions).claim()
+    context, reference = Dialogue(sessions).context(job)
+    assert reference is None and context["history"] == []
+
+
+def test_lexical_followup_reuses_only_the_last_cited_topic(chat, monkeypatch):
+    from test_chat_knowledge import candidates
+
+    c, sessions, tools = chat
+    monkeypatch.setenv("CHAT_LLM_ENABLED", "0")
+    cid = conversation(c)
+    original = tools.call
+    result = candidates()
+    queries = []
+
+    def call(job, name, args):
+        if name == "retrieve_knowledge":
+            if "corpus_id" not in args:
+                queries.append(args["query"])
+            return result
+        return original(job, name, args)
+
+    monkeypatch.setattr(tools, "call", call)
+    for question in ("EW là gì?", "Vậy nó có hạn chế gì?"):
+        send(c, cid, content=question, intent=None, strategy=None)
+        assert Worker(sessions, tools).tick()
+    assert len(queries) == 2 and "EW" in queries[-1] and "hạn chế" in queries[-1]
+    last = c.get(f"/api/v1/conversations/{cid}/messages", headers=headers()).json()[-1]
+    assert last["structured"]["knowledge"]["citations"] == []  # definition only

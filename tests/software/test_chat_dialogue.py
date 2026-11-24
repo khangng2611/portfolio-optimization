@@ -323,3 +323,15 @@ def test_revoked_owner_grant_blocks_paid_interpretation(chat, monkeypatch):
     assert not calls
     with s() as db:
         assert db.scalar(select(func.count()).select_from(ProviderInvocation)) == 0
+
+
+def test_provider_cannot_turn_a_read_question_into_an_allocation(chat, monkeypatch):
+    c, s, t = chat
+    configured(monkeypatch, lambda _: httpx.Response(200, json=response(
+        {"intent": "allocation", "strategy": None, "reference": "none"})))
+    cid = conversation(c, t.summary["id"])
+    send(c, cid, content="Một khoản đầu tư được ghi nhận ra sao?", intent=None, strategy=None)
+    run(s, t)
+    assert last(c, cid)["structured"]["type"] != "confirmation"
+    assert last(c, cid)["structured"].get("fields") != ["strategy"]
+    assert not t.allocations

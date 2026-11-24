@@ -1,0 +1,352 @@
+{
+  "name": "knowledge-vi-v1.1-20261124",
+  "parser_version": "markdown-claims-v1",
+  "chunker_version": "approved-claims-v1",
+  "review": "Retains the active v1 documents and adds a Vietnamese glossary definition checked against Investor.gov on 2026-11-24.",
+  "documents": [
+    {
+      "key": "ew",
+      "version": 1,
+      "title": "EW · chia đều",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "ew.md",
+      "content_hash": "95344baf4da5755cd921339059a80732f23c294e2b3805ff3b3459d89d91beb3",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "ew-definition",
+          "text": "EW (Equal Weight) chia đều tỷ trọng giữa các tài sản được chọn trong tập đầu vào.",
+          "source_title": "Project numerical contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/packages/portfolio-core/src/portfolio_core/allocator.py",
+          "locator": "EW"
+        },
+        {
+          "id": "ew-limit",
+          "text": "Chia đều không đồng nghĩa chia đều rủi ro; mỗi tài sản có mức biến động và quan hệ với tài sản khác riêng.",
+          "source_title": "Project numerical contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/packages/portfolio-core/src/portfolio_core/allocator.py",
+          "locator": "EW"
+        }
+      ]
+    },
+    {
+      "key": "mvo",
+      "version": 1,
+      "title": "MVO · trung bình phương sai",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "mvo.md",
+      "content_hash": "15710e845786a2bba0a0ea67eb64e98396d7bbf88d7b4782f6ff44f4a154e674",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "mvo-definition",
+          "text": "MVO tìm sự đánh đổi giữa lợi nhuận kỳ vọng và phương sai danh mục, dưới các ràng buộc đã chọn.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Mean–variance model"
+        },
+        {
+          "id": "mvo-estimation",
+          "text": "Đầu vào MVO là các ước lượng. Nghiệm tối ưu theo mô hình không bảo đảm kết quả đầu tư tương lai.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Mean–variance model"
+        }
+      ]
+    },
+    {
+      "key": "covariance",
+      "version": 1,
+      "title": "Hiệp phương sai · covariance",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "covariance.md",
+      "content_hash": "84b3370002e04c5e878f3eaca47658a7093820a1e39b598ea010cf08a32c830f",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "covariance-definition",
+          "text": "Ma trận hiệp phương sai mô tả biến động riêng và mức đồng biến giữa các lợi suất tài sản.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Portfolio variance"
+        },
+        {
+          "id": "covariance-risk",
+          "text": "Rủi ro danh mục phụ thuộc cả tỷ trọng lẫn quan hệ giữa tài sản, không chỉ rủi ro từng tài sản.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Portfolio variance"
+        }
+      ]
+    },
+    {
+      "key": "diversification",
+      "version": 1,
+      "title": "Đa dạng hóa",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "diversification.md",
+      "content_hash": "eea6836399d2f5c966aa6b3653af2080e8809a30446ed5ced47616fd997cb6ee",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "diversification-definition",
+          "text": "Đa dạng hóa kết hợp nhiều tài sản để giảm rủi ro riêng khi mức đồng biến không hoàn toàn.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Diversification"
+        },
+        {
+          "id": "diversification-limit",
+          "text": "Đa dạng hóa không loại hết rủi ro thị trường hoặc bảo đảm danh mục không bị lỗ.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/markowitz.html",
+          "locator": "2.1 Diversification"
+        }
+      ]
+    },
+    {
+      "key": "black-litterman",
+      "version": 1,
+      "title": "Black–Litterman · BL",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "black-litterman.md",
+      "content_hash": "5d2b332fab2bea1bbdf07560024ad5e683dbd199f84bbbb4a867f1d11186079e",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "bl-definition",
+          "text": "Black–Litterman kết hợp thông tin prior với views có độ bất định để cập nhật ước lượng lợi nhuận.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/estimationerror.html",
+          "locator": "4.1.1 Black–Litterman"
+        },
+        {
+          "id": "bl-uncertainty",
+          "text": "Độ tin cậy của views ảnh hưởng mức cập nhật; đây là giả định mô hình, không phải bảo đảm lợi nhuận.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/estimationerror.html",
+          "locator": "4.1.1 Black–Litterman"
+        }
+      ]
+    },
+    {
+      "key": "ml-views",
+      "version": 1,
+      "title": "ML views · BL_ML",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "ml-views.md",
+      "content_hash": "b9d2127ee4de7ce48d5c4eb89df138fcb7e2bad63dfe9968b45dff44765751f1",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "ml-views-definition",
+          "text": "Trong ứng dụng, BL_ML sử dụng views từ mô hình đã được duyệt và phát hành tương thích với dữ liệu đầu vào.",
+          "source_title": "Project model serving contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "7.4 Train, publish, serve"
+        },
+        {
+          "id": "ml-views-limit",
+          "text": "Views do ML tạo là ước lượng có sai số. Chúng không phải lời hứa giá hoặc tỷ suất sinh lời thực tế.",
+          "source_title": "Project model serving contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "7.4 Train, publish, serve"
+        }
+      ]
+    },
+    {
+      "key": "risk-policy",
+      "version": 1,
+      "title": "Hồ sơ rủi ro và policy",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "risk-policy.md",
+      "content_hash": "4f890fb8050f3f0cde5c2526a7f06204778470bedf92765c7766c3f62bf7193e",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "risk-policy-definition",
+          "text": "Ứng dụng biên dịch câu trả lời rủi ro đã xác nhận thành policy và ràng buộc có phiên bản.",
+          "source_title": "Project risk policy contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "8.1 Risk policy compiler"
+        },
+        {
+          "id": "risk-policy-boundary",
+          "text": "Thay hồ sơ cần xem trước và xác nhận rõ ràng. Câu hỏi kiến thức không tự thay hồ sơ hoặc giới hạn danh mục.",
+          "source_title": "Project risk policy contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "8.1 Risk policy compiler"
+        }
+      ]
+    },
+    {
+      "key": "target-holdings",
+      "version": 1,
+      "title": "Mục tiêu và tài sản nắm giữ",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "target-holdings.md",
+      "content_hash": "c6be43c2100024e3fb099972f547213dbbda6fb107d9b962faf04270e536cc08",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "target-not-holdings",
+          "text": "Target là phân bổ mục tiêu đã chấp nhận trong ứng dụng; target không phải bằng chứng tài sản đang nắm giữ.",
+          "source_title": "Project onboarding and targets",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/WEEKS_6_7.md",
+          "locator": "Targets"
+        },
+        {
+          "id": "accept-not-trade",
+          "text": "Chấp nhận đề xuất chỉ lưu mục tiêu. Ứng dụng không tự đặt lệnh mua bán qua hành động đó.",
+          "source_title": "Project onboarding and targets",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/WEEKS_6_7.md",
+          "locator": "Targets"
+        }
+      ]
+    },
+    {
+      "key": "freshness",
+      "version": 1,
+      "title": "Độ mới dữ liệu · freshness",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "freshness.md",
+      "content_hash": "a80c0c8efe0b90e9e0060f6d3ea224c59e024617bf9a95a0891e427280c44b8f",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "freshness-definition",
+          "text": "Đề xuất mới phải dùng dữ liệu đủ mới theo chính sách hệ thống; nguồn và thời điểm được ghim trong kết quả.",
+          "source_title": "Project data contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "10.3 Availability and replay"
+        },
+        {
+          "id": "freshness-history",
+          "text": "Dữ liệu hiện tại hết hạn không làm thay đổi tỷ trọng hoặc nguồn đã ghim của một target cũ.",
+          "source_title": "Project data contract",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/TECHNICAL_SPECIFICATION_PHASE_2.md",
+          "locator": "10.3 Availability and replay"
+        }
+      ]
+    },
+    {
+      "key": "model-approval",
+      "version": 1,
+      "title": "Phê duyệt mô hình",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "model-approval.md",
+      "content_hash": "d9ea60b0ef584da8e8f7e064ca4eabd4702ca12a7bec789e32a4b0658a679394",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "model-approval-definition",
+          "text": "Huấn luyện tạo candidate. Reviewer riêng phải duyệt trước khi operator phát hành mô hình cho serving.",
+          "source_title": "Project model lifecycle",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/IMPLEMENTATION_STATUS.md",
+          "locator": "P1 model operations"
+        },
+        {
+          "id": "model-approval-boundary",
+          "text": "Chat không có quyền tự phê duyệt hay promote mô hình. Trạng thái duyệt không bảo đảm hiệu suất tương lai.",
+          "source_title": "Project model lifecycle",
+          "source_url": "https://github.com/khangng2611/portfolio-optimization/blob/67540341a7819cfc4cc8ea4b202a325bafd0b583/docs/software/IMPLEMENTATION_STATUS.md",
+          "locator": "P1 model operations"
+        }
+      ]
+    },
+    {
+      "key": "fees-turnover",
+      "version": 1,
+      "title": "Phí và turnover",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "fees-turnover.md",
+      "content_hash": "b23caad1e9ee17b90d2b44d94da70ab56190e9152d9bf4fa74165e0f98e602d7",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "turnover-definition",
+          "text": "Turnover gắn với mua bán để thay đổi cơ cấu danh mục; giao dịch thực tế có thể phát sinh chi phí.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/transaction.html",
+          "locator": "6 Transaction costs"
+        },
+        {
+          "id": "fees-limit",
+          "text": "Phí giao dịch, chênh lệch giá mua bán và trượt giá có thể làm giảm kết quả sau chi phí so với mô phỏng bỏ qua chúng.",
+          "source_title": "MOSEK Portfolio Optimization Cookbook",
+          "source_url": "https://docs.mosek.com/portfolio-cookbook/transaction.html",
+          "locator": "6 Transaction costs"
+        }
+      ]
+    },
+    {
+      "key": "backtest",
+      "version": 1,
+      "title": "Giới hạn backtest",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "backtest.md",
+      "content_hash": "69b2733d3232eabc5324a788cbec4e1a476da6d942e7a921134ac9c7087e171f",
+      "published_at": null,
+      "available_at": "2026-11-06T18:09:17.257125+00:00",
+      "claims": [
+        {
+          "id": "backtest-definition",
+          "text": "Backtest mô phỏng chiến lược trên dữ liệu quá khứ; thử nhiều cấu hình có thể dẫn đến chọn quá khớp.",
+          "source_title": "Bailey et al. The Probability of Backtest Overfitting",
+          "source_url": "https://www.davidhbailey.com/dhbpapers/backtest-prob.pdf",
+          "locator": "Abstract; introduction"
+        },
+        {
+          "id": "backtest-limit",
+          "text": "Kết quả quá khứ không chứng minh lợi nhuận tương lai. Cần kiểm tra ngoài mẫu, thời điểm khả dụng và giả định chi phí.",
+          "source_title": "Bailey et al. The Probability of Backtest Overfitting",
+          "source_url": "https://www.davidhbailey.com/dhbpapers/backtest-prob.pdf",
+          "locator": "Abstract; introduction"
+        }
+      ]
+    },
+    {
+      "key": "asset-allocation",
+      "version": 1,
+      "title": "Phân bổ tài sản · Asset allocation",
+      "language": "vi",
+      "visibility": "PUBLIC",
+      "path": "asset-allocation.md",
+      "content_hash": "79b4733e57f4e1fdefb225faa42233563e0e8e590d25bed10a775aa05d464a25",
+      "published_at": null,
+      "available_at": "2026-11-24T15:01:59.236292+00:00",
+      "claims": [
+        {
+          "id": "asset-allocation-definition",
+          "text": "Phân bổ tài sản là cách chia vốn đầu tư giữa các nhóm tài sản, chẳng hạn như cổ phiếu, trái phiếu và tiền mặt.",
+          "source_title": "Investor.gov · Asset Allocation",
+          "source_url": "https://www.investor.gov/introduction-investing/investing-basics/glossary/asset-allocation",
+          "locator": "Glossary · Asset Allocation"
+        }
+      ]
+    }
+  ]
+}

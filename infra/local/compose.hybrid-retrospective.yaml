@@ -1,0 +1,17 @@
+# Local retrospective pilot. Keep the forward study and ML review independent.
+services:
+  portfolio-api:
+    image: portfolio-software-portfolio:local
+    environment:
+      SYSTEM_HYBRID_ENABLED: "true"
+      HYBRID_LOCAL_RETROSPECTIVE_POLICY: hybrid-growth-normal-mvo60-v1
+  portfolio-consume:
+    image: portfolio-software-portfolio:local
+  quant-consume:
+    image: portfolio-software-quant:local
+  chat-api:
+    environment:
+      SYSTEM_HYBRID_ENABLED: "true"
+  chat-worker:
+    environment:
+      SYSTEM_HYBRID_ENABLED: "true"

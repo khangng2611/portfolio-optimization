@@ -110,7 +110,10 @@
       "additionalProperties": false,
       "properties": {
         "version": {
-          "const": "phase1-hybrid-profile-v1",
+          "enum": [
+            "phase1-hybrid-profile-v1",
+            "hybrid-growth-normal-mvo60-v1"
+          ],
           "title": "Version",
           "type": "string"
         },

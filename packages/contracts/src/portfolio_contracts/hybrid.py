@@ -3,13 +3,21 @@
 import math
 
 
-def hybrid_policy(regime, profile):
+SERVING_POLICY = 'phase1-hybrid-profile-v1'
+FORWARD_POLICY = 'hybrid-growth-normal-mvo60-v1'
+
+
+def hybrid_policy(regime, profile, version=SERVING_POLICY):
+    if version not in (SERVING_POLICY, FORWARD_POLICY):
+        raise ValueError('Unknown HYBRID policy version')
     shares = {'normal': .60, 'stress': .30, 'crisis': .10}
     multipliers = {'conservative': .75, 'balanced': 1., 'growth': 1.25}
     if regime not in shares or profile not in multipliers:
         raise ValueError('HYBRID requires a known regime and confirmed risk profile')
-    return {'version': 'phase1-hybrid-profile-v1',
-            'mvo_share': round(shares[regime] * multipliers[profile], 6)}
+    share = shares[regime] * multipliers[profile]
+    if version == FORWARD_POLICY and (regime, profile) == ('normal', 'growth'):
+        share = .60
+    return {'version': version, 'mvo_share': round(share, 6)}
 
 
 def constraint_violations(assets, weights, constraints, *, tolerance=1e-12):

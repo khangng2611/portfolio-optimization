@@ -1,6 +1,6 @@
 """Versioned questionnaire-to-policy mapping, owned by Portfolio, not the browser."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -8,12 +8,24 @@ from portfolio_contracts import Constraints, StrictModel
 from portfolio_contracts.assets import canonical_candidates, EQUITY_IDS
 
 
-class RiskAnswers(StrictModel):
-    questionnaire_version: Literal["risk-v1"]
+class RiskInputs(StrictModel):
     horizon_months: int = Field(ge=1, le=600, strict=True)
     liquidity_need: Literal["low", "medium", "high"]
     loss_tolerance: Literal["low", "medium", "high"]
+
+
+class LegacyRiskAnswers(RiskInputs):
+    questionnaire_version: Literal["risk-v1"]
     experience: Literal["beginner", "experienced"]
+
+
+class QuantifiedRiskAnswers(RiskInputs):
+    questionnaire_version: Literal["risk-v2"]
+    reserve_months: Literal["under_3", "3_to_under_6", "at_least_6"]
+    experience: Literal["beginner", "experienced"] | None = None
+
+
+RiskAnswers = Annotated[LegacyRiskAnswers | QuantifiedRiskAnswers, Field(discriminator="questionnaire_version")]
 
 
 def effective_constraints(constraints: Constraints, universe_id: str, regime: str = "normal"):
@@ -32,17 +44,25 @@ def risk_policy(answers: RiskAnswers, universe_id: str = "DEMO"):
     horizon = (
         0 if answers.horizon_months < 12 else 1 if answers.horizon_months < 60 else 2
     )
-    score = min(
-        horizon,
-        {"high": 0, "medium": 1, "low": 2}[answers.liquidity_need],
-        {"low": 0, "medium": 1, "high": 2}[answers.loss_tolerance],
-        1 if answers.experience == "beginner" else 2,
-    )
+    levels = {"low": 0, "medium": 1, "high": 2}
+    factors = {
+        "horizon_months": horizon,
+        "liquidity_need": 2 - levels[answers.liquidity_need],
+        "loss_tolerance": levels[answers.loss_tolerance],
+    }
+    quantified = isinstance(answers, QuantifiedRiskAnswers)
+    if quantified:
+        factors["reserve_months"] = {"under_3": 0, "3_to_under_6": 1, "at_least_6": 2}[answers.reserve_months]
+    else:
+        factors["experience"] = 1 if answers.experience == "beginner" else 2
+    score = min(factors.values())
     profile = ("conservative", "balanced", "growth")[score]
+    policy = "custom-mixed-risk" if universe_id == "USER_SELECTED" else "risk-policy"
     return {
         "profile": profile,
-        "answers": answers.model_dump(),
-        "mapping_version": "custom-mixed-risk-v1" if universe_id == "USER_SELECTED" else "risk-policy-v1",
+        "answers": answers.model_dump(exclude_none=True),
+        "mapping_version": f"{policy}-v{2 if quantified else 1}",
+        **({"score": score, "determining_factors": [key for key, value in factors.items() if value == score]} if quantified else {}),
     }, effective_constraints(Constraints(risk_aversion=(6.0, 3.0, 1.5)[score], max_position_weight=0.5), universe_id)
 
 

@@ -39,3 +39,42 @@ def test_hybrid_blends_distinct_universes_and_flags_infeasible_ew():
     r['weights'][0] += .01
     with pytest.raises(ValueError, match='blend'):
         validate_hybrid_weights(ids, active, constraints, pin, r)
+
+
+def test_locked_forward_candidate_changes_only_growth_normal():
+    version = 'hybrid-growth-normal-mvo60-v1'
+    for regime in ('normal', 'stress', 'crisis'):
+        for profile in ('conservative', 'balanced', 'growth'):
+            original = hybrid_policy(regime, profile)
+            candidate = hybrid_policy(regime, profile, version)
+            expected = .60 if (regime, profile) == ('normal', 'growth') else original['mvo_share']
+            assert candidate == {'version': version, 'mvo_share': expected}
+            assert original['version'] == 'phase1-hybrid-profile-v1'
+    with pytest.raises(ValueError):
+        hybrid_policy('normal', 'growth', 'unknown')
+
+
+def test_reviewed_report_is_required_for_new_candidate_pins(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    import hashlib
+    import json
+    from portfolio_service import hybrid_release as release
+
+    path = tmp_path / "final.json"
+    monkeypatch.setattr(release, "FINAL_REPORT", path)
+    monkeypatch.delenv("HYBRID_REVIEWED_REPORT_SHA256", raising=False)
+    assert release.reviewed_version() == release.SERVING_POLICY
+    monkeypatch.setenv("HYBRID_LOCAL_RETROSPECTIVE_POLICY", release.FORWARD_POLICY)
+    assert release.reviewed_version() == release.FORWARD_POLICY
+    after_close = datetime(2027, 12, 1, tzinfo=timezone.utc)
+    report = {"status": "PASS", "policy": release.FORWARD_POLICY, "evaluation_period": ["2026-11-24", "2027-11-23"],
+              "informative_normal_executions": 1,
+              "checks": {p: dict(volatility=True, drawdown=True, turnover=True) for p in ("conservative", "balanced", "growth")}}
+    path.write_text(json.dumps(report))
+    monkeypatch.setenv("HYBRID_REVIEWED_REPORT_SHA256", hashlib.sha256(path.read_bytes()).hexdigest())
+    assert release.reviewed_version(datetime(2026, 11, 24, tzinfo=timezone.utc)) is None
+    assert release.reviewed_version(after_close) == release.FORWARD_POLICY
+    path.write_text(json.dumps(report | {"status": "FAIL"}))
+    assert release.reviewed_version(after_close) is None
+    monkeypatch.setenv("HYBRID_REVIEWED_REPORT_SHA256", hashlib.sha256(path.read_bytes()).hexdigest())
+    assert release.reviewed_version(after_close) is None

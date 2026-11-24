@@ -1,14 +1,16 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from portfolio_contracts import Envelope, aware, canonical_hash, utcnow
+from portfolio_contracts import Envelope, StrictModel, aware, canonical_hash, utcnow
+from portfolio_contracts.assets import EQUITY_IDS
 from portfolio_contracts.market import (
     DatasetRegistration,
     IngestCommand,
@@ -30,11 +32,13 @@ from .models import (
     IngestionJob,
     Outbox,
     PriceRevision,
+    QualityReport,
     Snapshot,
     RegisteredDataset,
     DatasetRegistrationReceipt,
 )
 from .registry import bootstrap, metadata, dataset_json
+from .phase1_sources import GOLD_PROVIDER
 from .quality import terminal_quality
 from .snapshots import build_snapshot, observation_json, snapshot_json
 from .selected_snapshots import SelectedSnapshotRequest, build_selected_snapshot
@@ -46,6 +50,40 @@ HUMAN_ROLES = {
     "model-reviewer",
     "system-admin",
 }
+
+def eligible_price_filters(cutoff, unit):
+    return (
+        PriceRevision.available_at <= cutoff,
+        or_(PriceRevision.published_at.is_(None), PriceRevision.published_at <= cutoff),
+        PriceRevision.data_origin == "real",
+        PriceRevision.price_basis != "unverified",
+        PriceRevision.unit == unit,
+        PriceRevision.price_vnd > 0,
+        or_(PriceRevision.ingestion_job_id.is_(None), QualityReport.status == "PASS"),
+    )
+
+
+class PriceSeriesObservation(StrictModel):
+    date: date
+    price_vnd: str
+    revision: int
+    revision_id: UUID
+    available_at: datetime
+
+
+class MarketPriceSeries(StrictModel):
+    provider: str
+    price_type: str
+    price_basis: str
+    unit: str
+    source_unit: str
+    observations: list[PriceSeriesObservation]
+
+
+class MarketPriceHistory(StrictModel):
+    asset_id: str
+    as_of: datetime
+    series: list[MarketPriceSeries]
 
 
 def create_app(*, sessions, verifier, provider):
@@ -549,6 +587,60 @@ def create_app(*, sessions, verifier, provider):
                 )
             ]
 
+    @app.get("/api/v1/market/price-series", response_model=MarketPriceHistory)
+    def price_series(
+        start_date: date,
+        end_date: date,
+        asset_id: str = Query(pattern=r"^[A-Z0-9_-]{1,64}$"),
+        identity=Depends(principal),
+    ):
+        cutoff = utcnow()
+        if start_date > end_date or (end_date - start_date).days > 366 or end_date > cutoff.date():
+            raise HTTPException(422, "Invalid market price interval")
+        series_fields = (
+            PriceRevision.provider, PriceRevision.price_type, PriceRevision.price_basis,
+            PriceRevision.unit, PriceRevision.source_unit,
+        )
+        with sessions() as session:
+            asset = session.get(Asset, asset_id)
+            if asset is None:
+                raise HTTPException(404, "Market asset not found")
+            ranked = (
+                select(PriceRevision.id, func.row_number().over(
+                    partition_by=(*series_fields, PriceRevision.observation_date),
+                    order_by=(PriceRevision.available_at.desc(), PriceRevision.revision.desc(), PriceRevision.id),
+                ).label("rank"))
+                .outerjoin(QualityReport, QualityReport.job_id == PriceRevision.ingestion_job_id)
+                .where(
+                    PriceRevision.asset_id == asset_id,
+                    PriceRevision.observation_date.between(start_date, end_date),
+                    *eligible_price_filters(cutoff, asset.unit),
+                ).subquery()
+            )
+            rows = session.scalars(
+                select(PriceRevision).join(ranked, ranked.c.id == PriceRevision.id)
+                .where(ranked.c.rank == 1)
+                .order_by(*series_fields, PriceRevision.observation_date)
+                .limit(5001)
+            ).all()
+            if len(rows) > 5000:
+                raise HTTPException(409, "Shorten the market price interval")
+            series = {}
+            for row in rows:
+                key = (row.provider, row.price_type, row.price_basis, row.unit, row.source_unit)
+                if key not in series:
+                    series[key] = {
+                        "provider": row.provider, "price_type": row.price_type,
+                        "price_basis": row.price_basis, "unit": row.unit,
+                        "source_unit": row.source_unit, "observations": [],
+                    }
+                series[key]["observations"].append({
+                    "date": row.observation_date, "price_vnd": str(row.price_vnd),
+                    "revision": row.revision, "revision_id": UUID(row.id),
+                    "available_at": aware(row.available_at),
+                })
+            return {"asset_id": asset_id, "as_of": cutoff, "series": list(series.values())}
+
     @app.post("/api/v1/market/snapshots", status_code=201)
     def snapshot(body: SnapshotRequest, identity=Depends(principal)):
         with sessions.begin() as session:
@@ -624,8 +716,47 @@ def create_app(*, sessions, verifier, provider):
         return identity
 
     @app.get('/internal/v1/chat/market-facts')
-    def chat_market_facts(identity=Depends(chat_reader)):
+    def chat_market_facts(
+        asset_id: str | None = Query(None, pattern="^(?:" + "|".join((*EQUITY_IDS, "GOLD")) + ")$"),
+        requested_date: date | None = None,
+        description: bool = False,
+        identity=Depends(chat_reader),
+    ):
+        if requested_date and (asset_id not in EQUITY_IDS or requested_date > utcnow().astimezone(ZoneInfo("Asia/Ho_Chi_Minh")).date()):
+            raise HTTPException(422, "Expected a past or current equity observation date")
         with sessions() as s:
+            if description:
+                if asset_id not in EQUITY_IDS or requested_date:
+                    raise HTTPException(422, "Expected one equity ticker for description")
+                row = s.get(Asset, asset_id)
+                return {"scope": "asset_description", "asset_id": asset_id,
+                        "display_name": row.display_name if row else None,
+                        "description": row.description if row else None,
+                        "metadata_source": row.metadata_source if row else None,
+                        "metadata_fetched_at": row.metadata_fetched_at if row else None}
+            if asset_id is not None:
+                gold = asset_id == "GOLD"
+                filters = (PriceRevision.provider == GOLD_PROVIDER, PriceRevision.price_basis == "raw_close") if gold else ()
+                checked = utcnow()
+                today = checked.astimezone(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+                # Keep a dated history reference when the requested trading day has no eligible price.
+                exact_first = ((PriceRevision.observation_date == requested_date).desc(),) if requested_date else ()
+                row = s.scalar(
+                    select(PriceRevision)
+                    .outerjoin(QualityReport, QualityReport.job_id == PriceRevision.ingestion_job_id)
+                    .where(
+                        PriceRevision.asset_id == asset_id,
+                        *filters,
+                        PriceRevision.price_type == "close",
+                        PriceRevision.observation_date <= today,
+                        *eligible_price_filters(checked, "VND/tael" if gold else "VND/share"),
+                    )
+                    .order_by(*exact_first, PriceRevision.observation_date.desc(), PriceRevision.available_at.desc(), PriceRevision.revision.desc(), PriceRevision.id)
+                    .limit(1)
+                )
+                return {"scope": "gold_quote" if gold else "equity_quote", "asset_id": asset_id, "checked_at": checked.isoformat(),
+                        **({"requested_date": requested_date.isoformat()} if requested_date else {}),
+                        "local_date": today.isoformat(), "observations": [observation_json(row)] if row else []}
             rows = s.scalars(select(PriceRevision).where(PriceRevision.available_at <= utcnow()).order_by(PriceRevision.observation_date.desc(), PriceRevision.available_at.desc(), PriceRevision.id).limit(20)).all()
             latest = max((r.observation_date for r in rows), default=None)
             return {'checked_at': utcnow().isoformat(), 'status': 'NO_OBSERVATIONS' if latest is None else 'STALE' if (utcnow().date() - latest).days > 7 else 'AVAILABLE',

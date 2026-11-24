@@ -121,10 +121,12 @@ def test_system_mode_only_accepts_server_selected_hybrid(stack, preflight, monke
         assert command.hybrid_policy.mvo_share == .10
         assert command.compute_hash() == job.input_hash
     monkeypatch.setenv('SYSTEM_HYBRID_ENABLED', 'paused')
-    assert not client.get(base + '/readiness', headers=headers()).json()['can_submit']
+    paused = client.get(base + '/readiness', headers=headers()).json()
+    assert not paused['can_submit'] and paused['reason_code'] == 'SYSTEM_PAUSED'
     assert client.post(path, headers=h, json={'mode': 'system'}).json() == result.json()
     new_headers = h | {'Idempotency-Key': 'paused-new-job'}
-    assert client.post(path, headers=new_headers, json={'mode': 'system'}).status_code == 409
+    rejected = client.post(path, headers=new_headers, json={'mode': 'system'})
+    assert rejected.status_code == 409 and rejected.json()['error']['code'] == 'SYSTEM_PAUSED'
     assert client.post(path, headers=new_headers, json={'strategy': 'EW'}).status_code == 409
 
 
@@ -168,3 +170,98 @@ def test_chat_custom_admission_uses_confirmed_version_and_cannot_supply_candidat
     with sessions() as session:
         job = session.get(Job, response.json()['job_id'])
         assert job.input['selection_context']['candidate_asset_ids'] == p['asset_selection']['candidate_asset_ids']
+
+
+def test_reassessing_to_v2_pins_new_hybrid_and_preserves_v1_command(stack, preflight, monkeypatch):
+    monkeypatch.setenv("SYSTEM_HYBRID_ENABLED", "true")
+    client, sessions = stack
+    p = create(client, ["FPT", "MWG", "VCB", "VFF"]).json()
+    path = f"/api/v1/portfolios/{p['id']}"
+    def submit(version):
+        response = client.post(path + "/recommendations", json={"mode": "system"},
+                               headers=headers(**{"If-Match": f'"{version}"', "Idempotency-Key": f"job-{version}"}))
+        assert response.status_code == 202, response.text
+        with sessions() as session:
+            return copy.deepcopy(session.get(Job, response.json()["job_id"]).input)
+
+    original = submit(1)
+    new_answers = {"questionnaire_version": "risk-v2", "horizon_months": 60, "loss_tolerance": "high",
+                   "reserve_months": "at_least_6", "liquidity_need": "high"}
+    response = client.post(path + "/risk-assessments", json={"answers": new_answers},
+                           headers=headers(**{"If-Match": '"1"', "Idempotency-Key": "quantified"}))
+    assert response.status_code == 201, response.text
+    assert response.json()["mapping_version"] == "custom-mixed-risk-v2"
+    new = submit(2)
+    assert original["hybrid_policy"]["mvo_share"] == .10
+    assert new["hybrid_policy"]["mvo_share"] == .075
+    assert new["constraints"]["risk_aversion"] == 6
+    assert new["decision_context"]["risk_profile"]["answers"] == new_answers
+    assert original["selection_context"]["candidate_hash"] == new["selection_context"]["candidate_hash"]
+    with sessions() as session:
+        assert session.get(Job, str(original["job_id"])).input == original
+    assert client.get(path + "/risk-assessments", headers=headers()).json()[1]["answers"] == p["risk_profile"]["answers"]
+
+
+def test_unreleased_research_candidate_blocks_live_admission(stack, preflight, monkeypatch):
+    monkeypatch.setenv("SYSTEM_HYBRID_ENABLED", "true")
+    monkeypatch.setenv("HYBRID_REVIEWED_REPORT_SHA256", "0" * 64)
+    client, _ = stack
+    p = create(client, ["FPT", "MWG", "VCB", "VFF"]).json()
+    base = f"/api/v1/portfolios/{p['id']}"
+    assert client.get(base + "/readiness", headers=headers()).json()["reason_code"] == "SYSTEM_PAUSED"
+    response = client.post(base + "/recommendations", json={"mode": "system"},
+                           headers=headers(**{"If-Match": '"1"', "Idempotency-Key": "check-unreleased-policy"}))
+    assert response.status_code == 409 and response.json()["error"]["code"] == "SYSTEM_PAUSED"
+
+
+def test_promoted_policy_version_is_pinned_in_new_command(stack, preflight, monkeypatch):
+    from portfolio_contracts.hybrid import FORWARD_POLICY
+
+    monkeypatch.setenv("SYSTEM_HYBRID_ENABLED", "true")
+    monkeypatch.setattr("portfolio_service.api.reviewed_version", lambda: FORWARD_POLICY)
+    client, sessions = stack
+    p = create(client, ["FPT", "MWG", "VCB", "VFF"]).json()
+    response = client.post(f"/api/v1/portfolios/{p['id']}/recommendations", json={"mode": "system"},
+                           headers=headers(**{"If-Match": '"1"', "Idempotency-Key": "test-approved-version"}))
+    assert response.status_code == 202, response.text
+    with sessions() as session:
+        job = session.get(Job, response.json()["job_id"])
+        command = OptimizeCommand.model_validate(job.input)
+        assert command.hybrid_policy.version == FORWARD_POLICY
+        assert command.compute_hash() == job.input_hash
+
+
+def test_chat_readiness_matches_each_portfolios_own_basket(grants, preflight, monkeypatch):
+    client, sessions, _ = grants
+    monkeypatch.setenv("SYSTEM_HYBRID_ENABLED", "true")
+    monkeypatch.delenv("HYBRID_REVIEWED_REPORT_SHA256", raising=False)
+    original = Resolver.selection_ready
+
+    def basket_readiness(resolver, body):
+        decision = original(resolver, body)
+        if "FPT" in body["candidate_asset_ids"]:
+            decision.update(can_submit=False, reason_code="VFF_STALE", asset_status=[{
+                "asset_id": "VFF", "observation_date": "2026-11-10", "age_days": 13,
+                "max_age_days": 7, "available_at": "2026-11-11T08:15:00+07:00",
+            }])
+            for strategy in decision["strategies"]:
+                strategy.update(can_submit=False, reason_code="VFF_STALE")
+        return decision
+
+    monkeypatch.setattr(Resolver, "selection_ready", basket_readiness)
+    for equity, reason in [("FPT", "VFF_STALE"), ("MWG", "READY")]:
+        pid = create(client, [equity, "VCB", "VFF"]).json()["id"]
+        public = client.get(f"/api/v1/portfolios/{pid}/readiness", headers=headers()).json()
+        grant = issue(client, pid, tools=["get_allocation_status"]).json()
+        status = tool(client, grant, "get_allocation_status").json()
+        assert status["portfolio_id"] == pid
+        assert status["reason_code"] == public["reason_code"] == reason
+        assert (status["status"] == "READY") == public["can_submit"]
+        if reason == "VFF_STALE":
+            assert status["details"]["available_at"] == "2026-11-11T08:15:00+07:00"
+            assert status["details"]["observation_date"] == "2026-11-10"
+        else:
+            assert "details" not in status
+    with sessions() as session:
+        assert session.scalar(select(func.count()).select_from(Job)) == 0
+        assert session.scalar(select(func.count()).select_from(Outbox)) == 0

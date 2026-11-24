@@ -14,6 +14,7 @@ from .models import DelegationGrant, Job, Recommendation, User
 
 Tool = Literal[
     "get_profile",
+    "get_allocation_status",
     "get_portfolio_summary",
     "request_allocation",
     "get_recommendation",
@@ -27,10 +28,11 @@ class GrantRequest(StrictModel):
     job_id: UUID
     authorization_id: UUID | None = None
     portfolio_id: UUID | None = None
-    tools: list[Tool] = Field(min_length=1, max_length=6)
+    tools: list[Tool] = Field(min_length=1, max_length=7)
 
 
 class ToolArguments(StrictModel):
+    include_saved_target: bool = False
     portfolio_id: UUID | None = None
     resource_id: UUID | None = None
     strategy: Literal["EW", "MVO", "BL_ML"] | None = None
@@ -47,10 +49,12 @@ def install(
     owner,
     owned_portfolio,
     portfolio_json,
+    targets,
     recommend,
     recommendation_json,
     recommendation_type,
     account_active,
+    allocation_status,
 ):
     def actor_token(token):
         try:
@@ -170,6 +174,8 @@ def install(
                 raise HTTPException(403, "Tài khoản không còn quyền truy cập.")
             if body.portfolio_id and str(body.portfolio_id) != g.portfolio_id:
                 raise HTTPException(403, "Resource không thuộc delegation.")
+            if tool == "get_allocation_status":
+                return allocation_status(g.portfolio_id, user.id)
             if tool == "get_profile":
                 return {
                     "id": user.id,
@@ -183,6 +189,14 @@ def install(
                 raise HTTPException(403, "Delegation chưa chọn danh mục.")
             p = owned_portfolio(s, g.portfolio_id, user.id)
             if tool == "get_portfolio_summary":
+                if body.include_saved_target:
+                    rows = targets(s, p.id, user.id, limit=1)
+                    target = None
+                    if rows:
+                        row = rows[0]
+                        target = {key: row[key] for key in ("id", "recommendation_id", "accepted_at")}
+                        target.update({key: row["allocation"][key] for key in ("asset_ids", "weights")})
+                    return {"scope": "saved_target", "id": p.id, "name": p.name, "accepted_target": target}
                 return portfolio_json(p)
             if tool == "request_allocation":
                 if (

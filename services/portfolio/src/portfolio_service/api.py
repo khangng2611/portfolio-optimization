@@ -46,6 +46,7 @@ from .models import (
     PortfolioAssetSelection,
     User,
 )
+from .hybrid_release import reviewed_version
 from .policy import RiskAnswers, effective_constraints, risk_policy, check_candidate_feasibility
 from .selection import (enabled as selections_enabled, require_enabled, current_selection,
                         create_selection_revision, revision_json, stale_selection_details)
@@ -700,7 +701,7 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                      checked_at=utcnow())
         assessment = object_session(value).get(RiskAssessment, value.risk_profile["version_id"]) if value.risk_profile and value.risk_profile.get("version_id") else None
         reason = "INPUT_UNAVAILABLE" if not selections_enabled() else (
-            "RISK_PROFILE_REQUIRED" if assessment is None or assessment.portfolio_id != value.id or assessment.owner_user_id != value.owner_user_id or value.risk_profile.get("mapping_version") != "custom-mixed-risk-v1"
+            "RISK_PROFILE_REQUIRED" if assessment is None or assessment.portfolio_id != value.id or assessment.owner_user_id != value.owner_user_id or value.risk_profile.get("mapping_version") not in {"custom-mixed-risk-v1", "custom-mixed-risk-v2"}
             else check_candidate_feasibility(revision.candidate_asset_ids, value.constraints, "BL_ML")
         )
         if reason:
@@ -730,6 +731,9 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             "strategies": [{"strategy": "HYBRID", "can_submit": ready, "reason_code": reason}],
         })
 
+    def release_paused():
+        return system_hybrid_managed() and (not system_hybrid_enabled() or not reviewed_version())
+
     @app.get(
         "/api/v1/portfolios/{portfolio_id}/readiness", response_model=InputReadiness | SelectionReadiness
     )
@@ -737,10 +741,13 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
         with sessions() as session:
             value = owned_portfolio(session, portfolio_id, user_id)
             revision = current_selection(value)
-            if system_hybrid_managed() and not system_hybrid_enabled():
+            if release_paused():
                 return hybrid_readiness(SelectionReadiness(
+                    portfolio_version=value.version,
+                    revision_id=revision.id if revision else None,
+                    candidate_hash=revision.candidate_hash if revision else None,
                     candidate_asset_ids=revision.candidate_asset_ids if revision else [],
-                    reason_code="INPUT_UNAVAILABLE", checked_at=utcnow(),
+                    reason_code="SYSTEM_PAUSED", checked_at=utcnow(),
                 ))
             if revision is not None:
                 readiness = selected_readiness(value, revision)
@@ -749,6 +756,38 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 return hybrid_readiness(SelectionReadiness(reason_code="ASSET_SELECTION_REQUIRED", checked_at=utcnow()))
             universe_id = value.universe_id
         return resolve_readiness(universe_id)
+
+    def chat_allocation_status(portfolio_id, user_id):
+        checked = utcnow()
+        details = None
+        if portfolio_id is None:
+            reason = "SYSTEM_PAUSED" if release_paused() else "PORTFOLIO_REQUIRED"
+            ready = False
+        else:
+            decision = portfolio_readiness(UUID(portfolio_id), user_id)
+            checked = decision.checked_at or checked
+            reason = decision.reason_code
+            if isinstance(decision, SelectionReadiness):
+                ready = decision.can_submit
+                details = stale_selection_details(decision, reason)
+                if details:
+                    for item in decision.asset_status:
+                        if item.get("asset_id") == details["asset_id"] and item.get("available_at"):
+                            try:
+                                available = datetime.fromisoformat(item["available_at"])
+                                if available.tzinfo is not None:
+                                    details["available_at"] = available.isoformat()
+                            except (TypeError, ValueError):
+                                pass
+                            break
+            else:
+                ready = decision.status == "READY"
+        status = "READY" if ready and reason == "READY" else "BLOCKED"
+        if reason == "INPUT_UNAVAILABLE" or ready != (reason == "READY"):
+            status, reason = "UNKNOWN", "INPUT_UNAVAILABLE"
+        return {"scope": "system" if reason == "SYSTEM_PAUSED" else "portfolio",
+                "portfolio_id": portfolio_id, "status": status, "reason_code": reason,
+                "checked_at": checked.isoformat(), **({"details": details} if details else {})}
 
     def target_query(portfolio_id, user_id):
         return select(AcceptedTarget).where(
@@ -1052,6 +1091,9 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                     "portfolio.job.accept", job_id=existing.id, outcome="duplicate"
                 )
                 return accepted(existing)
+            version = reviewed_version() if system_hybrid_enabled() else None
+            if system_hybrid_managed() and not version:
+                raise HTTPException(409, {"code": "SYSTEM_PAUSED", "message": "Tính đề xuất mới đang tạm dừng."})
             if (system and not system_hybrid_enabled()) or (not system and system_hybrid_managed()):
                 raise HTTPException(409, {"code": "INPUT_UNAVAILABLE", "message": "Yêu cầu tạo đề xuất chưa phù hợp với chế độ đang phục vụ."})
             if system and revision is None:
@@ -1104,7 +1146,7 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 if system:
                     from portfolio_contracts.hybrid import hybrid_policy
 
-                    blend_policy = hybrid_policy(readiness.regime.regime, portfolio.risk_profile.get("profile"))
+                    blend_policy = hybrid_policy(readiness.regime.regime, portfolio.risk_profile.get("profile"), version)
                 try:
                     selection_context = SelectionContext(
                         revision_id=revision.id, candidate_asset_ids=revision.candidate_asset_ids,
@@ -1242,6 +1284,7 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                 )
             return {
                 "job_id": job.id,
+                "portfolio_id": job.portfolio_id,
                 "status": job.status,
                 "recommendation_id": job.recommendation_id,
                 "error": job.error,
@@ -1282,7 +1325,7 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
 
     from .delegation import install
     install(app, sessions=sessions, verifier=verifier, principal=principal, owner=owner,
-            owned_portfolio=owned_portfolio, portfolio_json=portfolio_json,
+            owned_portfolio=owned_portfolio, portfolio_json=portfolio_json, targets=targets,
             recommend=recommend, recommendation_json=recommendation_json,
-            recommendation_type=NewRecommendation, account_active=account_active)
+            recommendation_type=NewRecommendation, account_active=account_active, allocation_status=chat_allocation_status)
     return app

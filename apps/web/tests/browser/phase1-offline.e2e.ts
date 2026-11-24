@@ -105,9 +105,9 @@ test('Phase 1 offline review, publication and investor BL_ML proposal', async ({
   await investor.getByLabel('Thời gian đầu tư (tháng)').fill('36');
   await investor.getByLabel('Bộ tài sản').selectOption(universe);
   await investor.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-  await investor.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
-  await investor.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
-  await investor.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
+  await investor.getByRole('radio', { name: 'Vừa · Từ 5% đến dưới 15%', exact: true }).check();
+  await investor.getByRole('radio', { name: 'Tối đa 10%', exact: true }).check();
+  await investor.getByRole('radio', { name: 'Từ 6 tháng trở lên', exact: true }).check();
   await investor.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
   const { result: portfolio } = await submit(investor, '/api/v1/onboarding/portfolios',
     () => investor.getByTestId('create-portfolio-submit').click(), 201);
@@ -160,7 +160,7 @@ test('Phase 1 investor reopens the same proposal after stack restart', async ({ 
   } else {
     await expect(investor.getByTestId('accept-proposal')).toBeEnabled();
   }
-  await expect(investor.locator('.allocation-tags').getByText('BL + ML', { exact: true })).toBeVisible();
+  await expect(investor.locator('.allocation-tags').getByText('Giá thị trường', { exact: true })).toBeVisible();
   const job = await get(investor, `/api/v1/jobs/portfolio/${saved.job_id}`);
   expect(job.status).toBe('SUCCEEDED');
   expect(job.recommendation_id).toBe(saved.proposal.id);

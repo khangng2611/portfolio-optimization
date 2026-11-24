@@ -39,12 +39,12 @@ it('uses retained regime from the old canonical result without recomputing raw v
   const html = renderToStaticMarkup(<RecommendationEvidenceView evidence={evidence} facts={old} factsHash={'a'.repeat(64)}/>);
   expect(html).toContain('căng thẳng');
   expect(html).toContain('1,500');
-  expect(html).toContain('Chưa lưu raw views');
+  expect(html).toContain('chưa lưu dự báo từ mô hình');
 });
 
 it('keeps user views distinct from the defensive VFF policy', () => {
   const quant = { asset_ids: ['ACB', 'VFF'], active_asset_ids: ['ACB', 'VFF'], history_end_date: '2026-11-17', views: [{ source_kind: 'USER', status: 'APPLIED', coefficients: { ACB: 1 }, raw_mean_return: null, applied_q_daily: .001, confidence_applied: .4, horizon_sessions: null, transform_version: 'phase1-option-b-v1' }], features: {}, regime: null };
   const html = renderToStaticMarkup(<RecommendationEvidenceView evidence={{ ...evidence, quant } as RecommendationEvidence} facts={facts} factsHash={'a'.repeat(64)}/>);
   expect(html).toContain('người dùng');
-  expect(html).not.toContain('View phòng thủ theo quy tắc');
+  expect(html).not.toContain('Tín hiệu phòng thủ');
 });

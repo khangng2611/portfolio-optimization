@@ -3,7 +3,7 @@ import { test, expect, type BrowserContext, type Page, type TestInfo } from '@pl
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-const root=resolve('../..'), generated=resolve(root,'infra/local/.generated'),origin='http://localhost:3000';
+const root=resolve('../..'), generated=resolve(root,'infra/local/.generated'),origin=process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 const receiptFile=resolve(generated,'knowledge-browser-receipt.json');
 const persistence=process.env.KNOWLEDGE_VERIFY_RECEIPT==='1';
 type Value=Record<string,any>;
@@ -51,14 +51,12 @@ test('real Knowledge lexical sources consent v2 mobile and same receipt',async({
   saved=JSON.parse(await readFile(receiptFile,'utf8'));
   await page.goto(`/#chat?conversation=${saved.conversation_id}&job=${saved.jobs[0].id}`);
  }else{
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
   await page.getByTestId('chat-title').fill('Kiến thức có nguồn');
   const created=await uiPost(page,'/api/v1/conversations',()=>page.getByTestId('chat-create').click(),201);
   const cid=created.value.id;
   saved={conversation_id:cid,jobs:[],messages:[]};
-  await page.locator('.chat-advanced > summary').click();
-  await page.getByRole('radio',{name:'Kiến thức',exact:true}).check();
-  await page.getByRole('radio',{name:'Kiến thức',exact:true}).press('Escape');
-  await expect(page.locator('.chat-advanced > summary')).toBeFocused();
+  await expect(page.getByLabel('Tùy chọn hội thoại')).toHaveCount(0);
   async function turn(content:string){
    await page.getByTestId('chat-input').fill(content);
    const submitted=await uiPost(page,`/api/v1/conversations/${cid}/messages`,()=>page.getByTestId('chat-send').click(),202);
@@ -73,9 +71,12 @@ test('real Knowledge lexical sources consent v2 mobile and same receipt',async({
   phase(info,'knowledge-sources');
   const answer=await turn('EW là gì?');
   expect(answer.structured.type).toBe('knowledge');expect(answer.structured.knowledge.status).toBe('REFERENCE');
-  await expect(page.getByText('Đoạn tham khảo · Tìm theo từ khóa',{exact:true}).last()).toBeVisible();
+  await page.getByRole('button', { name: 'Xem nguồn tham khảo', exact: true }).first().click();
   const sources=page.locator('.chat-knowledge-sources').first();
+  await expect(sources).toHaveAttribute('open','');
   await sources.locator('summary').first().focus();await page.keyboard.press('Enter');
+  await expect(sources).not.toHaveAttribute('open');
+  await page.keyboard.press('Enter');
   await expect(sources).toHaveAttribute('open','');
   const link=sources.locator('a').first();expect(await link.getAttribute('href')).toMatch(/^https:\/\//);expect(await link.getAttribute('rel')).toContain('noopener');
   await capture(page,'knowledge-desktop');
@@ -83,6 +84,7 @@ test('real Knowledge lexical sources consent v2 mobile and same receipt',async({
   await expect(page.getByTestId('chat-input')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await capture(page,'knowledge-mobile');
+  await page.getByRole('button', { name: 'Trở lại hội thoại', exact: true }).click();
   phase(info,'knowledge-developer-policy');
   const session=await get(context,'/auth/session');
   const denied=await context.request.post(`/api/v1/conversations/${cid}/preferences`,{data:{llm_consent:true},headers:{Origin:origin,'X-CSRF-Token':session.csrfToken}});
@@ -99,7 +101,8 @@ test('real Knowledge lexical sources consent v2 mobile and same receipt',async({
  await expect(page.getByTestId('chat-llm-consent')).toHaveCount(0);
  if(persistence){
   await page.setViewportSize({width:390,height:844});
-  const summary=page.locator('.chat-knowledge-sources > summary').first();await summary.click();await summary.scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Xem nguồn tham khảo', exact: true }).first().click();
+  await page.locator('.chat-knowledge-sources > summary').first().scrollIntoViewIfNeeded();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   const metrics=await page.locator('.chat-knowledge .muted').first().evaluate(element=>{
    const rgb=(value:string)=>(value.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
@@ -138,22 +141,22 @@ test('real Knowledge canonical sources and explicit target accept',async({page},
   expect(onboarded.status()).toBe(201);const pid=(await onboarded.json()).id;
   expect(pid).not.toBe(baseline.portfolio_id);
   await page.goto(`/#chat?portfolio=${pid}`);
-  await page.getByTestId('chat-title').fill(`Kiến thức và phân bổ ${Date.now()}`);await page.getByTestId('chat-portfolio').selectOption(pid);
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
+  await page.getByTestId('chat-title').fill(`Kiến thức và phân bổ ${Date.now()}`);
   const created=await uiPost(page,'/api/v1/conversations',()=>page.getByTestId('chat-create').click(),201);const cid=created.value.id,path=`/api/v1/conversations/${cid}/messages`;
   async function terminal(jid:string){let j:Value={};await expect.poll(async()=>{j=await get(context,`/api/v1/jobs/chat/${jid}`);return ['SUCCEEDED','WAITING_INPUT','FAILED'].includes(j.status);},{timeout:90000}).toBe(true);expect(j.provider_usage).toEqual([]);return j;}
-  await page.locator('.chat-advanced > summary').click();await page.getByRole('radio',{name:'Tạo đề xuất',exact:true}).check();await page.getByTestId('chat-strategy-MVO').check();await page.getByTestId('chat-strategy-MVO').press('Escape');
-  await page.getByTestId('chat-input').fill('Tạo phân bổ MVO');
+  await page.getByTestId('chat-input').fill('Tạo đề xuất phân bổ');
   const first=await uiPost(page,path,()=>page.getByTestId('chat-send').click(),202);expect((await terminal(first.value.job_id)).status).toBe('WAITING_INPUT');
   expect((await get(context,`/api/v1/portfolios/${pid}/recommendations`)).length).toBe(0);
   const confirmed=await uiPost(page,path,()=>page.getByTestId('chat-confirm').last().click(),202);const result=await terminal(confirmed.value.job_id);expect(result.status).toBe('SUCCEEDED');
   const facts=await get(context,`/api/v1/recommendations/${result.recommendation_id}`);expect(facts.inputs_provenance.data_origin).toBe('real');
-  await page.locator('.chat-advanced > summary').click();await page.getByRole('radio',{name:'Giải thích',exact:true}).check();await page.getByRole('radio',{name:'Giải thích',exact:true}).press('Escape');
-  await page.getByLabel('Mã đề xuất',{exact:true}).fill(facts.id);await page.getByTestId('chat-input').fill('MVO');
-  const explained=await uiPost(page,path,()=>page.getByTestId('chat-send').click(),202);expect((await terminal(explained.value.job_id)).status).toBe('SUCCEEDED');
+  await page.getByRole('button',{name:'Tài sản 0% được hiểu thế nào?',exact:true}).last().click();
+  const explained=await uiPost(page,path,()=>page.getByTestId('chat-send').click(),202);expect(explained.body.recommendation_id).toBe(facts.id);expect((await terminal(explained.value.job_id)).status).toBe('SUCCEEDED');
   const rows=await get(context,path);const card=rows.find((m:Value)=>m.id===(result.result_message_id)).structured;expect(card.facts).toEqual(facts);
-  const references=page.getByTestId('chat-result').last().locator('.chat-knowledge-sources');await references.locator('summary').first().click();await expect(references.locator('a').first()).toBeVisible();
+  await page.getByTestId('chat-result').last().getByRole('button',{name:'Xem dữ kiện và nguồn'}).click();
+  const references=page.locator('.chat-detail-panel .chat-knowledge-sources');await references.locator('summary').first().click();await expect(references.locator('a').first()).toBeVisible();
   await capture(page,'knowledge-canonical-sources');
-  await page.getByTestId('chat-open-recommendation').last().click();await expect(page.getByTestId('accept-proposal')).toBeEnabled();
+  await page.locator('.chat-detail-panel').getByTestId('chat-open-recommendation').click();await expect(page.getByTestId('accept-proposal')).toBeEnabled();
   const accepted=await uiPost(page,`/api/v1/recommendations/${facts.id}/accept`,()=>page.getByTestId('accept-proposal').click(),200);
   expect(digest(await get(context,`/api/v1/portfolios/${baseline.portfolio_id}`))).toBe(sourceHash);
   await writeFile(canonicalFile,JSON.stringify({conversation_id:cid,recommendation_id:facts.id,target_id:accepted.value.id,facts_hash:digest(facts),target_hash:digest(accepted.value.allocation)},null,2),{mode:0o600});
@@ -170,4 +173,62 @@ test('provider controls stay developer-managed after reload',async({page},info)=
  await expect(page.getByTestId('chat-llm-consent')).toHaveCount(0);
  await expect(page.getByText('Dữ liệu gửi tới OpenAI',{exact:true})).toHaveCount(0);
  phase(info,'knowledge-developer-policy-complete');
+});
+
+test('real RAG definition, follow-up and abstention retain their own citations', async ({ page }) => {
+  const mode = process.env.RAG_V3_BROWSER_MODE;
+  test.skip(!mode, 'Requires the isolated provider-off RAG acceptance stack');
+  expect(['exercise', 'verify']).toContain(mode);
+  expect(origin).toBe('http://127.0.0.1:3138');
+  const stage = process.env.RAG_BROWSER_SUITE ?? 'v3';
+  expect(['v3', 'v4', 'v5']).toContain(stage);
+  const file = resolve(root, 'output/rag-quality-' + stage + '/browser-receipt.json');
+  await authenticate(page, '/#chat');
+  const context = page.context();
+  if (mode === 'verify') {
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    const path = '/api/v1/conversations/' + saved.cid + '/messages';
+    expect(digest(await get(context, path))).toBe(saved.messages_hash);
+    await page.goto('/#chat?conversation=' + saved.cid);
+    await expect(page.locator('[data-message-id="' + saved.last + '"]')).toContainText('Chưa có nguồn');
+    return;
+  }
+  await page.getByText('Đặt tên hội thoại (tùy chọn)', { exact: true }).click();
+  const created = await uiPost(page, '/api/v1/conversations', () => page.getByTestId('chat-create').click(), 201);
+  const cid = created.value.id, path = '/api/v1/conversations/' + cid + '/messages';
+  const cases = [
+    ['EW là gì?', 'ew-definition'],
+    ['Vậy nó có nhược điểm gì?', 'ew-limit'],
+    ['Cơ chế phân rã hạt nhân là gì?', null],
+  ] as const;
+  let last = '';
+  for (const [question, expected] of cases) {
+    await page.getByTestId('chat-input').fill(question);
+    const sent = await uiPost(page, path, () => page.getByTestId('chat-send').click(), 202);
+    let job: Value = {};
+    await expect.poll(async () => {
+      job = await get(context, sent.value.status_url);
+      return job.status;
+    }).toBe('SUCCEEDED');
+    expect(job.provider_usage).toEqual([]);
+    const messages = await get(context, path);
+    const answer = messages.find((m: Value) => m.id === job.result_message_id);
+    last = answer.id;
+    const visible = page.locator('[data-message-id="' + last + '"]');
+    await expect(visible).toContainText(answer.content);
+    const citations = answer.structured.knowledge.citations;
+    if (expected) {
+      expect(citations.map((p: Value) => p.claim_id)).toEqual([expected]);
+      expect(answer.content).toContain(citations[0].text);
+      expect(createHash('sha256').update(citations[0].text).digest('hex')).toBe(citations[0].text_hash);
+      await visible.getByRole('button', { name: 'Xem nguồn tham khảo' }).click();
+      await expect(page.locator('.chat-knowledge-sources blockquote').last()).toHaveText(citations[0].text);
+      await page.locator('.chat-detail-panel').getByRole('button', { name: 'Thu gọn' }).click();
+    } else {
+      expect(citations).toEqual([]);
+      await expect(visible).toContainText('Chưa có nguồn');
+    }
+  }
+  await writeFile(file, JSON.stringify({ cid, last, messages_hash: digest(await get(context, path)) }),
+    { mode: 0o600, flag: 'wx' });
 });

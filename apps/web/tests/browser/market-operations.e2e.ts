@@ -158,7 +158,10 @@ test('real operator source to publication to investor accepted target', async ({
   expect(registered.result.price_basis).toBe('provider_adjusted');
   expect((await mutate(page.context(), registered.intent, 201)).dataset_id).toBe(first.dataset_id);
   const firstJob = await uiMutation(page, '/api/v1/market/ingestions',
-    () => page.getByTestId(`market-ingest-${first.dataset_id}`).click(), 202);
+    async () => {
+      await page.getByTestId(`market-ingest-${first.dataset_id}`).click();
+      await page.getByTestId('market-ingestion-confirm').click();
+    }, 202);
   firstJob.intent.job_id = firstJob.result.job_id;
   const intents = [firstJob.intent];
   const ids: string[] = [firstJob.result.job_id];
@@ -245,9 +248,9 @@ test('real operator source to publication to investor accepted target', async ({
     await alice.getByLabel('Thời gian đầu tư (tháng)').fill('36');
     await alice.getByLabel('Bộ tài sản').selectOption(fixture.universe_id);
     await alice.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-    await alice.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
-    await alice.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
-    await alice.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Vừa · Từ 5% đến dưới 15%', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Tối đa 10%', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Từ 6 tháng trở lên', exact: true }).check();
     await alice.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
     const portfolio = (await uiMutation(alice, '/api/v1/onboarding/portfolios',
       () => alice.getByTestId('create-portfolio-submit').click(), 201)).result;

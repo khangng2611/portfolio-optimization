@@ -1,0 +1,69 @@
+main.auth-page {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-height: 100svh;
+  padding: 32px clamp(24px, 7.6vw, 110px) clamp(32px, 6.6vh, 66px);
+  margin: 0;
+  background: var(--bg);
+}
+.auth-layout {
+  display: grid;
+  grid-template-columns: 44.7% minmax(0, 1fr);
+  width: min(100%, 1220px);
+  min-height: 682px;
+  margin: auto;
+  overflow: hidden;
+  border-radius: 22px;
+  background: white;
+}
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  padding: 52px clamp(28px, 3.75vw, 54px) 96px;
+  background: #103e34;
+  color: #d4ecdc;
+  border-radius: 0 140px 140px 0;
+}
+.auth-brand .wordmark {
+  align-self: start;
+  color: inherit;
+  font-weight: 700;
+  font-size: 30px;
+  text-decoration: none;
+}
+.auth-brand .auth-greeting {
+  margin: auto 0 44px;
+  font-size: clamp(40px, 4vw, 56px);
+  font-weight: 700;
+  line-height: 1.25;
+  color: white;
+}
+.auth-message { max-width: 360px; margin: 0; font-size: 18px; line-height: 1.35; }
+.auth-palette { display: flex; gap: 5px; margin-top: auto; }
+.auth-palette i { height: 8px; width: 126px; border-radius: 8px; background: #acd6ba; }
+.auth-palette i:nth-child(2) { width: 78px; background: #70a29e; }
+.auth-palette i:last-child { width: 39px; background: #dfb773; }
+.auth-layout .auth-form {
+  align-self: center;
+  display: grid;
+  gap: 10px;
+  width: min(calc(100% - 64px), 470px);
+  margin: 0 auto;
+  transform: translate(-1.25vw, -26px);
+}
+.auth-layout .auth-form h1 { margin: 0 0 30px; font-size: 36px; line-height: 1.3; }
+.auth-form label { line-height: 1.35; }
+.auth-layout .auth-form input { height: 48px; min-height: 48px; margin: 9px 0 2px; background: white; border: 1px solid #92ab9f; }
+.auth-layout .auth-form :is(button, .button) { min-height: 44px; padding: 9px 16px; }
+.auth-form .auth-alternative { margin-top: 8px; background: white; border-color: var(--line); }
+@media (max-width: 760px) {
+  main.auth-page { display: block; padding: 0; background: white; }
+  .auth-layout { display: block; min-height: 100svh; border-radius: 0; }
+  .auth-brand { min-height: 206px; padding: 21px 24px 36px; border-radius: 0 0 84px 0; }
+  .auth-brand .wordmark { font-size: 24px; }
+  .auth-brand .auth-greeting { margin: 20px 0 0; font-size: 32px; }
+  .auth-brand :is(.auth-message, .auth-palette) { display: none; }
+  .auth-layout .auth-form { width: min(calc(100% - 48px), 470px); padding-block: 42px; transform: none; }
+  .auth-layout .auth-form h1 { font-size: 28px; margin-bottom: 18px; }
+}

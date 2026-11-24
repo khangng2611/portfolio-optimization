@@ -1,0 +1,93 @@
+.plan-heading { margin: 0; min-width: 0; }
+.plan-heading h1 { margin: 0; font-size: clamp(27px, 3vw, 38px); line-height: 1.28; overflow-wrap: anywhere; }
+.plan-heading p { margin: 10px 0 0; color: var(--muted); font-size: 16px; }
+.plan-surface { min-width: 0; }
+.plan-surface :is(.plan-result-grid, .plan-empty-grid) { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+.plan-surface .plan-decision { grid-area: auto; display: block; margin: 0; padding: 0; background: none; }
+.plan-surface .plan-status {
+  --notice-accent: var(--green);
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  min-height: 122px; padding: 20px 24px; border: 1px solid #83998f; border-radius: 12px; background: #fff;
+}
+.plan-surface .plan-status::before { content: ''; position: absolute; inset: 9px auto 9px -1px; width: 4px; border-radius: 2px; background: var(--notice-accent); }
+.plan-surface .plan-status[data-tone="warning"] { --notice-accent: #80510a; }
+.plan-status h2 { margin: 0; font-size: 24px; line-height: 1.3; color: var(--notice-accent); }
+.plan-status p { max-width: 65ch; margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+.plan-status-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-surface :is(.button,button,.plan-disclosure > summary) { min-height: 44px; border-radius: 8px; }
+.plan-status-actions > :is(.button,button) { justify-content: center; min-width: min(230px,100%); text-align: center; }
+.plan-decision > a { margin-top: 12px; }
+.plan-surface .allocation-primary { grid-area: auto; min-width: 0; margin: 0; padding: 0; background: transparent; }
+.plan-result-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.plan-result-actions .button { padding-inline: 24px; }
+.plan-history-mobile { display: none; }
+.plan-current-facts { margin-top: 24px; }
+.plan-current-facts h2 { margin: 0; font-size: 17px; font-weight: 600; color: var(--green); }
+.plan-current-facts > strong { display: block; margin-top: 4px; font-size: clamp(34px,4vw,54px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.plan-current-facts dl { margin: 20px 0 46px; border-top: 1px solid var(--line); }
+.plan-current-facts dl > div { display: flex; justify-content: space-between; align-items: center; gap: 1em; min-height: 60px; border-bottom: 1px solid var(--line); }
+.plan-current-facts dt { color: var(--muted); }
+.plan-current-facts dd { margin: 0; font-weight: 600; }
+.plan-surface .plan-disclosure { margin: 0; padding: 0; border: 0; background: transparent; }
+.plan-surface .plan-disclosure > summary {
+  width: fit-content; min-width: min(165px, 100%); display: inline-flex; justify-content: center; align-items: center; padding: 10px 20px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; list-style: none; font-size: 14px; font-weight: 600;
+}
+.plan-surface .plan-disclosure > summary::-webkit-details-marker { display: none; }
+.plan-surface .plan-disclosure[open] { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.plan-surface .plan-disclosure :is(h3,h4) { margin: 20px 0 8px; }
+.plan-disclosure p { margin: 8px 0; }
+.plan-disclosure > details { margin-top: 12px; }
+.plan-evidence + .plan-details { margin-top: 16px; }
+.plan-surface .plan-result-actions + .plan-result-details { margin-top: -10px; }
+.request-review .review-list { display: grid; gap: 24px; background: var(--surface); border-radius: var(--radius); padding: 16px; }
+.request-review .review-list > div { display: grid; grid-template-columns: minmax(0,1fr); gap: 3px; padding: 0; border: 0; }
+.request-review .review-list dd { overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .plan-heading p { font-size: 13px; }
+  .plan-surface :is(.plan-result-grid, .plan-empty-grid) { gap: 26px; }
+  .plan-surface .plan-status { flex-direction: column; align-items: stretch; gap: 24px; min-height: 169px; padding: 14px 17px 16px; }
+  .plan-status h2 { font-size: 18px; }
+  .plan-status p { font-size: 13px; line-height: 1.4; }
+  .plan-status-actions { margin-top: auto; }
+  .plan-current-facts { margin-top: 0; }
+  .plan-current-facts h2 { font-size: 16px; }
+  .plan-current-facts dl { margin: 22px 0 24px; }
+  .plan-current-facts dl > div { min-height: 50px; }
+  .plan-current-facts :is(dt,dd) { font-size: 15px; }
+  .plan-history-desktop { display: none; }
+  .plan-history-mobile { display: inline-flex; }
+  .plan-result-actions .button { padding-inline: 16px; }
+}
+
+.workspace .portfolio-list.portfolio-management { background: transparent; border: 0; padding: 0; }
+.portfolio-management .portfolio-list-subtitle { margin: -4px 0 44px; font-size: 18px; color: var(--muted); }
+.workspace .portfolio-management .portfolio-toolbar { grid-template-columns: minmax(0,1fr) repeat(2, minmax(150px,auto)); margin-bottom: 18px; }
+.plan-list-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plan-list-rows a { display: grid; align-content: center; gap: 4px; min-height: 82px; padding: 14px 20px; border-radius: 8px; background: var(--surface); text-decoration: none; color: var(--ink); }
+.plan-list-rows a:hover { box-shadow: inset 0 0 0 1px var(--green); }
+.plan-list-rows strong { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.plan-list-rows span { font-size: 14px; color: var(--muted); }
+.workspace .portfolio-management > .portfolio-create { margin-top: 40px; min-width: min(190px,100%); }
+@media (max-width: 767px) {
+  .workspace .portfolio-management .portfolio-toolbar { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .portfolio-management .portfolio-list-subtitle { margin-bottom: 32px; font-size: 16px; }
+  .plan-list-rows a { padding-inline: 16px; }
+  .workspace .portfolio-management > .portfolio-create { min-width: min(166px,100%); }
+}
+@media (min-width: 768px) {
+  .plan-surface .plan-status { padding: 15px 23px 15px 17px; }
+  .plan-status > div:first-child { align-self: start; }
+  .plan-status p { margin-top: 16px; font-size: 16px; }
+  .plan-status-actions > :is(.button,button) { width: 209px; min-width: 0; min-height: 44px; }
+}
+@media (min-width: 1200px) {
+  .workspace-task:has(> .plan-surface .plan-status) > .portfolio-header:has(.plan-heading) { margin-bottom: 20px; }
+  .plan-surface .plan-result-grid:has(> .plan-status), .plan-surface .plan-result-grid:has(.plan-decision) { row-gap: 44px; }
+}
+@media (max-width: 767px) {
+  .workspace-task:has(> .plan-surface .plan-status) > .portfolio-header:has(.plan-heading) { margin-bottom: 30px; }
+}
+@media (min-width: 768px) and (max-width: 1000px) {
+  .plan-history-mobile { display: inline-flex; }
+}

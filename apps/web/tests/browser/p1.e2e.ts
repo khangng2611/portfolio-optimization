@@ -462,9 +462,9 @@ test('real P1 provider refresh model review publication and risk reassessment li
     await alice.getByLabel('Thời gian đầu tư (tháng)').fill('36');
     await alice.getByLabel('Bộ tài sản').selectOption(universe);
     await alice.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-    await alice.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
-    await alice.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
-    await alice.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Vừa · Từ 5% đến dưới 15%', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Tối đa 10%', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Từ 6 tháng trở lên', exact: true }).check();
     await alice.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
     const created = await uiMutation(alice, '/api/v1/onboarding/portfolios',
       () => alice.getByTestId('create-portfolio-submit').click(), 201, false);
@@ -480,9 +480,9 @@ test('real P1 provider refresh model review publication and risk reassessment li
     phase(info, 'p1-risk-preview-confirm-and-stale-conflicts');
     await alice.goto(`/#risk-assessment?portfolio=${pid}`);
     await alice.getByTestId('risk-horizon').fill('120');
-    await alice.getByTestId('risk-liquidity').selectOption('low');
-    await alice.getByTestId('risk-loss').selectOption('high');
-    await alice.getByTestId('risk-experience').selectOption('experienced');
+    await alice.getByRole('radio', { name: 'Tối đa 10%', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Cao · Từ 15% trở lên', exact: true }).check();
+    await alice.getByRole('radio', { name: 'Từ 6 tháng trở lên', exact: true }).check();
     const preview = await uiMutation(alice, `${investorPath(pid)}/risk-assessments/preview`,
       () => alice.getByTestId('risk-preview').click(), 200, false);
     expect(preview.result.portfolio_version).toBe(before.version);
@@ -495,7 +495,7 @@ test('real P1 provider refresh model review publication and risk reassessment li
     expect(assessment.intent.if_match).toBe(`"${before.version}"`);
     expect(assessment.result.portfolio_version).toBe(3);
     expect(assessment.result.risk_profile.version_id).toBe(assessment.result.id);
-    expect(assessment.result.policy_version_id).toBe(`risk-policy-v1:growth:${assessment.result.id}`);
+    expect(assessment.result.policy_version_id).toBe(`risk-policy-v2:growth:${assessment.result.id}`);
     expect((await mutate(investorContext, assessment.intent, 201)).result).toEqual(assessment.result);
     await mutate(investorContext, { ...assessment.intent, key: randomUUID() }, 412);
     await mutate(investorContext, { ...assessment.intent, body: { answers: { ...assessment.intent.body.answers, horizon_months: 6 } } }, 409);

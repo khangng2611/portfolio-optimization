@@ -1,0 +1,9 @@
+/* Fixed shell controls can otherwise overlap the full list capture. */
+.bottom-nav, .account-bar, .risk-wizard > .task-actions {
+  visibility: hidden !important;
+}
+
+/* Market metadata varies with publication. Keep the tickers, controls and basket rows in the comparison. */
+.asset-transfer-name > span, .asset-transfer-description, .asset-transfer-meta > span {
+  display: none !important;
+}

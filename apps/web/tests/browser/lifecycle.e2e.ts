@@ -158,9 +158,9 @@ test('real login lifecycle, conflict, expiry and reauthentication', async ({ pag
     await page.getByLabel('Thời gian đầu tư (tháng)').fill('36');
     await page.getByLabel('Bộ tài sản').selectOption('DEMO');
     await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-    await page.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
-    await page.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
-    await page.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
+    await page.getByRole('radio', { name: 'Vừa · Từ 5% đến dưới 15%', exact: true }).check();
+    await page.getByRole('radio', { name: 'Tối đa 10%', exact: true }).check();
+    await page.getByRole('radio', { name: 'Từ 6 tháng trở lên', exact: true }).check();
     await page.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
     const createdResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/onboarding/portfolios');
     await page.getByTestId('create-portfolio-submit').click();
@@ -168,8 +168,8 @@ test('real login lifecycle, conflict, expiry and reauthentication', async ({ pag
     expect(createdHTTP.status()).toBe(201);
     const portfolio = await createdHTTP.json();
     const pid = portfolio.id;
-    expect(portfolio.risk_profile.answers.questionnaire_version).toBe('risk-v1');
-    await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
+    expect(portfolio.risk_profile.answers.questionnaire_version).toBe('risk-v2');
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 
     phase(info, 'broker-proposal-accept');
     const first = await propose(page, pid, 'EW');
@@ -226,8 +226,8 @@ test('real login lifecycle, conflict, expiry and reauthentication', async ({ pag
     await expect(page.getByTestId('comparison')).toContainText('MVO');
     await expect(page.getByTestId('comparison')).toContainText('AAA');
     await expect(page.getByTestId('comparison')).toContainText('Các phương án khác cơ sở đầu vào');
-    await page.getByText('Đối chiếu dữ liệu & phiên bản', { exact: true }).click();
-    for (const label of ['Ngày dữ liệu', 'Policy', 'Snapshot dữ liệu', 'Core', 'Vốn kế hoạch', 'Phiên bản danh mục']) {
+    await page.getByText('Xem hồ sơ và ngày dữ liệu', { exact: true }).click();
+    for (const label of ['Ngày dữ liệu', 'Hồ sơ rủi ro', 'Vốn kế hoạch', 'Phiên bản danh mục']) {
       await expect(page.getByTestId('comparison')).toContainText(label);
     }
     await page.reload();

@@ -1,7 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import './allocation-view.css';
+import { dateTime } from '../lib/portfolio-types';
+import { workspaceHash } from '../lib/workspace-state';
 import { ActionIcon } from './action-controls';
-import type { SelectionProof } from '../lib/selection-types';
+import { assetKindName, type AssetCatalogItem, type SelectionProof } from '../lib/selection-types';
 import type { AllocationConstraints, Phase1Full } from '../lib/p1-types';
 export type Allocation = {
   asset_ids: string[]; weights: (string | number)[]; capital_vnd: string;
@@ -18,12 +21,18 @@ export type Allocation = {
   } };
   inputs_provenance?: { data_origin?: string; snapshot_hash?: string; estimator?: string; phase1_full?: Phase1Full };
 };
-export const money = (amount: number | string) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(amount));
+const currency = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 });
+export const money = (amount: number | string) => amount != null && String(amount).trim() && Number.isFinite(Number(amount)) ? currency.format(Number(amount)) : 'Chưa có số tiền';
 export const profileName = (profile?: string) => !profile ? 'Chưa xác nhận' : ({ conservative: 'Thận trọng', balanced: 'Cân bằng', growth: 'Tăng trưởng' }[profile ?? ''] ?? 'Tùy chỉnh');
-export const strategyName = (strategy: string) => strategy === 'HYBRID' ? 'Đề xuất của hệ thống' : strategy === 'BL_ML' ? 'BL + ML' : strategy;
 export const percentage = (weight: number) => `${(weight * 100).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+export function weightPercentage(weight: number) {
+  const magnitude = Math.abs(weight);
+  if (magnitude > 0 && magnitude < .0001) return weight < 0 ? '−<0,01%' : '<0,01%';
+  if (magnitude > 0 && magnitude < .001) return `${(weight * 100).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  return percentage(weight);
+}
 
-function AllocationReferences({ allocation }: { allocation: Allocation }) {
+export function AllocationReferencesDetails({ allocation }: { allocation: Allocation }) {
   const comparison = allocation.diagnostics?.hybrid;
   if (allocation.strategy !== 'HYBRID' || !comparison) return null;
   const label: Record<string, string> = {
@@ -40,54 +49,145 @@ function AllocationReferences({ allocation }: { allocation: Allocation }) {
         <tr><th scope="row">Biến động ngày ước tính</th><td>{percentage(comparison.daily_volatility.hybrid)}</td><td>{percentage(comparison.daily_volatility.ew)}</td><td>{percentage(comparison.daily_volatility.mvo)}</td></tr>
       </tbody>
     </table></div>
-    <p className="muted small">Ước tính từ {comparison.covariance_window_sessions} phiên. {comparison.ew_constraint_violations.length > 0 && <>EW không đáp ứng {comparison.ew_constraint_violations.map(code => label[code] ?? code).join(', ')}.</>}</p>
+    <p className="muted small">Ước tính từ {comparison.covariance_window_sessions} phiên. {comparison.ew_constraint_violations.length > 0 && <>EW không đáp ứng {comparison.ew_constraint_violations.map(code => label[code] ?? 'một giới hạn phân bổ khác').join(', ')}.</>}</p>
   </details>;
 }
 
 export function AllocationMetadata({ allocation }: { allocation: Allocation }) {
-  return <details className="allocation-details"><summary>Nguồn và phiên bản của đề xuất</summary><dl className="provenance">
-    {([['Ngày dữ liệu', allocation.as_of_date], ['Policy ID', allocation.policy_version_id], ['Snapshot ID', allocation.data_snapshot_id], ['Bundle hash', allocation.bundle_hash], ['Snapshot hash', allocation.inputs_provenance?.snapshot_hash], ['Core version', allocation.core_version], ['Model', allocation.model_bundle_id]] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? '—'}</dd></div>)}
-    {allocation.inputs_provenance?.phase1_full && <>
-      <div><dt>Selection hash</dt><dd>{allocation.inputs_provenance.phase1_full.selection_id}</dd></div>
-      <div><dt>Selection / fit epoch</dt><dd>{allocation.inputs_provenance.phase1_full.selection_epoch} / {allocation.inputs_provenance.phase1_full.fit_epoch}</dd></div>
-    </>}
-    {allocation.selection_context && <><div><dt>Candidate revision / hash</dt><dd>{allocation.selection_context.revision_id} · {allocation.selection_context.candidate_hash}</dd></div><div><dt>Selection / data / risk policy</dt><dd>{allocation.selection_context.selection_policy_id} · {allocation.selection_context.data_policy_id} · {allocation.selection_context.risk_policy_id}</dd></div><div><dt>Selection hash</dt><dd>{allocation.selection_proof?.selection_hash}</dd></div><div><dt>Selection price end / decision</dt><dd>{allocation.selection_proof?.selection_price_end_date} / {allocation.selection_proof?.decision_session}</dd></div><div><dt>Hạn dữ liệu lựa chọn</dt><dd>{allocation.selection_context.valid_until}</dd></div></>}
+  const source = allocation.demo ? 'Dữ liệu minh họa' : allocation.inputs_provenance?.data_origin === 'real' ? 'Giá thị trường' : 'Nguồn chưa xác minh';
+  const priceEnd = allocation.selection_proof?.selection_price_end_date;
+  return <details className="allocation-details"><summary>Dữ liệu dùng để tính</summary><dl className="provenance">
+    <div><dt>Loại dữ liệu</dt><dd>{source}</dd></div>
+    {allocation.as_of_date && <div><dt>Ngày dữ liệu</dt><dd>{allocation.as_of_date}</dd></div>}
+    {priceEnd && priceEnd !== allocation.as_of_date && <div><dt>Ngày giá cuối dùng để chọn tài sản</dt><dd>{priceEnd}</dd></div>}
   </dl></details>;
 }
 
-export function AllocationView({ allocation, compact = false, metadata = true, summaryFirst = false, capitalLabel = 'Vốn kế hoạch' }: { allocation: Allocation; compact?: boolean; metadata?: boolean; summaryFirst?: boolean; capitalLabel?: string }) {
+type Kind = AssetCatalogItem['kind'] | 'unknown';
+const groupNames = { ...assetKindName, unknown: 'Chưa rõ loại' };
+const groupOrder: Kind[] = ['fund', 'stock', 'gold', 'unknown'];
+const summaryPercent = (weight: number) => weightPercentage(weight).replace(/,0%$/, '%');
+
+type AllocationRow = { asset: string; kind: Kind; weight: number; capital: number; priceHref?: string };
+function AllocationMix({ rows, title }: { rows: AllocationRow[]; title: string }) {
+  const groups = groupOrder.map(kind => ({
+    kind, weight: rows.reduce((sum, row) => sum + (row.kind === kind ? row.weight : 0), 0),
+  })).filter(group => group.weight > 0);
+  return <section className="allocation-mix">
+    <h2>{title}</h2>
+    {groups.length ? <>
+      <div className="mix-track" aria-hidden="true">{groups.map(({ kind, weight }) => <span key={kind} data-asset-kind={kind} style={{ width: `${weight * 100}%` }}/>)}</div>
+      <ul className="mix-legend" aria-label="Tỷ trọng theo nhóm tài sản">{groups.map(({ kind, weight }) => <li key={kind} data-asset-kind={kind}>
+        <span>{groupNames[kind]}</span><strong>{summaryPercent(weight)}</strong>
+      </li>)}</ul>
+    </> : <p role="status">Chưa có tài sản được phân bổ.</p>}
+  </section>;
+}
+
+type AllocationViewProps = {
+  allocation: Allocation; assets?: AssetCatalogItem[]; metadata?: boolean; summaryFirst?: boolean;
+  showDataDate?: boolean; presentation?: 'table' | 'chart' | 'summary'; capitalLabel?: string;
+  pricePortfolioId?: string; priceProposalId?: string; priceReturnView?: 'overview';
+  chartTitle?: string; capitalNote?: ReactNode; capitalAction?: ReactNode; summaryVariant?: 'compact';
+};
+export function AllocationView({ allocation, assets, metadata = true, summaryFirst = false, showDataDate = false, presentation = 'table', capitalLabel = 'Vốn kế hoạch', pricePortfolioId, priceProposalId, priceReturnView, chartTitle = 'Phân bổ mục tiêu', capitalNote, capitalAction, summaryVariant }: AllocationViewProps) {
   const [sort, setSort] = useState<{ key: 'asset' | 'weight' | 'capital'; direction: 'ascending' | 'descending' }>({ key: 'weight', direction: 'descending' });
-  const weights = allocation.asset_ids.map((_, index) => Number(allocation.weights[index]));
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  const rows = allocation.asset_ids.map((asset, index) => ({ asset, index, weight: weights[index], capital: Number(allocation.capital_vnd) * weights[index] })).filter(row => row.weight !== 0);
-  const sortedRows = [...rows].sort((a, b) => (sort.direction === 'ascending' ? 1 : -1) * (sort.key === 'asset' ? a.asset.localeCompare(b.asset, 'vi') : a[sort.key] - b[sort.key]));
-  const calculationDetails = <>
-    {allocation.inputs_provenance?.phase1_full && <section className="notice" aria-label="K5 và policy hiệu lực">
-      <p>K5: {allocation.inputs_provenance.phase1_full.selected_equity_ids.join(' · ')} · GOLD · VFF. Tài sản ngoài K5 có tỷ trọng 0%.</p>
-      {Object.entries(allocation.inputs_provenance.phase1_full.availability ?? {}).map(([asset, item]) => <p key={asset}>{asset === 'VFF' ? 'NAV VFF' : asset}: ngày {item.observation_date} · tuổi {item.age_days} ngày · khả dụng từ {item.policy_available_at}</p>)}
-      {allocation.constraints && <p>Policy hiệu lực: VFF phòng thủ tối thiểu {percentage(allocation.constraints.min_defensive_weight ?? 0)}; nhóm còn lại (gồm GOLD) tối đa {percentage(allocation.constraints.max_non_defensive_weight ?? 1)}; mỗi tài sản tối đa {percentage(allocation.constraints.max_position_weight)}. Ngại rủi ro: {allocation.constraints.risk_aversion}{allocation.requested_constraints && ` (hồ sơ: ${allocation.requested_constraints.risk_aversion})`} · regime {allocation.inputs_provenance.phase1_full.regime?.regime ?? 'normal'}.</p>}
+  const [showTable, setShowTable] = useState(false), [showZero, setShowZero] = useState(false);
+  const chart = presentation === 'chart', tableVisible = !chart || showTable;
+  if (!Array.isArray(allocation.asset_ids) || !Array.isArray(allocation.weights) || allocation.weights.length !== allocation.asset_ids.length ||
+      allocation.weights.some(weight => weight == null || String(weight).trim() === '' || !Number.isFinite(Number(weight)))) {
+    return <p role="status">Bản ghi chưa có đủ dữ liệu tỷ trọng.</p>;
+  }
+  const recordCapital = allocation.capital_vnd != null && String(allocation.capital_vnd).trim() ? Number(allocation.capital_vnd) : NaN;
+  const allRows: AllocationRow[] = allocation.asset_ids.map((asset, index) => {
+    const item = assets?.find(entry => entry.asset_id === asset);
+    const weight = Number(allocation.weights[index]);
+    const hasPrice = item && (item.data_status === 'FRESH' || item.data_status === 'STALE' || !!item.latest_observation_date);
+    return { asset, weight, capital: recordCapital * weight,
+      kind: item?.kind ?? (asset === 'VFF' ? 'fund' : asset === 'GOLD' ? 'gold' : 'unknown'),
+      priceHref: pricePortfolioId && hasPrice ? workspaceHash({ view: 'asset-prices', portfolioId: pricePortfolioId, proposalId: priceProposalId, returnView: priceReturnView, assetId: asset }) : undefined,
+    };
+  });
+  const assetLink = ({ asset, priceHref }: Pick<AllocationRow, 'asset' | 'priceHref'>) => priceHref
+    ? <a className="allocation-price-link" aria-label={`Xem giá ${asset}`} href={priceHref}>{asset}</a> : asset;
+  const total = allRows.reduce((sum, row) => sum + row.weight, 0);
+  const rows = allRows.filter(row => row.weight !== 0);
+  const zeroCount = allRows.length - rows.length;
+  const sortedRows = (showZero && tableVisible ? allRows : [...rows]).sort((a, b) => (sort.direction === 'ascending' ? 1 : -1) * (sort.key === 'asset' ? a.asset.localeCompare(b.asset, 'vi') : a[sort.key] - b[sort.key]));
+  if (presentation === 'summary') return <div className="result-allocation" data-variant={summaryVariant}>
+    <div className="result-allocation-head">
+      <div className="result-capital">
+        <span>{capitalLabel}</span><strong>{money(allocation.capital_vnd)}</strong>
+        {capitalNote && <div className="result-capital-note">{capitalNote}</div>}
+        {capitalAction && <div className="result-capital-action">{capitalAction}</div>}
+      </div>
+      <AllocationMix rows={allRows} title={chartTitle}/>
+    </div>
+    {allRows.length > 0 && <section className="result-assets">
+      <h2>Chi tiết theo tài sản</h2>
+      <table><caption className="sr-only">Phân bổ mục tiêu · {money(allocation.capital_vnd)}</caption>
+        <thead><tr><th scope="col">Tài sản</th><th scope="col">Tỷ trọng</th><th scope="col">Vốn mục tiêu</th></tr></thead>
+        <tbody>{[...allRows].sort((a, b) => b.weight - a.weight).map(row => <tr key={row.asset} data-asset-kind={row.kind}>
+          <th scope="row"><strong>{assetLink(row)}</strong><small>{groupNames[row.kind]}</small></th>
+          <td>{summaryPercent(row.weight)}</td><td>{money(row.capital)}</td>
+        </tr>)}</tbody>
+      </table>
     </section>}
-    {allocation.selection_context && <details className="notice allocation-selection-details" aria-label="Lựa chọn đã ghim của đề xuất"><summary>Chi tiết tính toán · {rows.length} tài sản được phân bổ</summary><p>Tài sản được phép cân nhắc khi tính: {allocation.selection_context.candidate_asset_ids.join(' · ')}.</p>{allocation.selection_proof && <><p>{allocation.selection_proof.applied_selection === 'equity-k5-v1' ? 'K5 thực tế' : 'Cổ phiếu được dùng'}: {allocation.selection_proof.selected_equity_ids.join(' · ') || 'Không có'}. {allocation.strategy === 'HYBRID' ? 'Tập của nhánh dùng mô hình' : 'Tập tính toán'}: {allocation.selection_proof.active_asset_ids.join(' · ')}.</p><p>{allocation.strategy !== 'HYBRID' && `${allocation.selection_proof.active_asset_ids.length} tài sản trong tập tính toán; `}{weights.filter(weight => weight > 0).length} tài sản có tỷ trọng dương. Tài sản được chọn vẫn có thể nhận 0%.</p></>}{allocation.constraints && <p>Policy hiệu lực: vị thế tối đa {percentage(allocation.constraints.max_position_weight)}; VFF phòng thủ tối thiểu {percentage(allocation.constraints.min_defensive_weight ?? 0)}; nhóm còn lại tối đa {percentage(allocation.constraints.max_non_defensive_weight ?? 1)}. Ngại rủi ro {allocation.constraints.risk_aversion} (hồ sơ {allocation.requested_constraints?.risk_aversion ?? '—'}; regime {allocation.selection_context.regime.regime}).</p>}</details>}
-  </>;
-  return <div className={`allocation-view${compact ? ' allocation-compact' : ''}`}>
-    <div className="allocation-capital"><strong>{money(allocation.capital_vnd)}</strong><span>{capitalLabel} · chưa trừ phí và làm tròn lô</span></div>
-    <div className="allocation-tags"><span className="badge">{allocation.requested_strategy && allocation.requested_strategy !== allocation.strategy ? `${strategyName(allocation.requested_strategy)} → ${strategyName(allocation.strategy)}` : strategyName(allocation.strategy)}</span>{allocation.demo && <span className="badge">Dữ liệu minh họa</span>}{!allocation.demo && allocation.inputs_provenance?.data_origin === 'real' && <span className="badge">Giá thị trường</span>}</div>
-    {allocation.fallback_reason && <p className="muted small">Đã dùng EW theo lựa chọn dự phòng: chưa có model ML được duyệt.</p>}
+    {allocation.demo && <small className="muted">Dữ liệu minh họa</small>}
+  </div>;
+  const phase = allocation.inputs_provenance?.phase1_full, selection = allocation.selection_context;
+  const proof = allocation.selection_proof, constraints = allocation.constraints;
+  const calculationDetails = (phase || selection) && <details className="allocation-calculation-details">
+    <summary>Tài sản và giới hạn khi tính</summary>
+    {phase && <>
+      <p>Tài sản dùng trong lần tính: {phase.active_asset_ids.join(' · ')}.</p>
+      {Object.entries(phase.availability ?? {}).map(([asset, item]) => <p key={asset}>{asset === 'VFF' ? 'NAV VFF' : asset}: ngày {item.observation_date}. Dữ liệu chậm {item.age_days} ngày, khả dụng từ {dateTime(item.policy_available_at)} (GMT+7).</p>)}
+    </>}
+    {selection && <>
+      <p>Tài sản được cân nhắc: {selection.candidate_asset_ids.join(' · ')}.</p>
+      {!!proof?.selected_equity_ids.length && <p>Cổ phiếu được dùng: {proof.selected_equity_ids.join(' · ')}.</p>}
+      {proof && <p>{allocation.strategy === 'HYBRID' ? 'Tài sản của nhánh dùng mô hình' : 'Tài sản dùng trong lần tính'}: {proof.active_asset_ids.join(' · ')}.</p>}
+    </>}
+    {constraints && <p>Mỗi tài sản tối đa {percentage(constraints.max_position_weight)}.{constraints.min_defensive_weight != null && <> Nhóm phòng thủ tối thiểu {percentage(constraints.min_defensive_weight)}.</>}{constraints.max_non_defensive_weight != null && <> Nhóm còn lại tối đa {percentage(constraints.max_non_defensive_weight)}.</>}</p>}
+  </details>;
+  return <div className={`allocation-view${chart ? ' allocation-chart-view' : ''}`}>
+    <div className="allocation-capital"><strong>{money(allocation.capital_vnd)}</strong><span>{capitalLabel}</span>
+      {showDataDate && <span className="allocation-data-date">Ngày dữ liệu{allocation.as_of_date ? <time dateTime={allocation.as_of_date}>{allocation.as_of_date}</time> : <span>Chưa xác định</span>}</span>}
+    </div>
+    {(allocation.demo || allocation.inputs_provenance?.data_origin === 'real') && <div className="allocation-tags">{allocation.demo ? <span className="badge">Dữ liệu minh họa</span> : <span className="badge">Giá thị trường</span>}</div>}
     {!summaryFirst && calculationDetails}
-    <div className="allocation-stack" aria-hidden="true">{rows.map(({ asset, index, weight }) => <span key={asset} title={`${asset}: ${percentage(weight)}`} style={{ width: `${Math.max(0, Math.min(100, weight * 100))}%`, background: `var(--chart-${index % 5 + 1})` }}/>)}</div>
-    <p className="allocation-total muted small">Tổng tỷ trọng: {percentage(total)}</p>
+    {chart ? <>
+      <div className="allocation-chart-toolbar">
+        <p className="weight-chart-summary"><strong>{percentage(total)}</strong> tổng tỷ trọng <span>· {rows.length} tài sản có phân bổ</span></p>
+        <div className="weight-chart-tabs" role="group" aria-label="Cách hiển thị phân bổ">
+          <button type="button" className="quiet" aria-label="Xem biểu đồ phân bổ" aria-pressed={!showTable} onClick={() => setShowTable(false)}>Biểu đồ</button>
+          <button type="button" className="quiet" aria-label="Xem bảng số liệu" aria-pressed={showTable} onClick={() => setShowTable(true)}>Bảng số liệu</button>
+        </div>
+      </div>
+      {!showTable && rows.length > 0 && <div className="weight-chart-plot">
+        <div className="weight-chart-axis" aria-hidden="true">{[0, 25, 50, 75, 100].map(tick => <span key={tick} style={{ left: `${tick}%` }}>{tick}%</span>)}</div>
+        <ul className="allocation-bars" aria-label="Biểu đồ tỷ trọng theo tài sản">{sortedRows.map(({ asset, kind, weight, capital, priceHref }) => <li key={asset}>
+          <div className="allocation-bar-label">
+            <div><strong>{assetLink({ asset, priceHref })}</strong><span> {groupNames[kind]}</span></div>
+            <strong>{weightPercentage(weight)}</strong><span>{money(capital)}</span>
+          </div>
+          <div className="allocation-bar-track" aria-hidden="true"><span data-asset-kind={kind} style={{ width: `${Math.max(0, Math.min(100, weight * 100))}%` }}/></div>
+        </li>)}</ul>
+      </div>}
+
+    </> : <><div className="allocation-stack" aria-hidden="true">{rows.map(({ asset, kind, weight }) => <span key={asset} title={`${asset}: ${percentage(weight)}`} data-asset-kind={kind} style={{ width: `${Math.max(0, Math.min(100, weight * 100))}%` }}/>)}</div><p className="allocation-total muted small">Tổng tỷ trọng: {percentage(total)}</p></>}
+    {tableVisible && zeroCount > 0 && <button type="button" className="quiet allocation-zero-toggle" aria-pressed={showZero} onClick={() => setShowZero(value => !value)}>{showZero ? 'Ẩn mã có tỷ trọng 0%' : `Xem ${zeroCount} mã có tỷ trọng 0%`}</button>}
     {!rows.length && <p className="muted" role="status">Chưa có tài sản được phân bổ.</p>}
-    {compact ? <ul className="allocation-legend">{sortedRows.map(({ asset, index, weight, capital }) => <li key={asset}><span className="legend-name"><i aria-hidden="true" style={{ background: `var(--chart-${index % 5 + 1})` }}/>{asset}</span><span className="allocation-legend-values"><strong>{percentage(weight)}</strong><span className="muted small">{money(capital)}</span></span></li>)}</ul> : <div className="allocation-table-wrap"><table className="allocation-table">
+    {tableVisible && <div className="allocation-table-wrap"><table className="allocation-table">
       <caption className="sr-only">Phân bổ mục tiêu · {money(allocation.capital_vnd)}</caption>
       <colgroup><col className="allocation-asset-col"/><col className="allocation-weight-col"/><col className="allocation-capital-col"/></colgroup>
       <thead><tr>{([['asset', 'Tài sản'], ['weight', 'Tỷ trọng mục tiêu'], ['capital', 'Vốn mục tiêu (VND)']] as const).map(([key, label]) => <th key={key} scope="col" aria-sort={sort.key === key ? sort.direction : 'none'}><button type="button" className="allocation-sort" aria-label={`${label}: sắp xếp ${sort.key === key && sort.direction === 'ascending' ? 'giảm dần' : 'tăng dần'}`} onClick={() => setSort(current => ({ key, direction: current.key === key && current.direction === 'ascending' ? 'descending' : 'ascending' }))}>{label}{sort.key === key ? <span aria-hidden="true">{sort.direction === 'ascending' ? '↑' : '↓'}</span> : <ActionIcon name="sort"/>}</button></th>)}</tr></thead>
-      <tbody>{sortedRows.map(({ asset, index, weight, capital }) => <tr key={asset}><th scope="row"><span className="legend-name"><i aria-hidden="true" style={{ background: `var(--chart-${index % 5 + 1})` }}/>{asset}</span></th><td>{percentage(weight)}</td><td data-label="Vốn mục tiêu">{money(capital)}</td></tr>)}</tbody>
-      <tfoot><tr><th scope="row">Tổng</th><td>{percentage(total)}</td><td>{money(Number(allocation.capital_vnd) * total)}</td></tr></tfoot>
+      <tbody>{sortedRows.map(({ asset, kind, weight, capital, priceHref }) => <tr key={asset}><th scope="row"><span className="legend-name"><i aria-hidden="true" data-asset-kind={kind}/>{assetLink({ asset, priceHref })}</span></th><td>{weightPercentage(weight)}</td><td data-label="Vốn mục tiêu">{money(capital)}</td></tr>)}</tbody>
+      <tfoot><tr><th scope="row">Tổng</th><td>{percentage(total)}</td><td>{money(recordCapital * total)}</td></tr></tfoot>
     </table></div>}
-    {!compact && <p className="muted small allocation-disclaimer">Tỷ trọng mục tiêu là kế hoạch phân bổ; không phản ánh tài sản thực tế. Vốn mục tiêu chưa trừ phí hoặc làm tròn lô.</p>}
-    {summaryFirst && (allocation.selection_context || allocation.inputs_provenance?.phase1_full) && <details className="allocation-calculation-details"><summary>Chi tiết tính toán · {rows.length} tài sản được phân bổ</summary>{calculationDetails}</details>}
-    {allocation.strategy === 'HYBRID' && allocation.diagnostics?.hybrid && <details className="allocation-details"><summary>Cách hệ thống tính</summary><p>Hồ sơ và trạng thái thị trường xác định mức ngại rủi ro và tỷ lệ phối. Đề xuất này phối {percentage(allocation.diagnostics.hybrid.mvo_share)} nhánh dùng thống kê lịch sử với {percentage(1 - allocation.diagnostics.hybrid.mvo_share)} nhánh dùng mô hình đã được duyệt.</p></details>}
-    <AllocationReferences allocation={allocation}/>
+    <p className="muted small allocation-disclaimer">Tỷ trọng mục tiêu là kế hoạch phân bổ; không phản ánh tài sản thực tế. Vốn mục tiêu chưa trừ phí hoặc làm tròn lô.</p>
+    {summaryFirst && calculationDetails}
+    {(!chart || metadata) && <AllocationReferencesDetails allocation={allocation}/>}
     {metadata && <AllocationMetadata allocation={allocation}/>}
   </div>;
 }

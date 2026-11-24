@@ -10,8 +10,9 @@ it('names expired inputs and provides an explicit refresh action', () => {
 it('compares actual asset weights and warns when source pins differ', () => {
   const common = { id: 'one', portfolio_id: 'pid', portfolio_version: 1, capital_vnd: '100000000', asset_ids: ['FPT'], weights: ['1'], strategy: 'EW', data_snapshot_id: 'a' };
   const html = renderToStaticMarkup(<ComparisonTable items={[common, { ...common, id: 'two', data_snapshot_id: 'b', strategy: 'MVO' }]}/>);
-  expect(html).toContain('Snapshot dữ liệu');
+  expect(html).toContain('Khác nhau về bộ dữ liệu');
+  expect(html).not.toContain('Snapshot dữ liệu');
   expect(html).toContain('FPT');
   expect(html).toContain('100,0%');
-  expect(html).toContain('không phải hiệu suất đầu tư');
+  expect(html).toContain('Bảng so sánh thể hiện thay đổi về phân bổ và vốn kế hoạch');
 });

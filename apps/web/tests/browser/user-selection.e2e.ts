@@ -43,13 +43,15 @@ async function create(page: Page, ids: string[]) {
   await page.getByLabel(/^Tên danh mục/).fill(`User selection ${Date.now()}`);
   await page.getByLabel(/^Vốn kế hoạch \(VND\)/).fill('100000000');
   await page.getByLabel('Thời gian đầu tư (tháng)').fill('36');
+  await page.getByRole('button', { name: 'Chọn tài sản', exact: true }).click();
+  await page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ }).click();
   for (const asset of ids) await page.getByTestId('available-assets').getByRole('button', { name: `Thêm ${asset} vào rổ tài sản`, exact: true }).click();
   if (!ids.includes('VFF')) await expect(page.getByTestId('selected-assets').locator('[data-asset-id="VFF"]')).toHaveCount(0);
-  await expect(page.getByText('Hệ thống có thể phân bổ 0% vào tài sản đã chọn.', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText('Mã đã chọn vẫn có thể nhận tỷ trọng 0%.', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-  await page.getByRole('radio', { name: 'Vừa — chấp nhận dao động', exact: true }).check();
-  await page.getByRole('radio', { name: 'Thấp — có nguồn dự phòng riêng', exact: true }).check();
-  await page.getByRole('radio', { name: 'Đã có kinh nghiệm', exact: true }).check();
+  await page.getByRole('radio', { name: 'Vừa · Từ 5% đến dưới 15%', exact: true }).check();
+  await page.getByRole('radio', { name: 'Tối đa 10%', exact: true }).check();
+  await page.getByRole('radio', { name: 'Từ 6 tháng trở lên', exact: true }).check();
   await page.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
   const sent = await postUI(page, '/api/v1/onboarding/portfolios', () => page.getByTestId('create-portfolio-submit').click(), 201);
   expect(sent.body.asset_ids).toEqual(ids); expect(sent.body).not.toHaveProperty('universe_id');
@@ -104,6 +106,9 @@ async function optionalReviewPublication(browser: Browser, snapshotOverride?: st
 test('Asset basket moves individual and filtered bulk choices without creating a portfolio', async ({ browser }) => {
   const page = await login(browser, 'alice');
   await page.goto('/#create');
+  await page.getByLabel('Tên danh mục').fill('Kiểm tra rổ tài sản');
+  await page.getByRole('button', { name: 'Chọn tài sản', exact: true }).click();
+  await page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ }).click();
   const available = page.getByTestId('available-assets'), basket = page.getByTestId('selected-assets');
   await expect(available.locator('[data-asset-id]')).toHaveCount(32);
   await available.getByRole('button', { name: 'Thêm FPT vào rổ tài sản', exact: true }).focus();
@@ -135,11 +140,25 @@ test('Asset basket moves individual and filtered bulk choices without creating a
   const captures = resolve('../../output/playwright/asset-transfer-v26-real');
   await mkdir(captures, { recursive: true });
   await available.getByRole('button', { name: 'Thêm FPT vào rổ tài sản', exact: true }).click();
+  await page.getByRole('button', { name: 'Xem danh sách đơn', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Bỏ FPT khỏi rổ tài sản' })).toBeVisible();
+  await page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ }).click();
+  await expect(basket.locator('[data-asset-id="FPT"]')).toHaveCount(1);
   await available.getByRole('region', { name: 'Danh sách tài sản hỗ trợ', exact: true }).evaluate(element => { element.scrollTop = 0; });
-  for (const [name, width] of [['desktop', 1440], ['mobile', 375]] as const) {
+  for (const [name, width] of [['desktop', 1440], ['tablet-wide', 1024], ['mobile', 375]] as const) {
     await page.setViewportSize({ width, height: 1000 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: resolve(captures, `${name}.png`), fullPage: true });
+    if (width > 800) {
+      const left = (await available.boundingBox())!, right = (await basket.boundingBox())!;
+      expect(right.x).toBeGreaterThanOrEqual(left.x + left.width);
+      expect(right.y).toBeCloseTo(left.y, 0);
+    } else {
+      await expect(basket).toBeHidden();
+      await page.getByRole('button', { name: 'Rổ của bạn · 1', exact: true }).click();
+      await expect(available).toBeHidden();
+      await expect(basket.getByRole('button', { name: 'Bỏ FPT khỏi rổ tài sản' })).toBeVisible();
+    }
+    await page.screenshot({ path: resolve(captures, `${name}.png`), fullPage: true, mask: [page.locator('.account-name')] });
   }
   await page.close();
 });
@@ -148,6 +167,9 @@ test('User selection basket preserves newer search focus after clearing selectio
   phase(info, 'asset-basket-focus');
   const page = await login(browser, 'alice');
   await page.goto('/#create');
+  await page.getByLabel('Tên danh mục').fill('Kiểm tra rổ tài sản');
+  await page.getByRole('button', { name: 'Chọn tài sản', exact: true }).click();
+  await page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ }).click();
   await page.getByTestId('available-assets').getByRole('button', { name: 'Thêm FPT vào rổ tài sản', exact: true }).click();
   await page.evaluate(() => {
     document.querySelector<HTMLButtonElement>('[data-testid="selected-assets"] .asset-transfer-header button')!.click();
@@ -260,8 +282,10 @@ test('User selection basket saves all 32 assets, edits, reloads and accepts a re
   expect(metadata.find((asset: Value) => asset.asset_id === 'VFF')).toMatchObject({ metadata_source: 'fmarket:vff:21', metadata_source_symbol: 'VFF' });
   expect(metadata.find((asset: Value) => asset.asset_id === 'GOLD')).toMatchObject({ metadata_source: 'giavang:sjc-sell-hcm', metadata_source_symbol: 'GOLD' });
   await page.goto('/#create');
-  await expect(page.getByTestId('available-assets').getByText(metadata.find((asset: Value) => asset.asset_id === 'FPT').display_name, { exact: true })).toBeVisible();
   await page.getByLabel(/^Tên danh mục/).fill(`Asset basket V2.6 real ${Date.now()}`);
+  await page.getByRole('button', { name: 'Chọn tài sản', exact: true }).click();
+  await page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ }).click();
+  await expect(page.getByTestId('available-assets').getByText(metadata.find((asset: Value) => asset.asset_id === 'FPT').display_name, { exact: true })).toBeVisible();
   const available = page.getByTestId('available-assets'), basket = page.getByTestId('selected-assets');
   await available.getByRole('button', { name: 'Thêm tất cả', exact: true }).click();
   await expect(basket.locator('[data-asset-id]')).toHaveCount(32);
@@ -274,7 +298,7 @@ test('User selection basket saves all 32 assets, edits, reloads and accepts a re
   await available.getByRole('button', { name: 'Thêm tất cả', exact: true }).click();
   await expect(basket.locator('[data-asset-id]')).toHaveCount(32);
   await page.getByRole('button', { name: 'Tiếp tục', exact: true }).click();
-  for (const name of ['Vừa — chấp nhận dao động', 'Thấp — có nguồn dự phòng riêng', 'Đã có kinh nghiệm']) await page.getByRole('radio', { name, exact: true }).check();
+  for (const name of ['Vừa · Từ 5% đến dưới 15%', 'Tối đa 10%', 'Từ 6 tháng trở lên']) await page.getByRole('radio', { name, exact: true }).check();
   await page.getByRole('button', { name: 'Xem lại hồ sơ', exact: true }).click();
   const created = await postUI(page, '/api/v1/onboarding/portfolios', () => page.getByTestId('create-portfolio-submit').click(), 201);
   expect(created.body.asset_ids).toEqual(ids);
@@ -488,7 +512,7 @@ test('User selection reopens identical old and new proposals after restart', asy
   for (const entry of proposals) {
     const actual = await get(page, `/api/v1/recommendations/${entry.proposal.id}`); expect(actual).toEqual(entry.proposal);
     await page.goto(`/#proposal?portfolio=${entry.portfolio_id}&proposal=${entry.proposal.id}`);
-    await expect(page.locator('.allocation-tags').getByText(entry.proposal.strategy === 'BL_ML' ? 'BL + ML' : entry.proposal.strategy, { exact: true })).toBeVisible();
+    await expect(page.locator('.allocation-tags').getByText('Giá thị trường', { exact: true })).toBeVisible();
     const rows = page.locator('.allocation-view').first().locator('tbody');
     await expect(rows.locator('tr')).toHaveCount(entry.proposal.weights.filter((weight: string | number) => Number(weight) !== 0).length);
     for (const [index, asset] of entry.proposal.asset_ids.entries()) {
@@ -514,4 +538,51 @@ test('User selection reopens identical old and new proposals after restart', asy
   }
   await writeFile(resolve(directory, 'browser-persistence-receipt.json'), JSON.stringify({ checked_at: new Date().toISOString(), old_proposal_verified: saved.legacy.proposal.id, new_proposals_verified: proposals.slice(1).map(entry => entry.proposal.id), bl_ml_proposals_verified: saved.cases.filter((entry: Value) => entry.proposal).map((entry: Value) => entry.proposal.id), positive_persistence: proposals.length > 1 ? 'VERIFIED' : 'BLOCKED_NO_POSITIVE_PROPOSAL' }, null, 2) + '\n', { mode: 0o600 });
   if (requirePositive) expect(proposals.length).toBeGreaterThan(1);
+});
+
+test('Quantified survey persists confirmed bands and reassesses only the test portfolio', async ({ browser }) => {
+  const page = await login(browser, 'alice');
+  const previous = await get(page, '/api/v1/portfolios?limit=100');
+  const legacy = previous.find((p: any) => p.risk_profile?.answers?.questionnaire_version === 'risk-v1');
+  if (legacy) {
+    await page.goto('/#risk-assessment?portfolio=' + legacy.id);
+    await expect(page.getByTestId('risk-horizon')).toHaveValue(String(legacy.risk_profile.answers.horizon_months));
+    await expect(page.locator('.risk-questions input:checked')).toHaveCount(0);
+    expect((await get(page, '/api/v1/portfolios/' + legacy.id)).risk_profile).toEqual(legacy.risk_profile);
+  }
+
+  const p = await create(page, ['FPT', 'MWG', 'VCB', 'VFF']);
+  const path = '/api/v1/portfolios/' + p.id;
+  expect(p.risk_profile.answers.questionnaire_version).toBe('risk-v2');
+  expect(p.risk_profile.answers).not.toHaveProperty('experience');
+  expect(p.risk_profile.profile).toBe('balanced');
+  await page.goto('/#risk-assessment?portfolio=' + p.id);
+  const form = page.getByTestId('risk-reassessment');
+  await expect(form.getByText('5% = 5.000.000 ₫ · 15% = 15.000.000 ₫', { exact: true })).toBeVisible();
+  const reserve = form.getByRole('group', { name: /Nếu thu nhập tạm dừng/ });
+  await reserve.getByRole('button', { name: 'Tôi chưa chắc' }).click();
+  await expect(reserve.getByRole('status')).toContainText('4 tháng');
+  await page.getByTestId('risk-preview').click();
+  await expect(page.getByTestId('risk-confirm')).toHaveCount(0);
+  await reserve.getByRole('radio', { name: 'Từ 6 tháng trở lên' }).check();
+  await page.getByTestId('risk-horizon').fill('60');
+  await page.getByRole('radio', { name: 'Cao · Từ 15% trở lên' }).check();
+  await page.getByRole('radio', { name: 'Trên 30%', exact: true }).check();
+  await form.getByLabel('Kinh nghiệm đầu tư (tùy chọn)').selectOption('beginner');
+  const preview = await postUI(page, path + '/risk-assessments/preview', () => page.getByTestId('risk-preview').click(), 200);
+  expect(preview.result.after.risk_profile.determining_factors).toEqual(['liquidity_need']);
+  await expect(page.getByText(/Hồ sơ được xác định theo dự kiến rút trên 30%/)).toBeVisible();
+  expect((await get(page, path)).risk_profile).toEqual(p.risk_profile);
+  const confirmed = await postUI(page, path + '/risk-assessments', () => page.getByTestId('risk-confirm').click(), 201);
+  expect(confirmed.result.constraints.risk_aversion).toBe(6);
+  expect(confirmed.headers['if-match']).toBe('"1"');
+  expect(confirmed.headers['idempotency-key']).toBeTruthy();
+  await page.goto('/#profile?portfolio=' + p.id);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Thận trọng', exact: true })).toBeVisible();
+  await expect(page.getByText(/Hồ sơ được xác định theo dự kiến rút trên 30%/)).toBeVisible();
+  const history = await get(page, path + '/risk-assessments');
+  expect(history.map((r: any) => r.risk_profile.profile)).toEqual(['conservative', 'balanced']);
+  expect(history[1].risk_profile).toEqual(p.risk_profile);
+  expect((await get(page, path)).asset_selection.revision_id).toBe(p.asset_selection.revision_id);
 });

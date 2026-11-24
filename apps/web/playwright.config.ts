@@ -10,7 +10,10 @@ export default defineConfig({
   retries: 0,
   timeout: 180_000,
   globalTimeout: 600_000,
-  expect: { timeout: 20_000 },
+  expect: {
+    timeout: 20_000,
+    toHaveScreenshot: { pathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}' },
+  },
   outputDir: '../../output/playwright/private-results',
   reporter: [['./tests/browser/safe-reporter.ts']],
   use: {

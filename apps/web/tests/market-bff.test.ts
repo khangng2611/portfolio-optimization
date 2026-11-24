@@ -32,3 +32,34 @@ it('routes fixed operator endpoints to their owning service with CSRF and bounde
   expect((await bff.proxy(request('/api/v1/market/ingestions', { method: 'POST', cookie, headers: { origin: config.origin, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: '{}' }))).status).toBe(400);
   expect((await bff.proxy(request('/api/v1/market/snapshots', { method: 'POST', cookie, headers: { 'content-type': 'application/json' }, body: '{}' }))).status).toBe(403);
 });
+
+it('forwards a bounded investor price series read and restricts raw prices to operators', async () => {
+  config.marketUrl = 'http://market-api:8000';
+  const received: string[] = [];
+  const { bff, cookie } = await login({ fetch: async url => { received.push(String(url)); return Response.json({ series: [] }); } });
+  const query = '?asset_id=FPT&start_date=2026-11-01&end_date=2026-11-22';
+  expect((await bff.proxy(request('/api/v1/market/price-series' + query, { cookie }))).status).toBe(200);
+  expect(received).toEqual(['http://market-api:8000/api/v1/market/price-series' + query]);
+  expect((await bff.proxy(request('/api/v1/market/price-series' + query + '&asset_id=VFF', { cookie }))).status).toBe(400);
+  expect((await bff.proxy(request('/api/v1/market/prices' + query, { cookie }))).status).toBe(403);
+});
+
+it('keeps knowledge lifecycle under the operator role, CSRF, version and idempotency gates', async () => {
+  config.knowledgeUrl = 'http://knowledge-api:8000';
+  const path = `/api/v1/knowledge/corpora/${id}/activate`;
+  const investor = await login();
+  expect((await investor.bff.proxy(request('/api/v1/knowledge/corpora', { cookie: investor.cookie }))).status).toBe(403);
+  const seen: string[] = [];
+  const { bff, cookie, csrf } = await login({ identity: operator(), fetch: async (url, init) => {
+    const h = new Headers(init?.headers);
+    seen.push(`${url} ${h.get('if-match')} ${h.get('idempotency-key')}`);
+    return Response.json({ active: true });
+  } });
+  const options = { method: 'POST', cookie, body: '{ "reason": "verified corpus" }' };
+  const headers = { origin: config.origin, 'content-type': 'application/json', 'x-csrf-token': csrf };
+  expect((await bff.proxy(request(path, options))).status).toBe(403);
+  expect((await bff.proxy(request(path, { ...options, headers }))).status).toBe(428);
+  expect((await bff.proxy(request(path, { ...options, headers: { ...headers, 'if-match': '"5"' } }))).status).toBe(400);
+  expect((await bff.proxy(request(path, { ...options, headers: { ...headers, 'if-match': '"5"', 'idempotency-key': 'activate-fixture' } }))).status).toBe(200);
+  expect(seen).toEqual([`http://knowledge-api:8000${path} "5" activate-fixture`]);
+});

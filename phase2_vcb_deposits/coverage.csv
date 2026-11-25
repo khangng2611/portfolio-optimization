@@ -1,0 +1,7 @@
+tenor,sample,sessions,bank_capture_sessions,missing_sessions,longest_gap_sessions,first_capture,last_capture,reconstruction_dates
+demand,full,1568,4,1564,785,2023-01-11,2026-04-10,3
+demand,oos,641,3,638,608,2026-03-13,2026-04-10,3
+1m,full,1568,4,1564,785,2023-01-11,2026-04-10,21
+1m,oos,641,3,638,608,2026-03-13,2026-04-10,10
+12m,full,1568,4,1564,785,2023-01-11,2026-04-10,25
+12m,oos,641,3,638,608,2026-03-13,2026-04-10,13

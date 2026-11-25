@@ -253,3 +253,8 @@ csonet-paper/
 /phase2_gold_k5/revision/verification/
 /phase2_gold_k5/revision/derived_exploratory.csv
 /phase2_gold_k5/revision/doi-soat-sjc.png
+
+# Local source captures and detailed observations for the VCB deposit study
+/phase2_vcb_deposits/evidence/
+/phase2_vcb_deposits/observations.csv
+/phase2_vcb_deposits/rates.csv

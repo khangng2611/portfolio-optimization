@@ -195,6 +195,10 @@ def persist_failure(sessions, asset, provenance, calendar_source, store, root, e
         }
 
 
+class CalendarUnavailable(ValueError):
+    pass
+
+
 def refresh_selected(
     asset_ids,
     cutoff,
@@ -205,6 +209,7 @@ def refresh_selected(
     mixed=None,
     seed=None,
     now=None,
+    minimum_calendar_end=None,
 ):
     now = now or utcnow()
     assets = canonical_candidates(asset_ids)
@@ -262,6 +267,18 @@ def refresh_selected(
         ArithmeticError,
     ) as exc:
         calendar_error = exc
+    if minimum_calendar_end is not None:
+        if not calendar:
+            if isinstance(calendar_error, CalendarUnavailable):
+                raise calendar_error
+            raise CalendarUnavailable("KBS_CALENDAR_UNAVAILABLE") from calendar_error
+        if calendar[-1] < minimum_calendar_end:
+            raise CalendarUnavailable(
+                f"KBS_CALENDAR_REGRESSION: received {calendar[-1]}, expected at least {minimum_calendar_end}"
+            )
+        if calendar[-1] > minimum_calendar_end:
+            # A partial retry cannot carry other assets forward to a new session.
+            assets = list(ASSET_IDS)
     receipts = {}
     for asset in assets:
         refs, metadata, gaps = [], {}, []

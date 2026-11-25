@@ -317,3 +317,31 @@ def test_successful_transaction_can_commit_with_a_source_commit_hash(
         "public-check",
         "committed",
     ]
+
+
+def test_release_profile_keeps_worker_settings_and_updates_images(tmp_path):
+    previous = {
+        "chat-worker": {
+            "image": "old-chat",
+            "env_file": ["/private/worker.env"],
+            "environment": {"CHAT_LLM_DAILY_CALL_LIMIT": "100"},
+        },
+        "hybrid-market-refresh": {
+            "image": "old-market",
+            "extends": {"file": "/old/compose.yaml", "service": "market-refresh"},
+        },
+    }
+    images = {
+        "chat-worker": {"image": "new-chat"},
+        "market-refresh": {"image": "new-market"},
+    }
+    profile = module().release_profile(previous, images, tmp_path)["services"]
+    assert profile["chat-worker"] == previous["chat-worker"] | {"image": "new-chat"}
+    assert profile["hybrid-market-refresh"] == {
+        "image": "new-market",
+        "extends": {
+            "file": str(tmp_path / "infra/local/compose.yaml"),
+            "service": "market-refresh",
+        },
+    }
+    assert previous["hybrid-market-refresh"]["extends"]["file"] == "/old/compose.yaml"

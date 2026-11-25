@@ -21,7 +21,7 @@ def approved_budget():
         if (
             not os.environ.get("KNOWLEDGE_PAID_APPROVAL")
             or not amount.is_finite()
-            or not 0 < amount <= 1
+            or not 0 < amount <= 10
         ):
             return None
         return os.environ["KNOWLEDGE_PAID_APPROVAL"], amount

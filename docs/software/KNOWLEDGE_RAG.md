@@ -398,8 +398,7 @@ independent of provider availability and the four-message text-context window.
 Explicit recommendation IDs retain priority. Explanation responses carry the
 additive explanation_requested flag so the explanation opens immediately.
 
-CHAT_LLM_APPROVAL_CALL_LIMIT defaults to 20 and is clamped to 0–250. Invalid
-values block new calls. The current authorized demo uses 250 per approval and 100
+CHAT_LLM_APPROVAL_CALL_LIMIT defaults to 20. Invalid or negative values block new calls. The separately configured daily quota and the approval budget still apply. The current authorized demo uses 250 per approval and 100
 per day, with a USD 1.00 budget approved on 18/11/2026. The existing approval ID
 and recorded usage are retained; billing settings are unchanged. Provider outages/exhaustion still permit canonical
 read-only follow-up explanations.

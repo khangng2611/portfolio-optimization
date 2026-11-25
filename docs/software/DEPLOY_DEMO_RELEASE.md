@@ -14,6 +14,8 @@ The command runs the software suite, Web unit tests and typecheck locally. It st
 
 The public profile reuses the existing Funnel hostname and generated credentials. It uses explicit DEMO strategies with `SYSTEM_HYBRID_ENABLED=false`. The local HYBRID, paid-provider and research overlays are separate from this release. Running them on another host requires provisioning the corresponding data and model artifacts, or separately configuring provider access and budget.
 
+The controller carries forward the active private runtime profile, including HYBRID, refresh workers and any already authorized OpenAI quota. It uses the new release images with that profile, and keeps the old configuration and exact images for rollback. In HYBRID mode it verifies the previously saved DEMO receipts without submitting new legacy strategy requests.
+
 ## Transaction and maintenance window
 
 1. Prepare a candidate checkout, isolated smoke Python environment and **release-tagged application images** before interrupting the current service. Prefetch external images if necessary. Build logs remain private on the VPS.

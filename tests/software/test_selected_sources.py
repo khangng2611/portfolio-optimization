@@ -660,3 +660,18 @@ def test_current_snapshot_keeps_all_32_latest_sources_available(owner):
             r["quality_status"] for r in snapshot.manifest["asset_coverage"].values()
         } == {"PASS"}
         assert {r["asset_id"] for r in snapshot.observations} == set(ASSET_IDS)
+
+
+def test_automation_refreshes_full_basket_when_calendar_advances(owner, monkeypatch):
+    from market_service import selected_refresh as selected
+
+    sessions, store = owner
+    # Small test universe, with one equity previously considered complete.
+    monkeypatch.setattr(selected, "ASSET_IDS", ["FPT", "ACB"])
+    result = refresh_selected(
+        ["FPT"], END, store, sessions=sessions, kbs=Kbs(), mixed=Vff(), now=NOW,
+        minimum_calendar_end="2026-11-10",
+    )
+    assert result["calendar_sessions"][-1] == str(END)
+    assert {a: r["status"] for a, r in result["asset_receipts"].items()} == {
+        "FPT": "AVAILABLE", "ACB": "AVAILABLE"}

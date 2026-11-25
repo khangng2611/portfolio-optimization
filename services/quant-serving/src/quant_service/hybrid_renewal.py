@@ -1,4 +1,4 @@
-"""Preflight buffered snapshots and enqueue through the normal publication worker."""
+"""Preflight live NAV snapshots and enqueue through the normal publication worker."""
 
 from datetime import datetime, timedelta
 import json
@@ -10,6 +10,7 @@ from uuid import UUID
 
 from portfolio_contracts import canonical_hash, utcnow
 from portfolio_contracts.assets import EQUITY_IDS
+from portfolio_contracts.selection import LIVE_NAV_POLICY
 from .ml import parse_manifest, read_artifact
 from .publication_api import CredentialModelResolver, ModelResolutionUnavailable
 from .publication_worker import CredentialMarketReader, PublicationQueue
@@ -19,7 +20,6 @@ from .selection_panel import SelectionDataError, SelectionPanel
 from .selection_ready import check_equity_model_inputs, fit_index
 
 HANDOFF = Path("/refresh/hybrid-automation/snapshot.json")
-BUFFERED = "user-selection-data-v1"
 
 
 def approved_model(directory, panel, equities):
@@ -69,7 +69,7 @@ def enqueue(pin, directory, now):
     snapshot, observations = CredentialMarketReader().load(
         pin["snapshot_id"], pin["snapshot_hash"]
     )
-    if snapshot["availability_policy"] != BUFFERED or snapshot["max_age_days"] != 7:
+    if snapshot["availability_policy"] != LIVE_NAV_POLICY or snapshot["max_age_days"] != 7:
         raise ValueError("WRONG_AVAILABILITY_POLICY")
     panel = SelectionPanel(
         snapshot, observations, expected_hash=pin["snapshot_hash"], now=now
@@ -80,19 +80,18 @@ def enqueue(pin, directory, now):
     if not equities:
         raise ValueError("NO_FRESH_EQUITIES")
     catalog = SelectionCatalog(directory)
-    # Avoid replacing a usable asset with a failed provider refresh. Compare like policies.
+    # Preserve coverage even when the prior bundle used a different NAV policy.
     try:
         prior = catalog.latest()
     except (ValueError, FileNotFoundError):
         prior = None
-    if prior and prior.valid_until > now:
+    if prior:
         _, old = catalog.load_resource(prior)
         if old.dates[old.decision_index] > panel.dates[panel.decision_index]:
             raise ValueError("OLDER_SNAPSHOT")
+    if prior and prior.valid_until > now:
         prior_assets, _ = eligible_assets(old, now)
         lost = set(prior_assets) - set(available)
-        if old.snapshot["availability_policy"] != BUFFERED:
-            lost.discard("VFF")  # The old, unbuffered NAV cannot certify VFF freshness.
         if lost:
             raise ValueError("COVERAGE_REGRESSION " + ",".join(sorted(lost)))
     model_id, model = approved_model(directory, panel, equities)

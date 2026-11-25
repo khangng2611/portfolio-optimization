@@ -110,6 +110,25 @@ def compose(root, images=None):
     return result
 
 
+def release_profile(previous, images, root):
+    services = {name: row.copy() for name, row in images.items()}
+    for name, row in previous.items():
+        settings = {key: value for key, value in row.items() if key != "image"}
+        if not settings:
+            continue
+        if name not in services:
+            parent = settings.get("extends", {}).get("service")
+            if parent not in services:
+                raise ValueError(f"Cannot carry runtime settings for {name}")
+            settings["extends"] = {
+                "file": str(root / "infra/local/compose.yaml"),
+                "service": parent,
+            }
+            services[name] = {"image": services[parent]["image"]}
+        services[name].update(settings)
+    return {"services": services}
+
+
 def public_check(origin):
     command = [
         "curl",
@@ -220,17 +239,6 @@ class Transaction:
                 private=True,
             )
         )
-        for service in config["services"].values():
-            for mount in service.get("volumes", []):
-                if mount["type"] == "bind" and not mount.get("read_only", False):
-                    if (
-                        not Path(mount["source"])
-                        .resolve()
-                        .is_relative_to((candidate / gen).resolve())
-                    ):
-                        raise RuntimeError(
-                            "Writable bind mount is outside the protected generated directory"
-                        )
         # Use the candidate's own release/profile validation before touching the live stack.
         run(
             [
@@ -258,9 +266,52 @@ class Transaction:
                 if s.get("image") in builds
             }
         }
-        atomic_json(self.path / "images.json", images)
+        previous_images = (self.state["previous_manifest"] or {}).get("images")
+        self.previous_services = (
+            json.loads(Path(previous_images).read_text())["services"]
+            if previous_images
+            else {}
+        )
+        candidate_profile = self.path / "candidate-images.json"
+        atomic_json(
+            candidate_profile,
+            release_profile(self.previous_services, images["services"], candidate),
+        )
+        atomic_json(
+            self.path / "images.json",
+            release_profile(self.previous_services, images["services"], ROOT),
+        )
+        candidate_config = json.loads(
+            run(
+                compose(candidate, candidate_profile) + ["config", "--format", "json"],
+                cwd=candidate,
+                private=True,
+            )
+        )
+        self.state["hybrid"] = (
+            candidate_config["services"]["portfolio-api"]["environment"].get(
+                "SYSTEM_HYBRID_ENABLED"
+            )
+            == "true"
+        )
+        for service in candidate_config["services"].values():
+            if any(
+                port.get("host_ip") not in ("127.0.0.1", "::1")
+                for port in service.get("ports", [])
+            ):
+                raise RuntimeError("Public profile contains a non-loopback port")
+            for mount in service.get("volumes", []):
+                if mount["type"] == "bind" and not mount.get("read_only", False):
+                    if (
+                        not Path(mount["source"])
+                        .resolve()
+                        .is_relative_to((candidate / gen).resolve())
+                    ):
+                        raise RuntimeError(
+                            "Writable bind mount is outside the protected generated directory"
+                        )
         event("phase", phase="building-release-images", transaction=self.id)
-        run(compose(candidate, self.path / "images.json") + ["build"], cwd=candidate)
+        run(compose(candidate, candidate_profile) + ["build"], cwd=candidate)
         for service in config["services"].values():
             name = service.get("image")
             if not name or name in builds:
@@ -405,7 +456,9 @@ class Transaction:
                 )
                 snapshot = run(["docker", "commit", "--pause=true", container, tag])
                 self.state.setdefault("runtime_image_snapshots", {})[service] = snapshot
-            services[service] = {"image": tag}
+            services[service] = getattr(self, "previous_services", {}).get(
+                service, {}
+            ) | {"image": tag}
             volumes_used.update(
                 m["Name"] for m in row["mounts"] if m["Type"] == "volume"
             )
@@ -567,8 +620,18 @@ class Transaction:
             ],
             cwd=ROOT,
         )
-        for script in ["smoke_software.py", "smoke_g2.py"]:
-            run([self.state["python"], ROOT / "scripts" / script], cwd=ROOT)
+        if self.state.get("hybrid"):
+            run(
+                [
+                    self.state["python"],
+                    ROOT / "scripts/smoke_software.py",
+                    "--verify-receipt",
+                ],
+                cwd=ROOT,
+            )
+        else:
+            for script in ["smoke_software.py", "smoke_g2.py"]:
+                run([self.state["python"], ROOT / "scripts" / script], cwd=ROOT)
         run(["curl", "-fsS", "--max-time", "15", "http://127.0.0.1:3000/health/live"])
         run(["curl", "-fsS", "--max-time", "15", "http://127.0.0.1:3000/login"])
 

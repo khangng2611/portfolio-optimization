@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { AnswerRows, emptyRiskDraft, quantifiedAnswers, riskKeys, RiskQuestions, shortLabels } from './risk-questions';
 import { TaskActions } from './task-actions';
-import { WizardAssetPicker } from './asset-picker';
+import { AssetPicker } from './asset-picker';
 import type { AssetCatalog } from '../lib/selection-types';
 import './risk-wizard.css';
 import { CapitalInput } from './capital-input';
@@ -98,7 +98,7 @@ export function RiskWizard({ busy, onCreate, universes = [], catalog = null, onS
       </div><aside className="wizard-capital-note"><h2>Vốn kế hoạch</h2><p>Số tiền bạn dự định phân bổ. Bạn có thể xem lại các thông tin này ở bước xác nhận.</p></aside></fieldset>
       {custom && step === 'basket' && <section className="wizard-basket-picker">
         <p className="wizard-basket-title" role="status">{answers.name} · {assetIds.length} mã đã chọn</p>
-        <WizardAssetPicker assets={catalog!.assets} selected={assetIds} onChange={setAssetIds} disabled={busy}/>
+        <AssetPicker assets={catalog!.assets} selected={assetIds} onChange={setAssetIds} disabled={busy}/>
       </section>}
       <fieldset hidden={step !== 'risk'} disabled={busy || step !== 'risk'}><legend className="sr-only">Khả năng chấp nhận rủi ro</legend>
         <p className="muted small">Chọn một câu trả lời cho mỗi nhóm theo khả năng thực tế của bạn.</p>

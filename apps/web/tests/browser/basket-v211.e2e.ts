@@ -66,13 +66,63 @@ test('V2.11 login, basket drafts, profile and account navigation', async ({ page
   await expect(page.locator('.task-actions')).toContainText('Mã đã chọn có thể nhận tỷ trọng 0%.');
   for (const width of widths) {
     await capture(page, 'basket', width);
+    if (width < 960) {
+      const fpt = toggle('FPT', true);
+      const bounds = (await fpt.boundingBox())!;
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
+      expect((await page.locator('li.wizard-asset').filter({has: fpt}).boundingBox())!.height).toBeLessThan(100);
+    } else {
+      await expect(page.getByRole('combobox', {name: 'Loại tài sản'})).toBeVisible();
+    }
     await expect(next).toBeInViewport();
     await expect(toggle('VFF', true)).toBeInViewport();
     await expect(toggle('FPT', true)).toBeInViewport();
   }
-  await page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ }).click();
-  await expect(page.getByTestId('selected-assets').locator('[data-asset-id]')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Xem danh sách đơn' }).click();
+  const expand = page.getByRole('button', { name: /^Xem tất cả \d+ mã$/ });
+  const rows = page.locator('.wizard-asset:visible');
+  const catalogSize = (await (await page.request.get('/api/v1/assets/catalog')).json()).assets.length;
+  await expect(rows).toHaveCount(catalogSize);
+  const left = page.locator('.wizard-candidates');
+  const right = page.locator('.wizard-basket-summary');
+  await expect(left.locator('.wizard-asset')).toHaveCount(catalogSize - 2);
+  await expect(right.locator('.wizard-asset-id strong')).toHaveText(['VFF', 'FPT']);
+  const leftBox = (await left.boundingBox())!;
+  expect((await right.boundingBox())!.x).toBeGreaterThan(leftBox.x + leftBox.width);
+  await left.getByRole('button', {name: 'Thêm ACB vào rổ tài sản'}).press('Enter');
+  await expect(left.locator('[data-asset-id="ACB"]')).toHaveCount(0);
+  await right.getByRole('button', {name: 'Bỏ ACB khỏi rổ tài sản'}).press('Enter');
+  await expect(left.locator('[data-asset-id="ACB"]')).toHaveCount(1);
+  // Fill both panes so their scroll behavior is exercised with real catalog rows.
+  const added = await left.locator('[data-asset-id]').evaluateAll(nodes => nodes.slice(0, 12).map(node => node.getAttribute('data-asset-id')!));
+  for (const symbol of added) await toggle(symbol, false).click();
+  const lists = page.locator('.wizard-asset-list');
+  const [availablePane, selectedPane] = await lists.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
+  expect(selectedPane.top).toBe(availablePane.top);
+  expect(selectedPane.height).toBe(availablePane.height);
+  await right.locator('li').filter({has: toggle('VFF', true)}).locator('summary').click();
+  const expandedRow = right.locator('li').first();
+  const description = (await expandedRow.locator('details p').boundingBox())!;
+  expect((await right.locator('li').nth(1).boundingBox())!.y).toBeGreaterThan(description.y + description.height);
+  const compact = (await left.locator('li').first().boundingBox())!;
+  expect(compact.height).toBeLessThan(90);
+  for (const index of [0, 1]) {
+    await lists.evaluateAll(nodes => nodes.forEach(n => { n.scrollTop = 0; }));
+    await lists.nth(index).evaluate(n => { n.scrollTop = 100; });
+    expect(await lists.nth(index).evaluate(n => n.scrollTop)).toBeGreaterThan(0);
+    expect(await lists.nth(1 - index).evaluate(n => n.scrollTop)).toBe(0);
+  }
+  for (const symbol of added) await toggle(symbol, true).click();
+  await expect(expand).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(rows).toHaveCount(2);
+  await expand.click();
+  await expect(rows).toHaveCount(catalogSize);
+  await capture(page, 'basket-expanded', 390);
+  await toggle('ACB', false).click();
+  await page.getByRole('button', { name: 'Thu gọn' }).click();
+  await expect(toggle('ACB', true)).toBeVisible();
+  await toggle('ACB', true).click();
   await next.click();
   await expect(page.locator('.wizard-progress-label')).toHaveText('Bước 3/4 · Rủi ro');
   await back.click();

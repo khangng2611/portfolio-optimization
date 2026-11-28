@@ -54,7 +54,7 @@ def test_source_receipt_retains_invalid_bytes_and_excludes_late_response(tmp_pat
             asset,
             deadline,
             lambda: (body, {"received_at": received_at.isoformat()}),
-            lambda value: capture.normalize(value, asset, cutoff, cutoff),
+            lambda value: capture.normalize_completed_closes(value, asset, cutoff, cutoff, cutoff),
         )
 
     available = save("ACB", raw, early)

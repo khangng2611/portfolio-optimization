@@ -32,7 +32,8 @@ from .refresh_provider import (
     BASE,
     KbsProvider,
     PROVIDER,
-    normalize,
+    close_query_end,
+    normalize_completed_closes,
     normalized_csv,
 )
 from .runtime import sessions_from_env
@@ -236,7 +237,8 @@ def refresh_selected(
     def stock(symbol, refs, index=False):
         start = date(2020, 1, 1) if index else START
         requested = utcnow().isoformat()
-        raw = kbs.fetch_raw(symbol, start, cutoff, index=index)
+        query_end = close_query_end(cutoff, index=index)
+        raw = kbs.fetch_raw(symbol, start, query_end, index=index)
         ref = keep(
             raw,
             {
@@ -247,12 +249,12 @@ def refresh_selected(
                 "method": "GET",
                 "params": {
                     "sdate": start.strftime("%d-%m-%Y"),
-                    "edate": cutoff.strftime("%d-%m-%Y"),
+                    "edate": query_end.strftime("%d-%m-%Y"),
                 },
             },
             refs,
         )
-        return normalize(raw, symbol, start, cutoff), ref
+        return normalize_completed_closes(raw, symbol, start, cutoff, query_end), ref
 
     calendar_source, calendar, calendar_error = None, [], None
     try:

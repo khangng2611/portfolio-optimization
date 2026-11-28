@@ -349,3 +349,27 @@ def test_expired_publication_still_sets_calendar_floor(tmp_path, monkeypatch):
     )
     with pytest.raises(ValueError, match="OLDER_SNAPSHOT"):
         quant.enqueue(pin, tmp_path, now)
+
+
+def test_kbs_equity_end_is_exclusive_without_admitting_next_session(monkeypatch):
+    from datetime import date
+    import json
+
+    from market_service.refresh_provider import close_query_end, normalize_completed_closes
+
+    cutoff = date(2026, 11, 27)
+    end = close_query_end(cutoff)
+    assert end == date(2026, 11, 28)
+    assert close_query_end(cutoff, index=True) == cutoff
+    raw = json.dumps({"data_day": [
+        {"t": str(cutoff), "c": "42000"},
+        {"t": str(end), "c": "43000"},
+    ]}).encode()
+    assert normalize_completed_closes(raw, "FPT", cutoff, cutoff, end) == [
+        (cutoff, 42000)
+    ]
+    monkeypatch.setattr(market.KbsProvider, "fetch_raw", lambda *a, **kw: raw)
+    kbs = market.CheckedKbs()
+    kbs.cutoff = cutoff
+    kbs.calendar = [cutoff]
+    assert kbs.fetch_raw("FPT", cutoff, end) == raw

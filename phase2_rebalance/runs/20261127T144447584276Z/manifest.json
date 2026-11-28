@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "run": "20261127T144447584276Z",
+  "started_at": "2026-11-27T14:44:47.584276+00:00",
+  "status": "failed",
+  "working_directory": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "argv": [
+    "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/venv/bin/python",
+    "phase2_rebalance/run.py"
+  ],
+  "registration_sha256": "96a00133da79397abec1084b8452fb1f0c6fa2d2cc7f8b03d769ece2b6e50eb7",
+  "amendment_sha256": "adda55b0c8c735663121f3e4b7248349957eb134f187f5588e8c066dc8503e2f",
+  "git_head": "23242db1d4f51be5055f26b9c397889a434d80ea",
+  "branch": "codex/demo-11",
+  "dirty": true,
+  "source_sha256": {
+    "run.py": "112de5f3f868ee705238f0ecd4d0b506ac4c6eb4af579396fe4fb2719a88417b",
+    "paper_ledger.py": "94787b4a839efaa94d18e0bf4ce267f96815d9af928ae670bc8f6a5497bd7cbd",
+    "protocol.json": "e37fbd833ab1dd0d4db8532b8eababef07678355ad8cc1097b4c7ea3ce773152",
+    "freeze.py": "e61d9f9c1b29f5c1c99dece4a485432f4931534c30ea10dcb79d92a20c6c84e7",
+    "default-amendment.md": "13d8f267bf5a578ad51b5c8b126eba5a3cbf4c2e2f281f220e0b401310c6c88e"
+  },
+  "environment": {
+    "python": "3.12.0 (main, Dec  9 2025, 20:03:20) [Clang 16.0.0 (clang-1600.0.26.6)]",
+    "os": "macOS-26.3.1-arm64-arm-64bit",
+    "cpu": "arm64",
+    "pandas": "2.2.3",
+    "numpy": "2.2.6"
+  },
+  "model": "Frozen target replay; no retraining, inference, caches or solver.",
+  "exit_code": 1,
+  "elapsed_seconds": 1.6363042079974548,
+  "ended_at": "2026-11-27T14:44:49.400822+00:00",
+  "artifact_sha256": {
+    "stderr.log": "a5cf67d08a51fd7366ea4c8268bc81be3902aaea315281dbff34f6b47c6e23a5",
+    "development.csv": "f965504b05e5b409c3481409fe12a709b16ac42bff342d701ba362da12803190",
+    "selection.json": "03db49c47b7772504b757bfbb66c32ee57224489cc8637956f96fa229a60eb6f"
+  }
+}

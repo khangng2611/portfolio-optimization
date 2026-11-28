@@ -1,0 +1,25 @@
+{
+  "question": "Does a drift threshold reduce trading and costs while maintaining net performance on the identical frozen Phase 1 HYBRID target stream?",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "status": "Registered before running these comparisons, historical retrospective evaluation.",
+  "development_end": "2023-09-29",
+  "evaluation_end": "2026-04-29",
+  "subperiod_end": "2024-12-31",
+  "capital": 10000000,
+  "thresholds": [0.02, 0.05, 0.10],
+  "selection": "Maximum development net cumulative return, then lower cumulative half-gross turnover, then smaller threshold. Lock to disk before evaluating any later session. Carry positions and unsettled balances across all boundaries.",
+  "arms": "A submits the opening basket only. B submits on every eligible five-session review. C shares the opening basket and B calendar, and submits if half the sum of absolute eligible weight differences (including all cash and zero-target holdings) >= threshold. For B/C a settled equity holding with a zero target worth >=1 VND forces a review trade; count separately. A keeps such holdings. The frozen universe contains no modeled mandatory corporate disposals. Weights <=1e-10 are numerical zero. No attempts between reviews.",
+  "inputs": "Use all 310 frozen HYBRID targets with exact next-session join. Replay archived adjusted stock closes, no separate corporate actions; exact published-date VFF NAV on trading dates for fills, fixed-five-session-buffer eligible fund marks for sizing, two-sided revised SJC HCMC composite for valuation and fills, previous calendar day's composite for sizing (D+1). Reject missing, duplicate, crossed or nonpositive marks; no backfill. A synthetic or flagged execution quote cancels only the GOLD leg. Other legs remain eligible. Synthetic carries never execute.",
+  "settlement": "Use the shared paper ledger. Fractional adjusted equity shares and luong of gold, no exchange board-lot rounding, market impact, cash interest or liquidation at interval end. Equity buy at close, sell at close, 10 bps/side plus 10 bps sales tax, T+2 (share and cash) settlement by observed sessions. Gold fills at archive ask/bid, mark midpoint, cash T+0. No extra gold fees. VFF uses exact NAV on reported fund day at least two market sessions after decision, maximum age five sessions, cancellation on expiry. Quantity precision 0.01, min sale 10 units, FIFO, sales tax 10 bps, T+5 cash. Any remaining pending order or unconfirmed VFF fill blocks a new basket until reconciled. Subscription reservation on first execution session, pro-rata buys funded from spendable cash; unspent cash remains until next review.",
+  "historical_fund_terms": "VFF redemption age bands <365/365-729/>=730 days. Apply 2/1.5/0.5% before 2021-06-11 then 2/0.5/0% (information-date proxy from May 2021 factsheet). Minimum subscription 2m before Mirae Asset guide 2022-06-10, then 100k. Exact effective dates of intermediaries not established. Tuesday weekly before 2021-09-01, Tuesday/Thursday from then (August 2021 resolution); exact NAV also required. Special holiday dates outside modeled weekdays excluded.",
+  "sensitivity": [
+    {"name":"base"},
+    {"name":"stock_0bps","stock_fee_bps":0},
+    {"name":"stock_25bps","stock_fee_bps":25},
+    {"name":"vff_t1","vff_settlement":1},
+    {"name":"gold_dated","permissive_gold":true},
+    {"name":"capital_100m","capital":100000000}
+  ],
+  "metrics": "Compare simple endpoint NAV returns from the prior session, maximum within-window drawdown including initial NAV, turnover=sum[(buy+sell fill gross)/(2 * previous session NAV)], actual fill days, submitted baskets, and fee+tax+midpoint spread. Attribute each to fill date. Report paired B-A and C-B, 2/5/10% held-out robustness without reselection. Remove the five largest absolute daily paired log-return differences from both return streams and compound remaining days; accounting paths held fixed.",
+  "default_rule": "Consider proposing the locked threshold only if primary held-out C-B net return is nonnegative, cost and turnover strictly lower, both subperiods nonnegative, sign survives removing five largest absolute paired daily differences, and remains nonnegative in every sensitivity. No automatic orders. Positive historical evidence still needs prospective validation."
+}

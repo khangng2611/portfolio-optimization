@@ -1,0 +1,18 @@
+{
+  "outputs/step1/Step1_Submission_Readiness_20261012/04_Baseline_Target_Weights.csv": "162ba6ed32408cbad45852dfe5c578a0d8b6c5ac2251bde4c491cc8e8c7c3c27",
+  "trusted_baseline/datasets/funds/full/VFF.csv": "888c9e9621adf5b0317b6bf54006637e7d74940435d7e3908c94775c0b53cee9",
+  "extensions_C_v1/inputs/prices_valuation.csv": "c6789fb99526608cc0e5426de2b8ff59bee14148d908828bd72ed0d3e5814c84",
+  "extensions_C_v1/inputs/prices_eligible.csv": "5802f1ea9f4d91693eaf2515c27e52adaf18fc60a2bff47aca801e166b0bc50e",
+  "phase2_ocb_deposits/runs/20261125-ocb-1m-vff/verified_rates.csv": "320ad2d3d646462b4be9888b7c9127aef7f8f0eec7ada398ee23f34b8fa58cbc",
+  "phase2_ocb_deposits/runs/20261125-ocb-1m-vff/evidence.json": "73c20bf444d1976c3304733a9c8ab9e5a3bf109598f935e757a67a756ea6d35d",
+  "https://vinacapital.com/wp-content/uploads/2025/07/20250725_VFF-Ban-cao-bach-sua-doi-bo-sung-07.2025.pdf": {
+    "file": "phase2_ocb_deposits/rebalance_5/evidence/vff-prospectus.pdf",
+    "sha256": "9b0ef945b1f6a91e0557af47a7a16bd2dac47f40f3e4bc0b819021200ff1275d",
+    "retrieved_at": "2026-11-25T01:07:20.766214+00:00"
+  },
+  "https://www.ocb.com.vn/vi/tin-tuc-su-kien/tin-tuc/khach-hang-duoc-rut-truoc-han-mot-phan-tien-gui-tai-ocb": {
+    "file": "phase2_ocb_deposits/rebalance_5/evidence/ocb-partial.html",
+    "sha256": "5cccdb384428b8a034951621db3adda2fa4d3e5eb16df51ed5241e15edd02750",
+    "retrieved_at": "2026-11-25T01:07:22.760620+00:00"
+  }
+}

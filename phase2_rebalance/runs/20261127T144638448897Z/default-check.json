@@ -1,0 +1,12 @@
+{
+  "criteria": {
+    "nonnegative_return": true,
+    "lower_total_cost": false,
+    "lower_turnover": false,
+    "no_deeper_drawdown": true,
+    "nonnegative_both_subperiods": true,
+    "nonnegative_without_five": true,
+    "nonnegative_every_sensitivity": true
+  },
+  "proposed": false
+}

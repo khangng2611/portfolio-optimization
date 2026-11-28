@@ -1,0 +1,7 @@
+{
+  "threshold": 0.02,
+  "locked_at": "2026-11-27T14:46:21.171328+00:00",
+  "cutoff": "2023-09-29",
+  "development_sha256": "f965504b05e5b409c3481409fe12a709b16ac42bff342d701ba362da12803190",
+  "registration_sha256": "96a00133da79397abec1084b8452fb1f0c6fa2d2cc7f8b03d769ece2b6e50eb7"
+}

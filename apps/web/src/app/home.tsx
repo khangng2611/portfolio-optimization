@@ -5,6 +5,7 @@ import { AccountSettings, UnavailableWorkspace, unavailableWorkspaces } from '..
 import { AssetSelectionEditor } from '../components/asset-picker';
 import { isSelectionReadiness, mergeAssetMetadata, type AssetCatalog, type AssetMetadata } from '../lib/selection-types';
 import { ChatWorkspace } from '../components/chat-workspace';
+import { PaperPortfolio } from '../components/paper-portfolio';
 import { DataRefresh } from '../components/data-refresh';
 import { KnowledgeOperations } from '../components/knowledge-operations';
 import { ModelOperations } from '../components/model-operations';
@@ -25,8 +26,8 @@ type Session = { user: { sub: string; name: string; roles: string[] }; csrfToken
 type Job = TraceReference & { job_id: string; status: string; portfolio_id: string; recommendation_id?: string; error?: { message?: string | null } };
 const terminal = (status: string) => ['SUCCEEDED', 'FAILED', 'CANCELLED', 'COMPLETED'].includes(status);
 const resumeKey = 'portfolio.resume-destination';
-const portfolioSections = [['overview', 'Tổng quan'], ['proposal', 'Đề xuất'], ['history', 'Lịch sử mục tiêu'], ['edit', 'Sửa danh mục']] as const;
-const portfolioContextTitles: Partial<Record<WorkspaceView, string>> = { overview: 'xem kế hoạch', proposal: 'xem đề xuất', profile: 'xem hồ sơ', history: 'xem lịch sử', edit: 'điều chỉnh kế hoạch', compare: 'so sánh phương án', 'risk-assessment': 'đánh giá lại rủi ro' };
+const portfolioSections = [['overview', 'Tổng quan'], ['proposal', 'Đề xuất'], ['history', 'Lịch sử mục tiêu'], ['edit', 'Sửa danh mục'], ['holdings', 'Tài sản mô phỏng'], ['rebalance', 'Tái cân bằng']] as const;
+const portfolioContextTitles: Partial<Record<WorkspaceView, string>> = { overview: 'xem kế hoạch', holdings: 'xem tài sản mô phỏng', rebalance: 'xem xét tái cân bằng', proposal: 'xem đề xuất', profile: 'xem hồ sơ', history: 'xem lịch sử', edit: 'điều chỉnh kế hoạch', compare: 'so sánh phương án', 'risk-assessment': 'đánh giá lại rủi ro' };
 
 export default function Home({ viewerBase }: { viewerBase: string | null }) {
   const [route, setRoute] = useState<WorkspaceRoute>({ view: 'overview' });
@@ -229,7 +230,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
   const waiting = busy || opening;
   const unavailable = unavailableWorkspaces[view];
   const proposalJob = job?.job_id === route.jobId ? job : null;
-  const title = !session ? 'Đầu tư có kế hoạch. Quyết định có cơ sở.' : unavailable ? unavailable.title : view === 'knowledge' ? 'Kho tri thức' : view === 'settings' ? 'Cài đặt' : view === 'asset-prices' ? 'Lịch sử giá tài sản' : view === 'chat' ? route.conversationId ? 'Hiểu rõ hơn trước mỗi quyết định' : 'Hội thoại của bạn' : !route.portfolioId && portfolioContextTitles[view] ? inventoryEmpty ? 'Bắt đầu kế hoạch đầu tư của bạn' : `Chọn danh mục để ${portfolioContextTitles[view]}` : p1Titles[view] ? p1Titles[view] : marketView ? marketTitles[view] : view === 'create' ? wizardTitles[wizardStep] : view === 'edit' ? 'Điều chỉnh kế hoạch của bạn' : view === 'history' ? 'Lịch sử mục tiêu' : view === 'compare' ? 'So sánh hai phương án' : view === 'proposal' ? browsingProposals ? 'Các đề xuất của danh mục' : detail ? stale && !accepted ? 'Đề xuất đã lưu' : 'Xem lại đề xuất' : 'Tạo đề xuất phân bổ' : view === 'profile' ? 'Hồ sơ rủi ro' : view === 'portfolios' ? 'Danh mục của bạn' : view === 'overview' ? 'Kế hoạch của bạn' : selected?.name ?? 'Tổng quan kế hoạch đầu tư';
+  const title = !session ? 'Đầu tư có kế hoạch. Quyết định có cơ sở.' : unavailable ? unavailable.title : view === 'knowledge' ? 'Kho tri thức' : view === 'settings' ? 'Cài đặt' : view === 'asset-prices' ? 'Lịch sử giá tài sản' : view === 'chat' ? route.conversationId ? 'Hiểu rõ hơn trước mỗi quyết định' : 'Hội thoại của bạn' : !route.portfolioId && portfolioContextTitles[view] ? inventoryEmpty ? 'Bắt đầu kế hoạch đầu tư của bạn' : `Chọn danh mục để ${portfolioContextTitles[view]}` : view === 'holdings' ? 'Tài sản và hiệu suất mô phỏng' : view === 'rebalance' ? 'Tái cân bằng mô phỏng' : p1Titles[view] ? p1Titles[view] : marketView ? marketTitles[view] : view === 'create' ? wizardTitles[wizardStep] : view === 'edit' ? 'Điều chỉnh kế hoạch của bạn' : view === 'history' ? 'Lịch sử mục tiêu' : view === 'compare' ? 'So sánh hai phương án' : view === 'proposal' ? browsingProposals ? 'Các đề xuất của danh mục' : detail ? stale && !accepted ? 'Đề xuất đã lưu' : 'Xem lại đề xuất' : 'Tạo đề xuất phân bổ' : view === 'profile' ? 'Hồ sơ rủi ro' : view === 'portfolios' ? 'Danh mục của bạn' : view === 'overview' ? 'Kế hoạch của bạn' : selected?.name ?? 'Tổng quan kế hoạch đầu tư';
   const refreshData = () => { setError(''); setConflict(false); setRefresh(value => value + 1); };
   const sharedPortfolioHeader = !!session && !!selected && selected.id === route.portfolioId && !route.invalid && portfolioSections.some(([section]) => section === view);
   const showPlanHeading = sharedPortfolioHeader && (view === 'overview' || view === 'proposal');
@@ -239,11 +240,14 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
   const sectionLink = ([target, label]: typeof portfolioSections[number], index: number) => (
     <a key={target} className={index > 1 ? 'portfolio-secondary-link' : undefined} href={href(target)} aria-current={view === target ? 'page' : undefined}>{label}</a>
   );
+  const extraSections = [...portfolioSections.slice(3), ['profile', 'Hồ sơ rủi ro'] as const];
+  const extraLinks = extraSections.map(([target, label]) => <a key={target} data-tab={target} href={href(target)} aria-current={view === target ? 'page' : undefined}>{label}</a>);
   const portfolioTabs = <nav className="portfolio-tabs" aria-label="Các phần của danh mục">
     {portfolioSections.slice(0, 3).map(sectionLink)}
+    {extraLinks}
     <details className="portfolio-extra" key={view} onKeyDown={event => {
       if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); }
-    }}><summary>Thêm</summary><div>{sectionLink(portfolioSections[3], 3)}<a href={href('profile')}>Hồ sơ rủi ro</a></div></details>
+    }}><summary>Thêm</summary><div>{extraLinks}</div></details>
   </nav>;
   return <WorkspaceShell view={view} portfolioId={route.portfolioId}
     portfolioMore={sharedPortfolioHeader && portfolioSections.slice(1).map(sectionLink)}
@@ -283,6 +287,7 @@ export default function Home({ viewerBase }: { viewerBase: string | null }) {
         {!sharedPortfolioHeader && view !== 'profile' && portfolioTabs}
         {view === 'proposal' && !route.proposalId && !route.jobId && !browsingProposals && !paused && <ReadinessNotice value={currentReadiness} onRefresh={refreshData} busy={opening} failed={readinessFailed} pausedPortfolio={{ id: selected.id, hasProposals: !!dashboard?.proposal_count }}/>}
         {view === 'risk-assessment' ? <RiskReassessment portfolio={selected} api={api} fetchPage={fetchPage} onSaved={refreshData} onReload={refreshData}/> : view === 'edit' ? <><AssetSelectionEditor portfolio={selected} catalog={catalog} api={api} onSaved={refreshData}/><EditPortfolio key={selected.id} portfolio={selected} api={api} onReload={refreshData} onSaved={value => { setSelected(value); refreshData(); navigate({ view: 'overview', portfolioId: value.id }); }}/></>
+          : view === 'holdings' || view === 'rebalance' ? <PaperPortfolio key={session.user.sub + selected.id + view} view={view} portfolio={selected} targetCurrent={dashboard?.target_matches_portfolio === true} api={api}/>
           : view === 'history' ? <TargetHistory key={selected.id + historyVersion} portfolioId={selected.id} fetchPage={fetchPage} assets={catalog?.assets}/>
           : view === 'compare' ? proposalLoading ? <p role="status">Đang tải các phương án…</p> : comparison ? <ComparisonTable items={comparison}/> : <><aside className="notice">Chọn hai đề xuất của danh mục để so sánh.</aside><ProposalHistory portfolioId={selected.id} fetchPage={fetchPage}/></>
           : view === 'profile' ? <RiskProfileView portfolio={selected}/>

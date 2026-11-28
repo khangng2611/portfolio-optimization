@@ -58,7 +58,7 @@ it('prioritizes the accepted allocation over the number of proposals', () => {
   const html = renderToStaticMarkup(<PortfolioOverview portfolio={portfolio} dashboard={{ portfolio, accepted_target: { id: 't', recommendation_id: 'a', accepted_at: '2026-11-05T00:00:00Z', portfolio_version: 1, allocation: a }, proposal_count: 9281, target_matches_portfolio: true }}/>);
   expect(html).toContain('Mục tiêu đã chấp nhận');
   expect(html).not.toContain('9281');
-  expect(html).toContain('chưa theo dõi');
+  expect(html).toContain('#holdings?portfolio=p');
 });
 it('does not assign a risk profile to a legacy portfolio without confirmed answers', () => {
   const html = renderToStaticMarkup(<PortfolioOverview portfolio={{ ...portfolio, risk_profile: null }} dashboard={null}/>);

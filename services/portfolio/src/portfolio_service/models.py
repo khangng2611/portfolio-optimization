@@ -201,3 +201,23 @@ class DelegationGrant(Base):
     body_hash: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[object] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PaperAccount(Base):
+    __tablename__ = "paper_account"
+    portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolio.id"), primary_key=True)
+    opened_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+    state: Mapped[dict] = mapped_column(JSON)
+
+
+class PaperDecision(Base):
+    __tablename__ = "paper_decision"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    portfolio_id: Mapped[str] = mapped_column(ForeignKey("paper_account.portfolio_id"), index=True)
+    target_id: Mapped[str] = mapped_column(ForeignKey("accepted_target.id"))
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[object] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
+    action: Mapped[str | None] = mapped_column(String(8))
+    revision: Mapped[int] = mapped_column(Integer)
+    quote: Mapped[dict] = mapped_column(JSON)

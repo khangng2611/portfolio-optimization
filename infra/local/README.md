@@ -314,3 +314,28 @@ separate, and privileged initialization installs pinned pgvector v0.8.1. Run
 See [Knowledge setup/lifecycle](../../docs/software/KNOWLEDGE_RAG.md). The optional
 `compose.knowledge-paid.yaml` is disabled by default and requires a new explicit
 budget; old Chat keys/consent/quota are not permission to apply it.
+
+## Phase 2 · Danh mục mô phỏng
+
+Trong stack có dữ liệu HYBRID forward, thêm `compose.paper-portfolio.yaml` sau các overlay hiện có. Web và Portfolio API cần được build từ cùng checkout. Migration Portfolio tạo hai bảng tài khoản và quyết định mô phỏng. Dịch vụ `paper-market-export` đọc các capture đã kiểm chứng, xuất giá đóng cửa vào `output/paper-market`. API và `paper-portfolio-worker` chỉ đọc thư mục này. Worker cập nhật tài khoản và kỳ xem xét mỗi phút khi có một phiên mới.
+
+Stack cơ bản đọc được bộ giá đã xuất và đối soát khi user mở danh mục. Overlay dưới đây bổ sung việc xuất giá và cập nhật nền. Nó dùng cơ chế thu thập mở rộng sau ngày kết thúc nghiên cứu HYBRID.
+
+Ví dụ cho một stack local đã bootstrap và có capture forward, chạy từ thư mục gốc. Nếu stack có các overlay bổ sung, giữ chúng trong danh sách Compose đang dùng.
+
+```sh
+mkdir -p output/paper-market
+paper_compose() {
+  docker compose --env-file infra/local/.generated/.env \
+    -f infra/local/compose.yaml -f infra/local/compose.hybrid-forward.yaml \
+    -f infra/local/compose.paper-portfolio.yaml "$@"
+}
+paper_compose config --quiet
+paper_compose build portfolio-migrate web hybrid-forward-study
+paper_compose run --rm --no-deps portfolio-migrate
+paper_compose up -d --no-deps hybrid-forward-capture paper-market-export paper-portfolio-worker portfolio-api web
+```
+
+Trong một danh mục có mục tiêu đã chấp nhận, mở **Tài sản và hiệu suất** để khởi tạo vốn đầu kỳ. Tại **Tái cân bằng**, xem giỏ lệnh dự kiến và xác nhận hoặc bỏ qua. Lệnh chỉ khớp theo phiên đủ điều kiện sau khi xác nhận. Màn hình hiển thị trạng thái dữ liệu nếu giá chưa sẵn sàng. Nhắc xem xét mỗi năm phiên dùng mục tiêu user đã chấp nhận. [Bằng chứng A/B/C và lựa chọn chế độ thủ công](../../phase2_rebalance/REPORT.md)
+
+Kiểm thử trình duyệt có thể chạy riêng qua `npm run test:browser:paper` từ `apps/web` sau khi cài Chromium của Playwright và môi trường `.venv-software`. Bài kiểm dùng giá cố định, Portfolio API thật và SQLite tạm.

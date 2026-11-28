@@ -12,6 +12,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:browser:paper": "npm run build && playwright test --config tests/paper-browser/playwright.config.ts",
     "test:browser": "playwright test lifecycle.e2e.ts",
     "test:browser:portfolio-list": "bash tests/browser/portfolio-list-visual.sh",
     "test:browser:persistence": "BROWSER_VERIFY_RECEIPT=1 playwright test lifecycle.e2e.ts",

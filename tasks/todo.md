@@ -253,3 +253,12 @@ Fresh-context review không còn Critical/Important findings.
 Chi tiết IDs/lệnh/log: [báo cáo](../docs/software/PHASE1_LOCAL_SERVING.md#user-chọn-tài-sản--nghiệm-thu-ngày-12112026)
 và [acceptance.json](../outputs/step1/user-selected-local-acceptance-20261112/acceptance.json).
 Selection của snapshot hiện tại hết hạn00:00 ngày13/11 GMT+7 theo đúng freshness7.
+
+## Phase 2 · Danh mục mô phỏng
+
+Theo [kế hoạch và tiêu chí nghiệm thu](../docs/superpowers/plans/2026-11-27-paper-portfolio.md), thực hiện theo thứ tự:
+
+- [x] Khóa protocol, phạm vi dữ liệu và tiêu chí chọn ngưỡng.
+- [x] Chạy ba phương án, đối soát sổ và đánh giá ngoài tập chọn ngưỡng.
+- [x] Hoàn tất một giao dịch mô phỏng từ mục tiêu đã chấp nhận đến thanh toán.
+- [x] Đối soát biểu đồ lời/lỗ và kiểm thử nhắc xem xét, giao dịch thủ công.

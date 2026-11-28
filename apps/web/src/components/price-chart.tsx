@@ -23,11 +23,11 @@ function priceTicks(min: number, max: number) {
   return Array.from({ length: high - low + 1 }, (_, index) => (high - index) * step);
 }
 
-export function PriceChart({ observations, unit, periodDays, wide = false }: { observations: PriceObservation[]; unit?: string; periodDays: number; wide?: boolean }) {
+export function PriceChart({ observations, unit, periodDays, wide = false, nav = false }: { observations: (Pick<PriceObservation, 'date' | 'price_vnd'> & { note?: string })[]; unit?: string; periodDays?: number; wide?: boolean; nav?: boolean }) {
   const helpId = useId();
   const [selection, setSelection] = useState<number>(), [hover, setHover] = useState<number>();
   const end = observations.length - 1;
-  const index = hover ?? selection ?? end;
+  const index = Math.min(hover ?? selection ?? end, end);
   const points = observations.map(row => ({ ...row, value: Number(row.price_vnd), time: Date.parse(row.date) }));
   const first = points[0], last = points[end], point = points[index];
   const min = Math.min(...points.map(item => item.value)), max = Math.max(...points.map(item => item.value));
@@ -40,7 +40,7 @@ export function PriceChart({ observations, unit, periodDays, wide = false }: { o
   const dateTicks = elapsed >= 4 * day ? [0, .25, .5, .75, 1] : elapsed ? [0, 1] : [0];
   const tickDate = first.date.slice(0, 4) === last.date.slice(0, 4) ? shortDate : axisYearDate;
   const line = points.map(item => `${x(item.time) * 10},${y(item.value) * 2.5}`).join(' ');
-  const change = (last.value - first.value) / first.value;
+  const change = first.value ? (last.value - first.value) / first.value : null;
 
   function inspect(event: PointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -60,29 +60,30 @@ export function PriceChart({ observations, unit, periodDays, wide = false }: { o
   }
 
   const stats = <div className="price-chart-summary">
-      <div className="price-chart-change" data-direction={change > 0 ? 'up' : change < 0 ? 'down' : undefined}>
-        <span>Biến động trong khoảng</span><strong>{changeFormat.format(change)}</strong>
+      <div className="price-chart-change" data-direction={change !== null && change > 0 ? 'up' : change !== null && change < 0 ? 'down' : undefined}>
+        <span>Biến động trong khoảng</span><strong>{change === null ? '—' : changeFormat.format(change)}</strong>
       </div>
       <dl className="price-chart-stats">
         <div><dt>Thấp nhất</dt><dd>{marketPrice(min)}</dd></div>
         <div><dt>Cao nhất</dt><dd>{marketPrice(max)}</dd></div>
-        <div><dt>Số ngày có giá</dt><dd>{points.length}</dd></div>
+        <div><dt>{nav ? 'Số phiên định giá' : 'Số ngày có giá'}</dt><dd>{points.length}</dd></div>
       </dl>
     </div>;
   return <figure className="price-chart">
-    <figcaption className="sr-only">Giá quan sát theo ngày</figcaption>
+    <figcaption className="sr-only">{nav ? 'Tổng tài sản mô phỏng theo ngày' : 'Giá quan sát theo ngày'}</figcaption>
     <div className="price-chart-quote">
-      <span>{index === end ? 'Giá ghi nhận gần nhất' : 'Giá tại điểm đang xem'}</span>
+      <span>{nav ? 'Tổng tài sản tại phiên đang xem' : index === end ? 'Giá ghi nhận gần nhất' : 'Giá tại điểm đang xem'}</span>
       <strong>{marketPrice(point.price_vnd)}{unit?.startsWith('₫/') && <span className="price-unit">{unit.slice(1)}</span>}</strong>
       <time dateTime={point.date}>{fullDate.format(point.time)}</time>
+      {point.note && <span>{point.note}</span>}
     </div>
-    <p className="price-period-label">{periodDays} ngày · Các phiên từ {shortDate.format(first.time)} đến {shortDate.format(last.time)}</p>
+    <p className="price-period-label">{periodDays && <>{periodDays} ngày · </>}Các phiên từ {shortDate.format(first.time)} đến {shortDate.format(last.time)}</p>
     <div className="price-chart-frame">
       <div className="price-chart-plot" role={end > 0 ? 'slider' : undefined} tabIndex={end > 0 ? 0 : undefined}
-        aria-label={end > 0 ? 'Dò giá theo ngày quan sát' : undefined} aria-describedby={end > 0 ? helpId : undefined}
+        aria-label={end > 0 ? nav ? 'Dò tổng tài sản theo phiên' : 'Dò giá theo ngày quan sát' : undefined} aria-describedby={end > 0 ? helpId : undefined}
         aria-valuemin={end > 0 ? 1 : undefined} aria-valuemax={end > 0 ? points.length : undefined}
         aria-valuenow={end > 0 ? index + 1 : undefined}
-        aria-valuetext={end > 0 ? `${fullDate.format(point.time)} · ${marketPrice(point.price_vnd)}` : undefined}
+        aria-valuetext={end > 0 ? `${fullDate.format(point.time)} · ${marketPrice(point.price_vnd)}${point.note ? ` · ${point.note}` : ''}` : undefined}
         onPointerDown={end > 0 ? inspect : undefined}
         onPointerMove={end > 0 ? (event => { if (event.pointerType === 'mouse' || event.buttons) inspect(event); }) : undefined}
         onPointerLeave={() => setHover(undefined)} onKeyDown={navigate}>
@@ -104,7 +105,7 @@ export function PriceChart({ observations, unit, periodDays, wide = false }: { o
         </span>)}
       </div>
     </div>
-    <p className="price-chart-help" id={helpId}>{end > 0 ? 'Rê chuột, chạm hoặc dùng phím mũi tên để xem giá từng ngày.' : 'Chỉ có một ngày ghi nhận giá trong khoảng đã chọn.'}</p>
+    <p className="price-chart-help" id={helpId}>{end > 0 ? 'Rê chuột, chạm hoặc dùng phím mũi tên để xem từng ngày.' : nav ? 'Mới có một phiên định giá.' : 'Chỉ có một ngày ghi nhận giá trong khoảng đã chọn.'}</p>
     {end > 0 && (wide ? stats : <details className="price-interval-details"><summary>Biến động và thống kê</summary>{stats}</details>)}
   </figure>;
 }

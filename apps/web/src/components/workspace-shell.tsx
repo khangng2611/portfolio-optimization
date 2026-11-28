@@ -15,7 +15,7 @@ export function WorkspaceShell({ children, view, portfolioId, account, busy, onL
 }) {
   const link = (view: WorkspaceView) => workspaceHash({ view, ...(['portfolios', 'create'].includes(view) ? {} : { portfolioId }) });
   const portfolioTask = ['portfolios', 'create', 'proposal', 'compare', 'history', 'edit', 'holdings', 'rebalance'].includes(view);
-  const taskWorkspace = view === 'create' || !!portfolioId && ['overview', 'proposal', 'profile', 'edit', 'compare', 'risk-assessment', 'history'].includes(view);
+  const taskWorkspace = view === 'create' || !!portfolioId && ['overview', 'proposal', 'profile', 'edit', 'compare', 'risk-assessment', 'history', 'holdings', 'rebalance'].includes(view);
   const layout = account ? view : 'welcome';
   const market = view.startsWith('market');
   const model = ['models', 'model-training', 'model-review'].includes(view);

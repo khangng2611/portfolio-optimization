@@ -97,6 +97,46 @@ def test_no_manually_approved_candidate_blocks_publication(tmp_path):
         quant.approved_model(tmp_path, panel, ["FPT"])
 
 
+def test_revised_training_history_identifies_model_epoch_and_asset(
+    tmp_path, monkeypatch, caplog
+):
+    from uuid import uuid4
+
+    import numpy as np
+
+    model_id = str(uuid4())
+    artifact = tmp_path / "ml-models" / "job" / "model" / f"{model_id}.approved.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.touch()
+    monkeypatch.setattr(
+        quant, "CredentialModelResolver", lambda: SimpleNamespace(resolve=lambda _: {})
+    )
+    monkeypatch.setattr(quant, "read_artifact", lambda *_: b"")
+    model = SimpleNamespace(
+        schema_version=5,
+        status="APPROVED",
+        demo=False,
+        fit_epoch=145,
+        covered_asset_ids=["FPT"],
+        assets={"FPT": SimpleNamespace(training_data_hash="old")},
+    )
+    monkeypatch.setattr(quant, "parse_manifest", lambda _: model)
+    panel = SimpleNamespace(
+        dates=list(range(151)),
+        decision_index=150,
+        ids=["FPT"],
+        prices=np.ones((151, 1)),
+    )
+    with pytest.raises(
+        ValueError, match="MODEL_REVIEW_OR_COMPATIBILITY_REQUIRED fit_epoch=145"
+    ):
+        quant.approved_model(tmp_path, panel, ["FPT"])
+    assert (
+        f"{model_id} at fit epoch 145 failed compatibility: INPUT_INVALID: FPT"
+        in caplog.text
+    )
+
+
 def test_retry_kbs_rejects_conflicting_close_until_clean_response(monkeypatch):
     import json
     from datetime import date

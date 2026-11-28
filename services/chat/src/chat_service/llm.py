@@ -332,13 +332,13 @@ class Dialogue:
             ),
         )
 
-    def explain_claims(self, job, digest, evidence, claims):
+    def explain_claims(self, job, digest, evidence, claims, *, deadline):
         if not self.enabled:
             return None, {"reason": "NOT_CONFIGURED"}
         context, _ = self.context(job)
         return self.ledger.invoke(
             job, "explanation", lambda: self.provider.explain_claims(
-                digest, evidence["evidence_hash"], claims, question=job.request["content"], history=(context or {}).get("history", [])
+                digest, evidence["evidence_hash"], claims, question=job.request["content"], history=(context or {}).get("history", []), deadline=deadline
             ), rag=True,
         )
 

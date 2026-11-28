@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PlanHeading, PortfolioOverview } from '../src/components/portfolio-workspace';
-import { AssetPicker } from '../src/components/asset-picker';
+import { AssetSelectionEditor } from '../src/components/asset-picker';
 import { ChatRecommendation } from '../src/components/chat-workspace';
 import type { Portfolio, Recommendation } from '../src/lib/portfolio-types';
 import type { RecommendationCard } from '../src/lib/chat-types';
@@ -54,11 +54,9 @@ it('shows the current basket and next step before there is an accepted target', 
 
 it('keeps technical asset metadata in a disclosure and does not collapse data/ML status into readiness', () => {
   const asset: AssetCatalogItem = { asset_id: 'GOLD', display_name: 'Vàng SJC', description: null, kind: 'gold', data_status: 'STALE', ml_status: 'NOT_COVERED', currency: 'VND', unit: 'VND/tael', catalog_version: 'v1', checked_at: '2026-11-20T00:00:00Z' };
-  const html = renderToStaticMarkup(<AssetPicker assets={[asset]} selected={[]} onChange={() => {}}/>);
-  expect(html).toContain('Tài sản hỗ trợ · 1');
-  expect(html).toContain('Rổ của bạn · 0');
-  expect(html).toContain('asset-transfer-empty-panel');
-  const row = html.split('class="asset-transfer-row"')[1]?.split('</li>')[0] ?? '';
+  const html = renderToStaticMarkup(<AssetSelectionEditor portfolio={portfolio} catalog={{assets:[asset],selection_enabled:true,catalog_version:"v1"}} api={async () => { throw Error(); }} onSaved={() => {}}/>);
+  expect(html).toContain('Rổ của bạn');
+  const row = html.split('class="asset-data-detail"')[1]?.split('</summary>')[0] ?? '';
   expect(row).toContain('Dữ liệu đã cũ');
   expect(row).not.toContain('ML');
   expect(html).toContain('Xem dữ liệu từng mã');
@@ -99,8 +97,8 @@ it('only labels current-target acceptance when it is explicitly confirmed by the
 it('renders every data status independently from ML coverage', () => {
   for (const [data_status, label] of [['UNKNOWN', 'Chưa xác minh dữ liệu'], ['MISSING', 'Thiếu dữ liệu'], ['QUARANTINED', 'Dữ liệu đang cách ly'], ['FRESH', 'Giá cách ngày kiểm tra tối đa 7 ngày'], ['STALE', 'Dữ liệu đã cũ']] as const) {
     const asset: AssetCatalogItem = { asset_id: 'FPT', display_name: 'FPT', kind: 'stock', data_status, ml_status: 'COVERED', currency: 'VND', unit: 'VND/share', catalog_version: 'v1' };
-    const html = renderToStaticMarkup(<AssetPicker assets={[asset]} selected={[]} onChange={() => {}}/>);
-    const row = html.split('class="asset-transfer-row"')[1]?.split('</li>')[0] ?? '';
+    const html = renderToStaticMarkup(<AssetSelectionEditor portfolio={portfolio} catalog={{assets:[asset],selection_enabled:true,catalog_version:"v1"}} api={async () => { throw Error(); }} onSaved={() => {}}/>);
+    const row = html.split('class="asset-data-detail"')[1]?.split('</summary>')[0] ?? '';
     expect(row).toContain(label);
     expect(row).not.toContain('Sẵn sàng');
     expect(html).toContain('Mô hình đã hỗ trợ');

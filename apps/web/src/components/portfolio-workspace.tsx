@@ -1,4 +1,5 @@
 'use client';
+import { PaperReviewReminder } from './paper-portfolio';
 import { AnswerRows, RiskReason } from './risk-questions';
 import { TaskActions } from './task-actions';
 import { isSelectionReadiness, type AssetCatalogItem } from '../lib/selection-types';
@@ -56,8 +57,8 @@ function PlanDetails({ portfolio, universeAssetIds, readiness, children, onRefre
     <p>{basket ? basket.join(' · ') || 'Rổ chưa có tài sản.' : assetUniverseName(portfolio.universe_id)}</p>
     <p>{basket && `${basket.length} tài sản trong rổ. `}Tài sản được cân nhắc có thể nhận tỷ trọng 0%.</p>
     <a href={portfolioLink(portfolio.id, 'edit')}>Sửa danh mục</a>
-    <details><summary>Tài sản thực tế · chưa theo dõi</summary>
-      <p>Vốn kế hoạch và tỷ trọng mục tiêu chỉ dùng cho phân bổ. Chấp nhận không tạo lệnh giao dịch.</p>
+    <details><summary>Tài khoản mô phỏng</summary>
+      <p>Sau khi chấp nhận mục tiêu, bạn có thể mở tài khoản mô phỏng và xem trước lệnh.</p>
       <div className="actions"><a href={workspaceHash({ view: 'holdings', portfolioId: portfolio.id })}>Tài sản và hiệu suất</a><a href={workspaceHash({ view: 'rebalance', portfolioId: portfolio.id })}>Tái cân bằng</a></div>
     </details>
     <details id="methodology"><summary>Dữ liệu và cách tính</summary>
@@ -188,7 +189,7 @@ export function PortfolioOverview({ portfolio, dashboard, readiness, assets, uni
   }
   const historyAction = <a className="button quiet" href={portfolioLink(portfolio.id, 'history')}>Lịch sử mục tiêu</a>;
   const targetLink = target && workspaceHash({ view: 'proposal', portfolioId: portfolio.id, proposalId: target.recommendation_id });
-  return <section className="plan-overview plan-surface"><div className={target ? 'plan-result-grid' : 'plan-empty-grid'}>
+  return <section className="plan-overview plan-surface">{target && api && <PaperReviewReminder key={portfolio.id} portfolioId={portfolio.id} api={api}/>}<div className={target ? 'plan-result-grid' : 'plan-empty-grid'}>
     {status && <div className="plan-decision overview-next-step">{status}
       {paused && pending && <a className="button quiet" href={workspaceHash({ view: 'proposal', portfolioId: portfolio.id, proposalId: pending.id })}>Xem đề xuất {proposalLabel(pending.id)}</a>}
       {paused && !portfolio.risk_profile && <a className="button quiet" href={portfolioLink(portfolio.id, 'risk-assessment')}>Tiếp tục hồ sơ rủi ro</a>}
@@ -198,6 +199,7 @@ export function PortfolioOverview({ portfolio, dashboard, readiness, assets, uni
     </section>}
     {target && <div className="plan-result-actions">
       {status && targetLink && <a className="button quiet" href={targetLink}>Xem mục tiêu đã lưu</a>}
+      <a className="button quiet" href={workspaceHash({ view: 'holdings', portfolioId: portfolio.id })}>Tài sản mô phỏng</a>
       <a className="button quiet plan-chat" href={chat}>Hỏi về kế hoạch</a>
       {!status && <span className="plan-history-mobile">{historyAction}</span>}
     </div>}

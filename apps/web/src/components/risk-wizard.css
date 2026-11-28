@@ -63,6 +63,10 @@ button.wizard-mode-switch {
 }
 button.wizard-mode-switch:hover:not(:disabled) { background: transparent; color: var(--green-hover); text-decoration: underline; }
 .wizard-asset-picker > input { margin: 0; }
+.wizard-bulk-tools { grid-column: 1; margin-top: 8px; }
+.wizard-bulk-tools > summary { cursor: pointer; color: var(--green); width: fit-content; font-size: 14px; }
+.wizard-bulk-tools > label { display: block; margin-block: 8px; }
+.wizard-bulk-tools > button + button { margin-inline-start: 8px; }
 .wizard-asset-list {
   display: grid;
   gap: 14px;
@@ -108,7 +112,7 @@ button.wizard-mode-switch:hover:not(:disabled) { background: transparent; color:
 .wizard-asset-info p { font-size: 14px; }
 .wizard-asset .wizard-asset-toggle {
   grid-column: 2;
-  grid-row: 1 / span 3;
+  grid-row: 1 / span 4;
   align-self: center;
   min-height: 44px;
   min-width: 112px;
@@ -117,28 +121,49 @@ button.wizard-mode-switch:hover:not(:disabled) { background: transparent; color:
   border-color: var(--line);
 }
 .wizard-basket-summary { display: none; }
+@media (max-width: 959.98px) {
+  .wizard-asset { min-height: 0; padding: 6px 10px; gap: 0 6px; }
+  .wizard-asset-id strong { font-size: 16px; }
+  .wizard-asset-id span { margin-left: 2px; }
+  .wizard-asset-info summary, .wizard-asset-name { font-size: 14px; }
+  .wizard-asset .wizard-asset-toggle { min-width: 84px; min-height: 44px; padding: 4px 8px; }
+  .wizard-asset-list { grid-auto-rows: max-content; align-content: start; gap: 6px; }
+  .wizard-asset[data-preview-hidden] { display: none; }
+}
 @media (min-width: 960px) {
-  .wizard-asset-picker:not(:has(.asset-picker)) {
+  button.wizard-mode-switch { display: none; }
+  .wizard-asset-picker {
     display: grid;
-    grid-template-columns: minmax(0, 700fr) minmax(220px, 380fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: clamp(24px, 3vw, 44px);
     align-items: start;
   }
   .wizard-asset-picker > :is(.wizard-search-tools, input, ul, p) { grid-column: 1; }
-  .wizard-basket-summary {
-    display: grid;
-    align-content: start;
-    gap: 24px;
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    min-height: 224px;
-    padding: 18px;
-    background: white;
-    border-radius: var(--radius);
+  .wizard-bulk-tools {
+    grid-column: 2; grid-row: 1 / span 2; align-self: end;
+    display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin: 0;
   }
-  .wizard-basket-summary h2, .wizard-basket-summary p { margin: 0; }
-  .wizard-basket-summary strong { color: var(--green); font-size: 19px; overflow-wrap: anywhere; }
-  .wizard-basket-summary p { color: var(--muted); font-size: 14px; }
+  .wizard-bulk-tools > label { flex: 1 1 130px; margin: 0; }
+  .wizard-bulk-tools select, .wizard-bulk-tools > button { min-height: 48px; }
+  .wizard-bulk-tools > button + button { margin: 0; }
+  .wizard-candidates, .wizard-basket-summary {
+    display: grid; grid-row: 3; min-width: 0; gap: 8px; margin-top: 16px;
+    padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .wizard-candidates { grid-column: 1; }
+  .wizard-basket-summary { grid-column: 2; }
+  .wizard-asset-picker :is(.wizard-candidates, .wizard-basket-summary) > h2 { margin: 0; font-size: 18px; line-height: 1.4; }
+  .wizard-asset-list {
+    height: min(46svh, 428px); margin: 0; gap: 6px; align-content: start;
+    grid-auto-rows: max-content; scrollbar-gutter: stable; overscroll-behavior-y: contain;
+  }
+  .wizard-asset { min-height: 0; padding: 6px 10px; gap: 0 8px; }
+  .wizard-asset-id strong { font-size: 16px; }
+  .wizard-asset-id span { margin-left: 4px; }
+  .wizard-asset-info summary, .wizard-asset-name { min-height: 24px; padding: 2px 0; font-size: 14px; }
+  .wizard-asset .wizard-asset-toggle { min-width: 72px; padding: 4px 8px; }
+  .wizard-asset-picker > p.wizard-selection-note { grid-column: 2; margin: 6px 0 0; }
+
 }
 .workspace-create .risk-wizard[data-step] > .task-actions {
   position: fixed;
@@ -160,11 +185,6 @@ button.wizard-mode-switch:hover:not(:disabled) { background: transparent; color:
   .workspace-create .risk-wizard .step-progress { display: none; }
   .wizard-basket-title { margin-bottom: 18px; font-size: 14px; }
   .wizard-asset-list { max-height: min(48svh, 400px); gap: 8px; }
-  .wizard-asset { min-height: 111px; padding: 9px 12px 9px 15px; }
-  .wizard-asset-id { grid-column: 1 / -1; }
-  .wizard-asset-id span { margin-left: 12px; }
-  .wizard-asset-name, .wizard-asset-info summary { font-size: 14px; }
-  .wizard-asset .wizard-asset-toggle { grid-row: 2 / span 2; min-width: 94px; align-self: end; }
   .workspace-create .risk-wizard[data-step] > .task-actions { min-height: 122px; display: grid; align-items: stretch; margin: 0; }
   .workspace-create .risk-wizard .task-actions-inner { width: 100%; align-content: space-between; }
   .workspace-create .risk-wizard .task-actions .actions button { flex: 1; justify-content: space-between; }
@@ -217,8 +237,6 @@ button.wizard-mode-switch:hover:not(:disabled) { background: transparent; color:
   .workspace-create:has(.risk-wizard[data-step=basket]) > .page-heading { gap: 12px; margin-top: 14px; margin-bottom: 14px; }
   .workspace-create:has(.risk-wizard[data-step=basket]) > .page-heading h1 { font-size: 40px; }
   .wizard-basket-title { margin-bottom: 38px; font-size: 17px; }
-  .wizard-basket-summary { margin-top: 12px; }
   .wizard-basket-picker .wizard-asset-picker { padding-top: 8px; }
-  .wizard-basket-summary h2 { font-size: 24px; line-height: 1.3; }
   .workspace-create .risk-wizard[data-step=basket] .task-actions-inner { gap: 22px; }
 }

@@ -8,6 +8,7 @@ import time
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 import httpx
+from service_observability import log_event
 from sqlalchemy import delete
 from portfolio_contracts import aware, canonical_hash, system_hybrid_enabled, system_hybrid_managed, utcnow
 from portfolio_contracts.assets import EQUITY_IDS
@@ -303,6 +304,7 @@ class Worker:
         if time.monotonic() - self.started > 20 or self.tool_count >= 7:
             raise ToolError("TOOL_BUDGET_EXCEEDED", permanent=True)
         self.tool_count += 1
+        started = time.monotonic()
         try:
             result = self.tools.call(job, name, args)
         except (httpx.HTTPError, ToolError):
@@ -327,6 +329,7 @@ class Worker:
                     status="SUCCEEDED",
                 )
             )
+        log_event("chat.tool." + name, job_id=job.id, duration_ms=round((time.monotonic() - started) * 1000))
         return result
 
     def reply(
@@ -683,25 +686,6 @@ class Worker:
                 )
             if profile is None:
                 profile = self.call(job, "get_profile", {})
-            p = self.call(
-                job, "get_portfolio_summary", {"portfolio_id": r["portfolio_id"]}
-            )
-            if intent == "profile":
-                return self.reply(
-                    job,
-                    "Hồ sơ đã xác nhận từ Portfolio Service.",
-                    {
-                        "type": "profile",
-                        "facts": profile,
-                        "facts_hash": canonical_hash(profile),
-                    },
-                )
-            if intent == "portfolio":
-                return self.reply(
-                    job,
-                    "Tóm tắt danh mục từ Portfolio Service.",
-                    {"type": "portfolio", "facts": p, "facts_hash": canonical_hash(p)},
-                )
             if intent == "explain":
                 r = r | {
                     "recommendation_id": r.get("recommendation_id")
@@ -723,6 +707,25 @@ class Worker:
                         {"resource_id": r["recommendation_id"]},
                     ),
                     requested=True,
+                )
+            p = self.call(
+                job, "get_portfolio_summary", {"portfolio_id": r["portfolio_id"]}
+            )
+            if intent == "profile":
+                return self.reply(
+                    job,
+                    "Hồ sơ đã xác nhận từ Portfolio Service.",
+                    {
+                        "type": "profile",
+                        "facts": profile,
+                        "facts_hash": canonical_hash(profile),
+                    },
+                )
+            if intent == "portfolio":
+                return self.reply(
+                    job,
+                    "Tóm tắt danh mục từ Portfolio Service.",
+                    {"type": "portfolio", "facts": p, "facts_hash": canonical_hash(p)},
                 )
             if system_hybrid_managed() and not readiness_checked:
                 facts = self.read_status(job)
@@ -930,10 +933,12 @@ class Worker:
                 claims.append(claim)
             selected_claim_ids = [claim.id]
             sections, metadata = None, {"reason": "CANONICAL_FACTS"}
-        elif not self.has_time(8):
+        elif not self.has_time(3 if evidence is not None else 8):
             sections, metadata = None, {"reason": "TURN_BUDGET_EXHAUSTED"}
         elif evidence is not None:
-            plan, metadata = self.dialogue.explain_claims(job, digest, evidence, claims)
+            plan, metadata = self.dialogue.explain_claims(
+                job, digest, evidence, claims, deadline=self.started + 20 - 7
+            )
             sections = None
             if plan:
                 try:

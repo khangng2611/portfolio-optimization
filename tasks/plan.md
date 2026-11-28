@@ -215,3 +215,5 @@ với 54.197 observations trên PostgreSQL. Freshness giữ 7 ngày; dữ liệu
 nhất ở nguồn và observation đủ điều kiện tại checkpoint được báo riêng.
 Kết quả nghiệm thu, giới hạn và lệnh canonical Compose được ghi trong
 `docs/software/PHASE1_LOCAL_SERVING.md` và checkbox bước 10 của `tasks/todo.md`.
+
+Kế hoạch Phase 2 tiếp theo gồm thí nghiệm ba quy tắc tái cân bằng, danh mục mô phỏng và định giá lời/lỗ. [Phạm vi, thứ tự và điều kiện nghiệm thu](../docs/superpowers/plans/2026-11-27-paper-portfolio.md)

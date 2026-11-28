@@ -1,0 +1,13 @@
+.paper-account { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; overflow-wrap: anywhere; }
+.paper-account .panel { margin: 0; min-width: 0; }
+.paper-account form { display: grid; gap: 1rem; justify-items: start; }
+.paper-account form label { width: min(100%, 23rem); }
+.paper-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); margin: 1rem 0 0; gap: 1rem; }
+.paper-facts dt { font-size: .875rem; color: var(--muted); }
+.paper-facts dd { margin: .25rem 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.paper-table { max-width: 100%; overflow-x: auto; }
+.paper-table table { width: 100%; font-variant-numeric: tabular-nums; }
+.paper-table td, .paper-table th { white-space: nowrap; }
+.paper-quotes, .paper-review { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+.paper-account .price-chart { margin-top: 1rem; }
+.paper-wait { display: block; min-width: 13rem; max-width: 19rem; white-space: normal; color: var(--muted); }

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "run_id": "20261125-ocb-1m-vff",
+  "status": "complete",
+  "started_at": "2026-11-25T00:55:14.168926+00:00",
+  "parent_run": null,
+  "repository": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization",
+  "commit": "23242db1d4f51be5055f26b9c397889a434d80ea",
+  "branch": "codex/demo-11",
+  "dirty": true,
+  "hypothesis": "Same-date one-calendar-month retail OCB at-counter savings vs original VFF NAV and full-sale scenario.",
+  "assets": [
+    "OCB standard retail VND, 1 month, at counter, interest at maturity, VND 10 million, no bonus",
+    "VFF FMarket 21"
+  ],
+  "model": null,
+  "model_reason": "No training, warmup, seed or optimizer for deterministic pairs",
+  "platform": "macOS-26.3.1-arm64-arm-64bit",
+  "cpu": "arm64",
+  "dependencies": "Python standard library",
+  "python": "Python 3.12.0",
+  "argv": [
+    "venv/bin/python",
+    "phase2_ocb_deposits/runs/20261125-ocb-1m-vff/replay.py"
+  ],
+  "calendar_parent": {
+    "path": "extensions_C_v1/inputs/prices_valuation.csv",
+    "sha256": "c6789fb99526608cc0e5426de2b8ff59bee14148d908828bd72ed0d3e5814c84"
+  },
+  "inputs": [
+    {
+      "path": "../../../trusted_baseline/datasets/funds/full/VFF.csv",
+      "sha256": "888c9e9621adf5b0317b6bf54006637e7d74940435d7e3908c94775c0b53cee9"
+    },
+    {
+      "path": "screened_sources.csv",
+      "sha256": "588745de4f96329887e40db2901e91ac7d12e5c49e1c9ec8dbed283b7b89780a"
+    },
+    {
+      "path": "verified_rates.csv",
+      "sha256": "320ad2d3d646462b4be9888b7c9127aef7f8f0eec7ada398ee23f34b8fa58cbc"
+    },
+    {
+      "path": "sessions.csv",
+      "sha256": "1d8eb65f7888212fa4d74374cdbdfb5fc303769acae58ae3e00f2358afbe83f0"
+    },
+    {
+      "path": "evidence.json",
+      "sha256": "73c20bf444d1976c3304733a9c8ab9e5a3bf109598f935e757a67a756ea6d35d"
+    },
+    {
+      "path": "replay.py",
+      "sha256": "333fa2c095ccfa44d6ee3f97931a201cf2d23ec3ea7fbc92efd41a72060ebaa8"
+    }
+  ],
+  "exit_code": 0,
+  "finished_at": "2026-11-25T00:55:14.961654+00:00",
+  "elapsed_seconds": 0.468817625020165,
+  "outputs": {
+    "stdout.log": "cf910bcad62b03fb53c2b69ca81381d9dfce5dae8aa804b1f027f65ce7c7347e",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "cf910bcad62b03fb53c2b69ca81381d9dfce5dae8aa804b1f027f65ce7c7347e",
+    "pairs.csv": "c3076e78d23aafba785d1dac2d32b2477a484a49312b6c90403134365eb7fe3e",
+    "excluded.csv": "1f65a06d01080cc1e5f3711b7b4c0fc4e41dc86fe12f6b956a6b14dfef0ed5a2"
+  }
+}

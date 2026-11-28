@@ -91,12 +91,12 @@ def fixture_evidence():
     return facts, evidence
 
 
-def test_overview_includes_four_groups_and_both_signs_without_causality():
+def test_detailed_overview_includes_four_groups_and_both_signs_without_causality():
     from chat_service.explanation import build_claims, default_ids, render_claims
 
     facts, evidence = fixture_evidence()
     claims = build_claims(facts, evidence)
-    ids = default_ids(claims, "Vì sao phân bổ như vậy?")
+    ids = default_ids(claims, "Giải thích chi tiết đề xuất")
     assert {c.group for c in claims if c.id in ids} >= {
         "profile",
         "regime",
@@ -150,7 +150,7 @@ def test_legacy_evidence_does_not_invent_forecasts():
         limitations=["NOT_RETAINED"],
     ).seal()
     claims = build_claims(facts, evidence)
-    text = render_claims(claims, default_ids(claims))
+    text = render_claims(claims, default_ids(claims, "Giải thích chi tiết đề xuất"))
     assert "chưa lưu" in text
     assert "3,00%" not in text
 
@@ -207,7 +207,7 @@ def test_non_bl_explanation_does_not_claim_ml_views_were_used(strategy):
         status="PARTIAL",
     ).seal()
     claims = build_claims(facts, evidence)
-    text = render_claims(claims, default_ids(claims))
+    text = render_claims(claims, default_ids(claims, "Giải thích chi tiết đề xuất"))
     assert strategy in text
     assert "không sử dụng views ML" in text
     if strategy == "EW":
@@ -346,6 +346,7 @@ def test_real_worker_uses_evidence_without_new_allocation(chat, monkeypatch, que
         assert card["focus"]["asset"] == "VFF"
     if "hồ sơ" in question.casefold() or question.startswith("Vì sao"):
         assert "30,00%" in messages[-1]["content"]
+    assert "get_portfolio_summary" not in calls
     assert "get_recommendation_evidence" in calls
     assert not tools.allocations
 

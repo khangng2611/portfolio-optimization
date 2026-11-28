@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "run": "20261127T145337440956Z",
+  "parent_run": "20261127T145333946622Z",
+  "started_at": "2026-11-27T14:53:37.440956+00:00",
+  "status": "complete",
+  "working_directory": "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "argv": [
+    "/Users/nguyenkhang/Documents/MASTER/Thesis/portfolio-optimization/venv/bin/python",
+    "phase2_rebalance/run.py"
+  ],
+  "registration_sha256": "96a00133da79397abec1084b8452fb1f0c6fa2d2cc7f8b03d769ece2b6e50eb7",
+  "amendment_sha256": "adda55b0c8c735663121f3e4b7248349957eb134f187f5588e8c066dc8503e2f",
+  "git_head": "23242db1d4f51be5055f26b9c397889a434d80ea",
+  "branch": "codex/demo-11",
+  "dirty": true,
+  "source_sha256": {
+    "run.py": "4ce296a14194370e1045051a1fb2f4a9254499aef0e08b708da4e6c8fc5be826",
+    "paper_ledger.py": "2a325cec6007ef4bf45dd9b28a9e76c8aca761edee8d72cd047599a16b527554",
+    "protocol.json": "e37fbd833ab1dd0d4db8532b8eababef07678355ad8cc1097b4c7ea3ce773152",
+    "freeze.py": "e61d9f9c1b29f5c1c99dece4a485432f4931534c30ea10dcb79d92a20c6c84e7",
+    "default-amendment.md": "13d8f267bf5a578ad51b5c8b126eba5a3cbf4c2e2f281f220e0b401310c6c88e"
+  },
+  "environment": {
+    "python": "3.12.0 (main, Dec  9 2025, 20:03:20) [Clang 16.0.0 (clang-1600.0.26.6)]",
+    "os": "macOS-26.3.1-arm64-arm-64bit",
+    "cpu": "arm64",
+    "pandas": "2.2.3",
+    "numpy": "2.2.6"
+  },
+  "model": "Frozen target replay; no retraining, inference, caches or solver.",
+  "selected_threshold": 0.02,
+  "validations": [
+    "cash, units and NAV reconciliation each session on all scenarios",
+    "C threshold zero matches B fills, units and daily books exactly",
+    "one opening basket in A",
+    "opening fills identical",
+    "development segment replay equals selection"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 3.2824408330016013,
+  "ended_at": "2026-11-27T14:53:40.862184+00:00",
+  "artifact_sha256": {
+    "default-check.json": "f02aee8a7ccae16eeb87f8b9f851cf17088c8c3aac87e650cd2b30e1c0d1147f",
+    "units.csv": "b514633c3495bd266b048d7602c00cd88fcd8747c793fa34a36b15791297bd9f",
+    "summary.csv": "befbd33c70c74df5782b7cc330acab3c8620180005b46de949d46dace299c979",
+    "paired.csv": "eda649226ac65f613d67454be1753e7209453b6eeb6d62ca96aa5001641241b3",
+    "reviews.csv": "1ac38d3ef610fe7f91a4fe013be3d45a8d2735df0751377b5b7a65d65d8ede8c",
+    "development.csv": "f965504b05e5b409c3481409fe12a709b16ac42bff342d701ba362da12803190",
+    "daily.csv": "339660324fc9af7f2fe367356fe71718dd269b5f77470c5da5f61518b99da84a",
+    "selection.json": "f146a21eec5a80805302233032f068b44f1b40cc3a3fdc6cfd80ea6005ce3f92",
+    "events.csv": "0b7ffdce78e09a3354b39402d7671f71932c264b5074f687bc3f11682755cfe4",
+    "costs_by_asset.csv": "058eed5abb652e3abf8eb3d10afc96963b16bb1548d9d469d5fe2d2a7b0dfef4"
+  }
+}

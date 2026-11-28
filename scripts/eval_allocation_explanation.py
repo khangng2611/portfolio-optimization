@@ -39,7 +39,7 @@ def frozen(path):
 def evaluate(cases=CASES):
     cases = Path(cases)
     dataset = [json.loads(row) for row in frozen(cases).splitlines()]
-    production_rendering = cases.name == CONCISE_CASES.name
+    production_rendering = cases.name in (CONCISE_CASES.name, "eval-allocation-explanation-vi-v3.jsonl")
     base = json.loads(frozen(FACTS))
     if (
         len(dataset) < 24

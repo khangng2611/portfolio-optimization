@@ -2,6 +2,18 @@
 
 Triển khai theo [plan](../superpowers/plans/2026-11-22-allocation-explanation.md) và [thiết kế](../superpowers/specs/2026-11-22-allocation-explanation-design.md). Phần này giúp đọc kết quả đã tính, không thay đổi mô hình đầu tư, trọng số, input/result/facts hash, confirmation hoặc accept target.
 
+## Tóm tắt đề xuất trên demo · 27/11/2026
+
+Chat xếp tối đa ba mã theo tỷ trọng cuối cùng của đúng đề xuất. Khi có đủ dữ kiện, Chat cộng tỷ trọng các mã thuộc `constraints.defensive_asset_ids` và so với mức tối thiểu của hồ sơ tại lần tính, lấy mức cao hơn giữa `min_defensive_weight` và `1 - max_non_defensive_weight`. Người đọc mở **Xem dữ kiện và nguồn** để xem danh sách mã 0%, dự báo của từng mã và chỉ số trạng thái rổ.
+
+Trên Chrome, đề xuất ngày 27/11 của danh mục “Mới tập chơi” hiển thị VFF 45,50%, SAB 18,44%, VJC 15,03%. Nhóm phòng thủ chỉ gồm VFF, đạt 45,50% so với mức tối thiểu 30,00%. Lượt này dùng mẫu từ dữ kiện đã xác minh khi hết thời gian dành cho bước giải thích bằng provider. Facts hash và evidence hash của tin nhắn trùng với bản ghi Portfolio. [Receipt demo](../../output/allocation-overview/receipt.json) · [Eval tiếng Việt v3](../../output/allocation-overview/eval.json).
+
+### Đo lượt giải thích trên cùng đề xuất
+
+Trước khi sửa, worker dành 7 giây trong tổng 20 giây cho việc kiểm tra lại corpus và quyền đọc. Sau khi đọc hồ sơ, tóm tắt danh mục, đề xuất, evidence và corpus, lượt này thiếu cửa sổ 8 giây để gọi OpenAI. Bản sửa bỏ lượt đọc tóm tắt danh mục trong nhánh giải thích. Portfolio vẫn kiểm tra owner, danh mục và đề xuất trước khi trả kết quả. Với claims đã kiểm chứng, worker có thể gọi OpenAI khi còn ít nhất 3 giây sau phần dự phòng. Timeout HTTP bằng thời gian còn lại sau dự phòng, tối đa 12 giây.
+
+Trên Chrome, câu “Giải thích đề xuất này” hoàn tất trong 9,27 giây, từ lúc tạo job đến lúc lưu tin nhắn là 6,58 giây. Worker đọc xong hồ sơ ở mốc 1,01 giây, đề xuất 1,30, evidence 1,54, corpus 2,10. OpenAI mất 3,62 giây, trong đó provider báo xử lý 2,01 giây. Sau đó worker kiểm tra lại corpus ở mốc 6,39 và quyền đọc ở mốc 6,55. Ledger xác nhận một lần gọi giải thích, 588 token vào, 103 token ra, ước tính 0,000125 USD. Plan trả về chọn `allocation_overview` và khớp cả hai hash của lượt cũ. [Trước sửa](../../output/explanation-latency/before.json) · [Sau sửa](../../output/explanation-latency/after.json) · [Plan và lượt trên trình duyệt](../../output/explanation-latency/plan.json).
+
 ## Hỏi về một tài sản trong đề xuất đã lưu · 24/11/2026
 
 Chat hiểu câu “VFF chiếm bao nhiêu %?” là yêu cầu đọc một tỷ trọng. Với câu “Tại sao chọn VFF quá nhiều?”, Chat bổ sung các giới hạn đã dùng và tỷ trọng của từng nhánh HYBRID khi phép phối khớp kết quả đã lưu. Nếu thiếu dữ kiện để giải thích chính xác tỷ trọng, câu trả lời nêu giới hạn đó.

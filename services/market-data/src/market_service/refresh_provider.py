@@ -108,6 +108,22 @@ def normalize(raw, symbol, start, end):
     return sorted(normalized)
 
 
+def close_query_end(cutoff, *, index=False):
+    # KBS stock history excludes edate, whereas VNINDEX includes it.
+    return cutoff if index else cutoff + timedelta(days=1)
+
+
+def normalize_completed_closes(raw, symbol, start, cutoff, query_end):
+    rows = [
+        (day, price)
+        for day, price in normalize(raw, symbol, start, query_end)
+        if day <= cutoff
+    ]
+    if not rows:
+        raise ValueError("No source closes on or before the cutoff")
+    return rows
+
+
 def normalized_csv(rows, symbol):
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")

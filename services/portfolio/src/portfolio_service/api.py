@@ -38,6 +38,7 @@ from service_observability import (
 )
 from .models import (
     AcceptedTarget,
+    PaperAccount,
     Job,
     Outbox,
     Portfolio,
@@ -528,6 +529,9 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
             raise HTTPException(404, "Không tìm thấy danh mục.")
         return value
 
+    from .paper import install_paper_routes
+    install_paper_routes(app, sessions=sessions, owner=owner, owned_portfolio=owned_portfolio)
+
     @app.get("/api/v1/portfolios/{portfolio_id}/asset-selections")
     def selection_history(portfolio_id: UUID, response: Response, user_id=Depends(owner)):
         with sessions() as session:
@@ -844,7 +848,7 @@ def create_app(*, sessions, verifier, resolver, account_active=None):
                         Recommendation.owner_user_id == user_id,
                     )
                 ),
-                "holdings_status": "NOT_TRACKED",
+                "holdings_status": "PAPER_TRACKED" if session.get(PaperAccount, value.id) else "NOT_TRACKED",
             }
 
     @app.post("/api/v1/recommendations/{recommendation_id}/accept")

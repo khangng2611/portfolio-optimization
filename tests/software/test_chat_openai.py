@@ -269,3 +269,21 @@ def test_source_route_with_expired_worker_deadline_skips_http(monkeypatch):
     p = provider(monkeypatch, lambda _: pytest.fail("Worker budget expired"))
     plan, meta = p.generate("source_route", {}, SourcePlan, deadline=time.monotonic() - 1)
     assert plan is None and meta["reason"] == "TURN_BUDGET_EXHAUSTED"
+
+
+def test_explanation_uses_remaining_worker_budget_and_records_provider_latency(monkeypatch):
+    import time
+    from chat_service.explanation import ClaimPlan
+
+    plan = {"facts_hash": "a" * 64, "evidence_hash": "b" * 64, "selected_claim_ids": ["allocation_overview"]}
+    def serve(request):
+        assert 0 < request.extensions["timeout"]["read"] <= 6
+        return httpx.Response(200, json=response(plan), headers={"openai-processing-ms": "1200"})
+
+    p = provider(monkeypatch, serve)
+    context = {"required_claim_ids": plan["selected_claim_ids"]}
+    value, meta = p.generate("allocation_explanation", context, ClaimPlan, deadline=time.monotonic() + 6)
+    assert value == plan and meta["provider_processing_ms"] == 1200
+    assert 0 < meta["timeout_ms"] <= 6000
+    value, meta = p.generate("allocation_explanation", context, ClaimPlan, deadline=time.monotonic() - 1)
+    assert value is None and meta["reason"] == "TURN_BUDGET_EXHAUSTED"

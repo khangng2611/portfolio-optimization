@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 import re
 
-import pandas as pd
-
 from market_service.hybrid_forward_capture import DECISION_TIME, FIRST_DAY, LAST_DAY, SETTLE_UNTIL, HISTORY_START, VIETNAM
 from market_service.phase1_sources import (
     EQUITY_GAP_ALLOWLIST, GOLD_PROVIDER, VFF_PROVIDER, frozen_gold,
     normalize_fmarket, normalize_gold_archive, verify_vff_identity,
 )
-from market_service.refresh_provider import BASE, MAX_BYTES, PROVIDER, normalize, normalized_csv
+from market_service.refresh_provider import (
+    BASE, MAX_BYTES, PROVIDER, close_query_end, normalize_completed_closes, normalized_csv,
+)
 from portfolio_contracts import canonical_hash
 from portfolio_contracts.assets import ASSET_IDS, EQUITY_IDS
 from quant_service.full import FullDataUnavailable, MixedPanel, START, check_full_availability
@@ -122,9 +122,14 @@ class _Batch:
         index = asset == "VNINDEX"
         name = "index" if index else "stocks"
         start = HISTORY_START if index else START
-        return self.source(asset, f"{BASE}/{name}/{asset}/data_day", "GET",
-                           lambda raw: (normalize(raw, asset, start, self.day), {}),
-                           **{"from": str(start), "to": str(self.day)})[0]
+        query_end = date.fromisoformat(self.read(asset)[0]["request"]["to"])
+        if query_end not in (self.day, close_query_end(self.day, index=index)):
+            raise ValueError(f"{asset}: unexpected provider request bound")
+        return self.source(
+            asset, f"{BASE}/{name}/{asset}/data_day", "GET",
+            lambda raw: (normalize_completed_closes(raw, asset, start, self.day, query_end), {}),
+            **{"from": str(start), "to": str(query_end)},
+        )[0]
 
     def calendar(self):
         return [str(day) for day, _ in self.stock("VNINDEX")]
@@ -160,6 +165,8 @@ def _read_sources(data):
 
 
 def _valuation(sessions, by_asset):
+    import pandas as pd
+
     dates = pd.DatetimeIndex(sessions, name="date")
     columns = {}
     for asset in ASSET_IDS:
@@ -185,6 +192,8 @@ def load_valuation(root, batch, cutoff, *, rehearsal=False):
 
 
 def load_panel(root, batch, cutoff, *, rehearsal=False, prepare_only=False):
+    import pandas as pd
+
     data = _Batch(root, batch, cutoff, rehearsal)
     if not rehearsal and (data.phase != "evaluation" or cutoff != _timestamp(data.manifest["decision_at"])):
         raise ValueError("Decision requires the locked evaluation cutoff")

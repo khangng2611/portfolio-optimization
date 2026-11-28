@@ -1275,11 +1275,28 @@ dialog.chat-detail-panel::backdrop { background: rgb(18 39 35 / .45); }
   border: 1px solid var(--line); border-radius: var(--radius-control);
 }
 .workspace .portfolio-tabs .portfolio-extra a { min-width: 0; border: 0; }
+.portfolio-header > .portfolio-tabs { container: portfolio-nav / inline-size; }
+.portfolio-header > .portfolio-tabs > a[data-tab] { display: none; }
 .asset-price-history .price-history-back { min-width: 180px; }
 @media (min-width: 1200px) {
   .workspace-task .portfolio-header > .portfolio-tabs { padding-bottom: 12px; border-bottom: 1px solid var(--line); gap: 12px; }
   .workspace-task .portfolio-tabs > a:nth-child(n), .portfolio-extra > summary { min-width: 145px; min-height: 44px; padding-block: 8px; border-color: var(--line); }
   .workspace-task > .portfolio-header:has(.plan-heading) { gap: 24px; }
+}
+@media (min-width: 1200px) {
+  .workspace-task .portfolio-tabs > a:nth-child(n), .portfolio-extra > summary { min-width: max-content; white-space: nowrap; }
+  @container portfolio-nav (min-width: 36rem) {
+    .portfolio-header .portfolio-tabs > a[data-tab="edit"] { display: inline-flex; }
+    .portfolio-extra a[data-tab="edit"] { display: none; }
+  }
+  @container portfolio-nav (min-width: 45rem) {
+    .portfolio-header .portfolio-tabs > a[data-tab="holdings"] { display: inline-flex; }
+    .portfolio-extra a[data-tab="holdings"] { display: none; }
+  }
+  @container portfolio-nav (min-width: 53rem) {
+    .portfolio-header .portfolio-tabs > a[data-tab] { display: inline-flex; }
+    .portfolio-tabs > .portfolio-extra { display: none; }
+  }
 }
 @media (max-width: 1199px) {
   body:has(.workspace-task .plan-heading) .environment-banner { display: none; }

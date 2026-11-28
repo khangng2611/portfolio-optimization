@@ -25,6 +25,7 @@ HANDOFF = Path("/refresh/hybrid-automation/snapshot.json")
 def approved_model(directory, panel, equities):
     resolver = CredentialModelResolver()
     epoch = panel.dates[fit_index(panel.decision_index)]
+    rejected = {}
     for path in sorted(
         (directory / "ml-models").glob("*/*/*.approved.json"), reverse=True
     ):
@@ -44,10 +45,15 @@ def approved_model(directory, panel, equities):
             continue
         try:
             check_equity_model_inputs(manifest, panel, equities, panel.decision_index)
-        except (SelectionDataError, ValueError):
+        except ValueError as error:
+            rejected[identity] = str(error)
             continue
         return identity, ref
-    raise ValueError("MODEL_REVIEW_OR_COMPATIBILITY_REQUIRED")
+    for identity, reason in rejected.items():
+        logging.warning(
+            "Model %s at fit epoch %s failed compatibility: %s", identity, epoch, reason
+        )
+    raise ValueError(f"MODEL_REVIEW_OR_COMPATIBILITY_REQUIRED fit_epoch={epoch}")
 
 
 def eligible_assets(panel, now):

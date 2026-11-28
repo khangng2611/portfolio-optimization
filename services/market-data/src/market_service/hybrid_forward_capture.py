@@ -23,7 +23,10 @@ from .phase1_sources import (
     normalize_gold_archive,
     verify_vff_identity,
 )
-from .refresh_provider import BASE, MAX_BYTES, KbsProvider, normalize, normalized_csv
+from .refresh_provider import (
+    BASE, MAX_BYTES, KbsProvider, close_query_end, normalize_completed_closes,
+    normalized_csv,
+)
 
 VIETNAM = ZoneInfo("Asia/Ho_Chi_Minh")
 FIRST_DAY = date(2026, 11, 24)
@@ -173,12 +176,13 @@ def collect(root, gold_seed, protocol, now, *, rehearsal=False, gold_shadow=Fals
 
     def stock(asset, start, index):
         requested = utcnow()
-        raw = kbs.fetch_raw(asset, start, day, index=index)
+        query_end = close_query_end(day, index=index)
+        raw = kbs.fetch_raw(asset, start, query_end, index=index)
         return raw, {
             "url": f"{BASE}/{'index' if index else 'stocks'}/{asset}/data_day",
             "method": "GET",
             "from": str(start),
-            "to": str(day),
+            "to": str(query_end),
             "requested_at": requested.isoformat(),
             "received_at": utcnow().isoformat(),
         }
@@ -188,7 +192,9 @@ def collect(root, gold_seed, protocol, now, *, rehearsal=False, gold_shadow=Fals
         record(
             asset,
             lambda: stock(asset, start, asset == "VNINDEX"),
-            lambda raw: normalize(raw, asset, start, day),
+            lambda raw: normalize_completed_closes(
+                raw, asset, start, day, close_query_end(day, index=asset == "VNINDEX")
+            ),
         )
 
     # Preserve each archive version. The trusted warm-up covers through April 2026.

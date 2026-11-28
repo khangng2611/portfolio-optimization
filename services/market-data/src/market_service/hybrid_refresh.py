@@ -21,7 +21,7 @@ from .selected_refresh import (
 )
 from .selected_snapshots import build_selected_snapshot
 from .runtime import sessions_from_env
-from .refresh_provider import KbsProvider, normalize
+from .refresh_provider import KbsProvider, normalize_completed_closes
 from .phase1_sources import equity_missing_sessions
 
 HANDOFF = Path("/datasets/refresh/hybrid-automation")
@@ -32,13 +32,15 @@ class CheckedKbs(KbsProvider):
     """A replica can return overlapping daily bars. Require a complete clean response."""
 
     calendar = None
+    cutoff = None
     minimum_calendar_end = ""
 
     def fetch_raw(self, symbol, start, end, *, index=False):
+        cutoff = self.cutoff or end
         for attempt in range(4):
             raw = super().fetch_raw(symbol, start, end, index=index)
             try:
-                rows = normalize(raw, symbol, start, end)
+                rows = normalize_completed_closes(raw, symbol, start, cutoff, end)
                 if index:
                     if str(rows[-1][0]) < self.minimum_calendar_end:
                         raise CalendarUnavailable(
@@ -106,6 +108,7 @@ def tick(now, *, retry_failed=False):
                 ):
                     return
         kbs = CheckedKbs()
+        kbs.cutoff = cutoff
         kbs.minimum_calendar_end = floor or ""
         try:
             data = refresh_selected(

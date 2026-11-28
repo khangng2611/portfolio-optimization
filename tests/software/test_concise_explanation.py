@@ -38,11 +38,17 @@ def test_overview_is_short_but_full_claims_remain_available():
     ids = default_ids(claims, "Vì sao phân bổ như vậy?")
     short = render_claims(claims, ids, concise=True)
     full = render_claims(claims, ids)
-    assert len(short.split()) < 180
+    assert len(short.split()) < 90
     assert len(short.split()) < len(full.split())
     assert "Thận trọng" in short and "30,00%" in short
-    assert "hướng tăng" in short and "hướng giảm" in short
-    assert "confidence" not in short and "confidence" in full
+    assert short.startswith("Đề xuất phân bổ vốn vào 2 tài sản.")
+    assert "BID 50,00%" in short and "VFF 50,00%" in short
+    assert "Nhóm phòng thủ chiếm 50,00%" in short
+    assert "căng thẳng" in short and "20/120" not in short
+    assert "ACB" not in short and "dự báo ensemble" not in short
+    assert "0%: ACB" in full
+    detailed = render_claims(claims, default_ids(claims, "Giải thích chi tiết đề xuất"))
+    assert "hướng tăng" in detailed and "hướng giảm" in detailed
 
 
 @pytest.mark.parametrize("status", ["COMPLETE", "PARTIAL"])
@@ -226,3 +232,19 @@ def test_indicator_spelling_from_ui_routes_without_paid_intent():
     from chat_service.workflow import is_evidence_followup
 
     assert is_evidence_followup("RSI14 của ACB?")
+
+
+@pytest.mark.parametrize("members,expected", [
+    (["ACB", "BID", "VFF"], "Nhóm phòng thủ chiếm 100,00%, so với mức tối thiểu 15,00%"),
+    ([], "Nhóm phòng thủ chiếm 0,00%"),
+    (None, "Chưa đủ dữ kiện để đối chiếu tỷ trọng thực tế"),
+])
+def test_overview_uses_only_pinned_defensive_members_and_available_floor(members, expected):
+    facts, evidence = fixture_evidence()
+    limits = facts["constraints"]
+    del limits["max_non_defensive_weight"]
+    limits["defensive_asset_ids"] = members
+    evidence["facts_hash"] = canonical_hash(facts)
+    claims = build_claims(facts, reseal(evidence))
+    answer = render_claims(claims, default_ids(claims), concise=True)
+    assert expected in answer

@@ -7,14 +7,6 @@ import type { WorkspaceView } from '../lib/workspace-state';
 type Unavailable = { title: string; message: string; research?: boolean };
 
 export const unavailableWorkspaces: Partial<Record<WorkspaceView, Unavailable>> = {
-  holdings: {
-    title: 'Tài sản và hiệu suất',
-    message: 'Ứng dụng chưa theo dõi giao dịch, số lượng tài sản hoặc tiền mặt. Để tính hiệu suất cần lịch sử giao dịch, dòng tiền và dữ liệu định giá theo ngày.',
-  },
-  rebalance: {
-    title: 'Tái cân bằng',
-    message: 'Cần có vị thế thực tế và dữ liệu định giá để đo độ lệch so với mục tiêu và xem xét tái cân bằng.',
-  },
   views: {
     title: 'Nhận định của bạn',
     message: 'Đề xuất hệ thống hiện sử dụng mô hình đã duyệt và quy tắc phân bổ. Ứng dụng chưa hỗ trợ lưu và áp dụng nhận định do bạn nhập.',

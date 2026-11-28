@@ -225,7 +225,7 @@ test('separate portfolio and basket writes, version conflict, paused state and d
   await expect(stale.getByTestId('portfolio-name-input')).toHaveValue('Danh mục kiểm thử V2.8');
   await page.goto(`/#edit?portfolio=${id}`);
   await page.getByTestId('portfolio-name-input').fill('Nháp không được lưu theo rổ');
-  await page.getByTestId('available-assets').getByRole('button', { name: 'Thêm MWG vào rổ tài sản' }).click();
+  await page.locator('.asset-selection-editor').getByRole('button', { name: 'Thêm MWG vào rổ tài sản' }).click();
   const saving = page.waitForResponse(response => response.url().endsWith(portfolioPath + '/asset-selections') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Lưu lựa chọn tài sản', exact: true }).click();
   const saved = await saving;
@@ -245,7 +245,7 @@ test('separate portfolio and basket writes, version conflict, paused state and d
   await stale.close();
 
   await page.goto(`/#edit?portfolio=${id}`);
-  await page.getByTestId('available-assets').getByRole('button', { name: 'Thêm ACB vào rổ tài sản' }).click();
+  await page.locator('.asset-selection-editor').getByRole('button', { name: 'Thêm ACB vào rổ tài sản' }).click();
   await page.getByTestId('portfolio-capital-input').fill('120000000');
   const savingPlan = page.waitForResponse(response => response.url().endsWith(portfolioPath) && response.request().method() === 'PATCH');
   await page.getByTestId('edit-portfolio-submit').click();
@@ -1228,13 +1228,19 @@ test('portfolio sections remain reachable from desktop tabs and the mobile More 
     { route: 'overview', label: 'Tổng quan', content: page.locator('.plan-overview') },
   ];
 
-  for (const width of [375, 390, 768, 1024, 1200, 1440, 2560]) {
+  for (const width of [375, 390, 768, 1024, 1200, 1440, 1880, 2560]) {
     await checkWidth(page, width, 900);
     if (width < 1200) await expect(tabs).toBeHidden();
     else await expect(tabs).toBeVisible();
     for (const section of sections) {
       const inMenu = width < 1200;
-      if (!inMenu && section.route === 'edit') await tabs.locator('.portfolio-extra summary').press('Enter');
+      if (width >= 1880 && page.url().includes('#overview?')) {
+        await expect(tabs.getByRole('link')).toHaveCount(7);
+        await expect(tabs.locator('.portfolio-extra')).toBeHidden();
+        const positions = await tabs.getByRole('link').evaluateAll(links => links.map(link => link.getBoundingClientRect().top));
+        expect(new Set(positions).size).toBe(1);
+      }
+      if (!inMenu && section.route === 'edit' && !await tabs.locator('a[data-tab="edit"]').first().isVisible()) await tabs.locator('.portfolio-extra summary').press('Enter');
       if (inMenu) await menu.getByText('Thêm', { exact: true }).click();
       const link = (inMenu ? menu : tabs).getByRole('link', { name: section.label, exact: true });
       await link.click();
@@ -1286,7 +1292,8 @@ test('overview keeps the accepted allocation after capital and basket edits on d
   async function openEdit(current: Page) {
     const edit = tab(current, 'Sửa danh mục');
     const desktopMore = current.locator('.portfolio-tabs .portfolio-extra summary');
-    if (await desktopMore.isVisible()) {
+    if (await edit.first().isVisible()) await edit.first().click();
+    else if (await desktopMore.isVisible()) {
       await desktopMore.click();
       await edit.click();
     } else {

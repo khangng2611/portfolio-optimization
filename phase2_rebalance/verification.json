@@ -1,0 +1,44 @@
+{
+  "primary": "20261127T145443320859Z",
+  "repeat": "20261127T145446286001Z",
+  "matched_deterministic_artifacts": [
+    "costs_by_asset.csv",
+    "daily.csv",
+    "development.csv",
+    "events.csv",
+    "paired.csv",
+    "reviews.csv",
+    "summary.csv",
+    "units.csv",
+    "default-check.json"
+  ],
+  "ledger_sha256": "4c4b207c211efd209aa41a10b6d4557e94d37b9575ca941232ec2067810ce940",
+  "exact_daily_nav_B_equals_C": true,
+  "examples": {
+    "pending_buy": {
+      "date": "2020-03-25",
+      "nav": 11222792.269980738,
+      "cash": 0.0,
+      "reserved": 3968135.393873528,
+      "receivable": 1534642.1221981968,
+      "invested": 5720014.753909014
+    },
+    "sale_with_fee": {
+      "date": "2020-02-26",
+      "nav": 10341617.900720194,
+      "cash": 0.0,
+      "reserved": 0.0,
+      "receivable": 1913116.487643596,
+      "invested": 8428501.413076596
+    },
+    "cash_settlement": {
+      "date": "2020-02-28",
+      "nav": 10903946.362930812,
+      "cash": 1913116.487643596,
+      "reserved": 0.0,
+      "receivable": 0.0,
+      "invested": 8990829.875287218
+    }
+  },
+  "nav_plot_sha256": "bb11a8c302391f23fd080b87f6ad3c0d07ba682bcf2980c9aec7ec196b16f888"
+}

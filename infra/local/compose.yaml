@@ -370,6 +370,7 @@ services:
   portfolio-api:
     image: portfolio-software-portfolio:local
     environment: *portfolio-environment
+    volumes: ["../../output/paper-market:/paper-market:ro"]
     ports: ["127.0.0.1:8001:8000"]
     depends_on:
       portfolio-migrate: {condition: service_completed_successfully}

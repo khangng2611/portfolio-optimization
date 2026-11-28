@@ -23,7 +23,7 @@ def test_concise_eval_checks_metric_focus_absence_and_word_budgets():
     from eval_allocation_explanation import evaluate, ROOT
 
     report = evaluate(
-        ROOT / "tests/fixtures/knowledge/eval-allocation-explanation-vi-v2.jsonl"
+        ROOT / "tests/fixtures/knowledge/eval-allocation-explanation-vi-v3.jsonl"
     )
     assert report["passed"] == report["total"]
     assert report["concision"]["passed"] == report["concision"]["total"]

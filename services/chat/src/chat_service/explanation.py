@@ -189,6 +189,43 @@ def build_claims(facts, evidence):
         selection_summary,
     )
 
+    ranked = sorted(
+        ((asset, weight) for asset, weight in weights.items() if float(weight) > 0),
+        key=lambda item: -Decimal(str(item[1])),
+    )
+    overview = f"Đề xuất phân bổ vốn vào {len(ranked)} tài sản."
+    if ranked:
+        overview += " Tỷ trọng cao nhất gồm " + ", ".join(
+            f"{asset} {percent(weight)}" for asset, weight in ranked[:3]
+        ) + "."
+    profile_label = labels.get(profile.get("profile"))
+    horizon = (profile.get("answers") or {}).get("horizon_months")
+    if profile_label:
+        overview += "\n\nHồ sơ " + profile_label + (f", thời hạn {horizon} tháng." if horizon is not None else ".")
+    defensive = constraints.get("defensive_asset_ids")
+    floors = []
+    if constraints.get("min_defensive_weight") is not None:
+        floors.append(Decimal(str(constraints["min_defensive_weight"])))
+    if constraints.get("max_non_defensive_weight") is not None:
+        floors.append(1 - Decimal(str(constraints["max_non_defensive_weight"])))
+    if isinstance(defensive, list) and set(defensive) <= weights.keys():
+        actual = sum(Decimal(str(weights[asset])) for asset in set(defensive))
+        overview += f" Nhóm phòng thủ chiếm {percent(actual)}"
+        overview += f", so với mức tối thiểu {percent(max(floors))}." if floors else "."
+    elif floors:
+        overview += f" Mức phòng thủ tối thiểu là {percent(max(floors))}. Chưa đủ dữ kiện để đối chiếu tỷ trọng thực tế."
+    refs = ["facts.asset_ids", "facts.weights", "facts.constraints", "facts.risk_profile"]
+    if proof:
+        refs.append("facts.selection_proof")
+    if regime:
+        overview += f"\n\nTại thời điểm tính, rổ tài sản ở trạng thái {state}."
+        refs.append("quant.regime" if q and q.regime else "facts.selection_context.regime")
+    if e.status != "COMPLETE":
+        overview += " Đề xuất chưa lưu đầy đủ dữ kiện giải thích."
+    overview += " Hệ thống không tự chấp nhận mục tiêu."
+    refs.append("evidence.status")
+    add("allocation_overview", "selection", overview + "\n\n" + text, refs, overview)
+
     for index, (asset, weight) in enumerate(weights.items()):
         add(
             "weight_" + asset, "selection",
@@ -508,6 +545,8 @@ def default_ids(claims, question=""):
         return (selected or [group + "_missing"]) + (
             ["limitations"] if group == "views" else []
         )
+    if not detail_requested(question):
+        return ["allocation_overview"]
     result = ["profile", "regime", "selection"]
     views = [c.id for c in claims if c.group == "views"]
     # Preserve both directions in an overview without pretending they determine weights.

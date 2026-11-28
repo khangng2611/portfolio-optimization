@@ -272,7 +272,7 @@ class OpenAIProvider:
         try:
             timeout = self.timeout_seconds
             timing = None
-            if purpose == "source_route":
+            if purpose in ("source_route", "allocation_explanation"):
                 timeout = 12 if deadline is None else min(12, deadline - started)
                 if timeout <= 0:
                     return None, meta | {"reason": "TURN_BUDGET_EXHAUSTED"}
@@ -350,7 +350,7 @@ class OpenAIProvider:
         return None, meta
 
     def explain_claims(
-        self, facts_hash, evidence_hash, claims, *, question="", history=None
+        self, facts_hash, evidence_hash, claims, *, question="", history=None, deadline=None
     ):
         from .explanation import ClaimPlan, default_ids
 
@@ -369,6 +369,7 @@ class OpenAIProvider:
                 "history": history or [],
             },
             ClaimPlan,
+            deadline=deadline,
         )
         if value and (
             value["facts_hash"] != facts_hash

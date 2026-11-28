@@ -339,3 +339,18 @@ paper_compose up -d --no-deps hybrid-forward-capture paper-market-export paper-p
 Trong một danh mục có mục tiêu đã chấp nhận, mở **Tài sản và hiệu suất** để khởi tạo vốn đầu kỳ. Tại **Tái cân bằng**, xem giỏ lệnh dự kiến và xác nhận hoặc bỏ qua. Lệnh chỉ khớp theo phiên đủ điều kiện sau khi xác nhận. Màn hình hiển thị trạng thái dữ liệu nếu giá chưa sẵn sàng. Nhắc xem xét mỗi năm phiên dùng mục tiêu user đã chấp nhận. [Bằng chứng A/B/C và lựa chọn chế độ thủ công](../../phase2_rebalance/REPORT.md)
 
 Kiểm thử trình duyệt có thể chạy riêng qua `npm run test:browser:paper` từ `apps/web` sau khi cài Chromium của Playwright và môi trường `.venv-software`. Bài kiểm dùng giá cố định, Portfolio API thật và SQLite tạm.
+
+### Feed danh mục mô phỏng trên VPS HTTPS
+
+Profile Funnel chạy các service `hybrid-forward-capture`,
+`paper-market-export` và `paper-portfolio-worker`. Trước lần triển khai đầu,
+chuẩn bị `infra/local/.generated/paper-feed/archive/setup/` với
+`protocol.md` và seed vàng đã khóa của [luồng capture](../../docs/software/HYBRID_FORWARD_CAPTURE.md).
+Có thể khởi tạo archive bằng các capture cùng ngày đã có cùng với
+`objects/` mà receipt tham chiếu. Exporter kiểm hash, thời điểm nhận,
+và lịch VNINDEX trước khi phát hành bảng giá. Các capture mới chạy trên VPS.
+Bản phát hành và rollback sao lưu cả archive lẫn các frame trong
+`infra/local/.generated/paper-feed/`. Portfolio API và worker chỉ đọc frame.
+
+Lệnh mô phỏng xác nhận sau khi mở tài khoản chỉ khớp khi có phiên đủ điều
+kiện kế tiếp. Kiểm thử replay cần kho dữ liệu và đồng hồ thử riêng.
